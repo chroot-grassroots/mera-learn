@@ -1,0 +1,58 @@
+{% extends 'lessons/base.html' %}
+
+{% block title %}Home - Jura Cybersecurity Education{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow-md p-8 mb-8">
+        <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to Jura</h2>
+        <p class="text-lg text-gray-700 mb-6">
+            Privacy-preserving cybersecurity education designed for activists, 
+            journalists, and civil rights organizations.
+        </p>
+        
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h3 class="font-semibold text-blue-900 mb-2">🔒 Your Privacy First</h3>
+            <p class="text-blue-800">
+                Your learning progress is stored in your own Solid Pod - 
+                we never see your data, and you control where it lives.
+            </p>
+        </div>
+        
+        <button id="test-python" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors">
+            Test Python Functionality
+        </button>
+    </div>
+    
+    <div id="python-output" class="bg-gray-100 rounded-lg p-4 hidden">
+        <h3 class="font-semibold mb-2">Python Output:</h3>
+        <div id="output-content" class="font-mono text-sm"></div>
+    </div>
+</div>
+
+<py-script>
+    from pyscript import document
+    
+    def test_python_click(event):
+        print("Button clicked from Python!")
+        
+        # Show output div
+        output_div = document.querySelector("#python-output")
+        output_div.classList.remove("hidden")
+        
+        # Add some test output
+        content = document.querySelector("#output-content")
+        content.innerHTML = """
+        <p>✅ Event handling works</p>
+        <p>✅ DOM manipulation works</p>
+        <p>✅ Python imports work</p>
+        <p>✅ Ready for Solid Pods integration!</p>
+        """
+    
+    # Attach event handler
+    test_button = document.querySelector("#test-python")
+    test_button.addEventListener("click", test_python_click)
+    
+    print("🚀 Home page PyScript initialized")
+</py-script>
+{% endblock %}

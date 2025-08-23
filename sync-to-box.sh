@@ -1,11 +1,11 @@
 #!/bin/bash
-# Sync development files to Google Drive
+# Sync development files to Box
 
 SOURCE_DIR="$(pwd)"
-REMOTE_NAME="gdrive"
+REMOTE_NAME="box"
 TARGET_PATH="Development/jura-learn"
 
-echo "Syncing jura-learn to Google Drive..."
+echo "Syncing jura-learn to Box..."
 
 rclone sync "$SOURCE_DIR" "$REMOTE_NAME:$TARGET_PATH" \
     --exclude-from=.rclone-exclude \
@@ -13,4 +13,4 @@ rclone sync "$SOURCE_DIR" "$REMOTE_NAME:$TARGET_PATH" \
     --transfers 8 \
     --checkers 16
 
-echo "✅ Sync complete! Files available in Google Drive/Development/jura-learn"
+echo "✅ Sync complete! Files available in Box/Development/jura-learn"

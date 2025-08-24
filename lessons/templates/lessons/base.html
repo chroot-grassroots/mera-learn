@@ -1,19 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Jura - Cybersecurity Education{% endblock %}</title>
-
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
+    
+    <!-- Solid Pod libraries -->
+    <script src="https://unpkg.com/@inrupt/solid-client-authn-browser@1.17.5/dist/solid-client-authn.bundle.js"></script>
+    <script src="https://unpkg.com/@inrupt/solid-client@1.30.2/dist/solid-client.bundle.js"></script>
+    
     <!-- PyScript CSS and JS -->
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
 </head>
-
 <body class="bg-gray-50 min-h-screen">
     <nav class="bg-indigo-600 text-white p-4">
         <div class="container mx-auto">
@@ -21,36 +23,29 @@
             <p class="text-indigo-200">Privacy-preserving learning for activists</p>
         </div>
     </nav>
-
+    
     <main class="container mx-auto py-8 px-4">
         {% block content %}
         {% endblock %}
     </main>
-
-    <!-- PyScript content -->
-<py-script>
-    from pyscript import document, when
     
-    # Use @when decorator for reliable event handling
-    @when("click", "#test-python")
-    def test_python_click(event):
-        print("Button clicked from Python!")
+    <!-- Basic PyScript test -->
+    <py-script>
+        print("🎉 PyScript is working!")
+        print("Python is now running in your browser")
         
-        # Show output div
-        output_div = document.querySelector("#python-output")
-        output_div.classList.remove("hidden")
+        # Test basic functionality
+        import datetime
+        now = datetime.datetime.now()
+        print(f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
         
-        # Add some test output
-        content = document.querySelector("#output-content")
-        content.innerHTML = """
-        <p>✅ Event handling works</p>
-        <p>✅ DOM manipulation works</p>
-        <p>✅ Python imports work</p>
-        <p>✅ Ready for Solid Pods integration!</p>
-        """
-    
-    print("🚀 Home page PyScript initialized with @when decorator")
-</py-script>
+        # Test DOM manipulation
+        from pyscript import document
+        
+        # Create a test element
+        test_div = document.createElement("div")
+        test_div.innerHTML = '<p class="text-green-600 font-bold mt-4">✅ PyScript + DOM manipulation working!</p>'
+        document.body.appendChild(test_div)
+    </py-script>
 </body>
-
 </html>

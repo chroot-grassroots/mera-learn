@@ -7,52 +7,127 @@
     <div class="bg-white rounded-lg shadow-md p-8 mb-8">
         <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to Jura</h2>
         <p class="text-lg text-gray-700 mb-6">
-            Privacy-preserving cybersecurity education designed for activists, 
-            journalists, and civil rights organizations.
+            Privacy-preserving cybersecurity education designed for activists.
         </p>
         
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <h3 class="font-semibold text-blue-900 mb-2">🔒 Your Privacy First</h3>
-            <p class="text-blue-800">
-                Your learning progress is stored in your own Solid Pod - 
-                we never see your data, and you control where it lives.
-            </p>
+        <div id="debug-info" class="bg-gray-100 p-4 rounded mb-4">
+            <h3 class="font-semibold">Debug Information:</h3>
+            <div id="debug-output"></div>
         </div>
         
-        <button id="test-python" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-colors">
-            Test Python Functionality
-        </button>
-    </div>
-    
-    <div id="python-output" class="bg-gray-100 rounded-lg p-4 hidden">
-        <h3 class="font-semibold mb-2">Python Output:</h3>
-        <div id="output-content" class="font-mono text-sm"></div>
+        <div class="space-y-3">
+            <button id="test-js" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
+                Test JavaScript Access
+            </button>
+            <button id="login-solidcommunity" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700">
+                🌐 Connect with SolidCommunity.net
+            </button>
+            <details class="text-sm">
+                <summary class="cursor-pointer text-gray-600 hover:text-gray-800">Advanced: Custom Pod Provider</summary>
+                <div class="mt-3 p-3 bg-gray-50 rounded">
+                    <input type="url" id="custom-provider" placeholder="https://your-pod-provider.com" 
+                           class="w-full p-2 border rounded mb-2">
+                    <button id="login-custom" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">
+                        Connect
+                    </button>
+                </div>
+            </details>
+        </div>
     </div>
 </div>
 
 <py-script>
-    from pyscript import document
+    from pyscript import document, when
+    import js
     
-    def test_python_click(event):
-        print("Button clicked from Python!")
+    def update_debug(message):
+        debug_output = document.querySelector("#debug-output")
+        if debug_output:
+            current = debug_output.innerHTML
+            debug_output.innerHTML = current + f"<p>{message}</p>"
+        print(message)
+    
+    class SolidAuth:
+        def __init__(self):
+            self.session = js.solidClientAuthentication.getDefaultSession()
+            update_debug("SolidAuth initialized")
         
-        # Show output div
-        output_div = document.querySelector("#python-output")
-        output_div.classList.remove("hidden")
+        async def login(self, issuer_url):
+            try:
+                update_debug(f"Attempting login to {issuer_url}...")
+                
+                clean_url = js.window.location.origin + js.window.location.pathname
+                update_debug(f"Using redirect URL: {clean_url}")
+                
+                await self.session.login(js.Object.fromEntries([
+                    ["oidcIssuer", issuer_url],
+                    ["redirectUrl", clean_url],
+                    ["clientName", "Jura Cybersecurity Education"]
+                ]))
+                
+                update_debug("Login request sent - redirecting...")
+                
+            except Exception as e:
+                update_debug(f"Login error: {e}")
         
-        # Add some test output
-        content = document.querySelector("#output-content")
-        content.innerHTML = """
-        <p>✅ Event handling works</p>
-        <p>✅ DOM manipulation works</p>
-        <p>✅ Python imports work</p>
-        <p>✅ Ready for Solid Pods integration!</p>
-        """
+        def check_session(self):
+            try:
+                info = self.session.info
+                if info.isLoggedIn:
+                    update_debug(f"✅ Already logged in! WebID: {info.webId}")
+                    return True
+                else:
+                    update_debug("Not logged in")
+                    return False
+            except Exception as e:
+                update_debug(f"Session check error: {e}")
+                return False
+        
+        async def logout(self):
+            try:
+                await self.session.logout()
+                update_debug("Logged out successfully")
+            except Exception as e:
+                update_debug(f"Logout error: {e}")
     
-    # Attach event handler
-    test_button = document.querySelector("#test-python")
-    test_button.addEventListener("click", test_python_click)
+    # Initialize auth system
+    solid_auth = SolidAuth()
     
-    print("🚀 Home page PyScript initialized")
+    @when("click", "#test-js")
+    def test_js_access(event):
+        update_debug("Testing library access...")
+        
+        try:
+            has_auth = hasattr(js, 'solidClientAuthentication')
+            has_client = hasattr(js, 'solidClient')
+            
+            update_debug(f"solidClientAuthentication: {has_auth}")
+            update_debug(f"solidClient: {has_client}")
+            
+            if has_auth and has_client:
+                update_debug("🎉 Both Solid libraries are working!")
+            
+        except Exception as e:
+            update_debug(f"Error: {e}")
+    
+    @when("click", "#login-solidcommunity")
+    async def login_solidcommunity(event):
+        update_debug("🌐 Connecting to SolidCommunity.net...")
+        is_logged_in = solid_auth.check_session()
+        if not is_logged_in:
+            await solid_auth.login("https://solidcommunity.net")
+        else:
+            update_debug("Already connected!")
+    
+    @when("click", "#login-custom")
+    async def login_custom(event):
+        custom_url = document.querySelector("#custom-provider").value
+        if custom_url:
+            update_debug(f"🔧 Connecting to {custom_url}...")
+            await solid_auth.login(custom_url)
+        else:
+            update_debug("Please enter a pod provider URL")
+    
+    update_debug("🔒 Solid Pod authentication ready!")
 </py-script>
 {% endblock %}

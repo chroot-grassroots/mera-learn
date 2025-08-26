@@ -1,50 +1,67 @@
-from pyscript import document, when
-import js
-from solid_auth import SolidAuth
+"""
+Main application module for Jura platform.
+Handles application initialization without event decorators.
+"""
 
-def update_debug(message):
-    debug_output = document.querySelector("#debug-output")
-    if debug_output:
-        current = debug_output.innerHTML
-        debug_output.innerHTML = current + f"<p>{message}</p>"
-    print(message)
+# Global variables 
+solid_auth = None
+update_debug_func = None
 
-# Initialize auth system
-solid_auth = SolidAuth(debug_callback=update_debug)
 
-@when("click", "#test-js")
-def test_js_access(event):
-    update_debug("Testing library access...")
+def initialize_solid_auth(debug_callback):
+    """Initialize the SolidAuth system with debug callback."""
+    global solid_auth, update_debug_func
+    update_debug_func = debug_callback
+    
+    # Create SolidAuth instance (class should be available from solid_auth.py)
+    solid_auth = SolidAuth(debug_callback=debug_callback)
+    debug_callback("🔒 Solid Pod authentication ready!")
+    return solid_auth
+
+
+def test_js_access():
+    """Test JavaScript library access."""
+    if not update_debug_func:
+        print("No debug callback available")
+        return
+        
+    update_debug_func("Testing library access...")
     
     try:
+        import js
         has_auth = hasattr(js, 'solidClientAuthentication')
         has_client = hasattr(js, 'solidClient')
         
-        update_debug(f"solidClientAuthentication: {has_auth}")
-        update_debug(f"solidClient: {has_client}")
+        update_debug_func(f"solidClientAuthentication: {has_auth}")
+        update_debug_func(f"solidClient: {has_client}")
         
         if has_auth and has_client:
-            update_debug("🎉 Both Solid libraries are working!")
+            update_debug_func("🎉 Both Solid libraries are working!")
         
     except Exception as e:
-        update_debug(f"Error: {e}")
+        update_debug_func(f"Error: {e}")
 
-@when("click", "#login-solidcommunity")
-async def login_solidcommunity(event):
-    update_debug("🌐 Connecting to SolidCommunity.net...")
+
+async def handle_solidcommunity_login():
+    """Handle SolidCommunity.net login."""
+    if not solid_auth or not update_debug_func:
+        return
+        
+    update_debug_func("🌐 Connecting to SolidCommunity.net...")
     is_logged_in = solid_auth.check_session()
     if not is_logged_in:
         await solid_auth.login("https://solidcommunity.net")
     else:
-        update_debug("Already connected!")
+        update_debug_func("Already connected!")
 
-@when("click", "#login-custom")
-async def login_custom(event):
-    custom_url = document.querySelector("#custom-provider").value
+
+async def handle_custom_login(custom_url):
+    """Handle custom pod provider login."""
+    if not solid_auth or not update_debug_func:
+        return
+        
     if custom_url:
-        update_debug(f"🔧 Connecting to {custom_url}...")
+        update_debug_func(f"🔧 Connecting to {custom_url}...")
         await solid_auth.login(custom_url)
     else:
-        update_debug("Please enter a pod provider URL")
-
-update_debug("🔒 Solid Pod authentication ready!")
+        update_debug_func("Please enter a pod provider URL")

@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,11 +11,22 @@
     
     <!-- Solid Pod libraries -->
     <script src="https://unpkg.com/@inrupt/solid-client-authn-browser@1.17.5/dist/solid-client-authn.bundle.js"></script>
-    <script src="https://unpkg.com/@inrupt/solid-client@1.30.2/dist/solid-client.bundle.js"></script>
+    <script src="https://cdn.skypack.dev/@inrupt/solid-client@1.30.2"></script>
+
+    <!-- Solid Bridge for PyScript -->
+    <script src="{% static 'js/solid-bridge.js' %}"></script>
     
     <!-- PyScript CSS and JS -->
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    
+    <!-- PyScript Configuration - MUST come after script tag -->
+    <py-config>
+    {
+        "packages": [],
+        "paths": ["/static/py/", "./static/py/"]
+    }
+    </py-config>
 </head>
 <body class="bg-gray-50 min-h-screen">
     <nav class="bg-indigo-600 text-white p-4">
@@ -29,23 +41,5 @@
         {% endblock %}
     </main>
     
-    <!-- Basic PyScript test -->
-    <py-script>
-        print("🎉 PyScript is working!")
-        print("Python is now running in your browser")
-        
-        # Test basic functionality
-        import datetime
-        now = datetime.datetime.now()
-        print(f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Test DOM manipulation
-        from pyscript import document
-        
-        # Create a test element
-        test_div = document.createElement("div")
-        test_div.innerHTML = '<p class="text-green-600 font-bold mt-4">✅ PyScript + DOM manipulation working!</p>'
-        document.body.appendChild(test_div)
-    </py-script>
 </body>
 </html>

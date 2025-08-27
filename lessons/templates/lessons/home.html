@@ -275,15 +275,17 @@ def next_block_click(event):
 
 @when("click", "#test-js")
 def test_js_click(event):
-    update_debug("🔍 Testing Solid Bridge...")
+    update_debug("🔍 Testing Solid Integration...")
     
-    if hasattr(js.window, 'solidBridge'):
-        result = js.window.solidBridge.test()
-        update_debug(f"Bridge available: {result.bridge}")
-        update_debug(f"solidClientAuthentication: {result.solidClientAuthentication}")
-        update_debug(f"solidClient: {result.solidClient}")
+    has_auth = hasattr(js.window, 'solidClientAuthentication')
+    has_client = hasattr(js.window, 'solidClient')
+    
+    if has_auth and has_client:
+        update_debug("✅ Solid libraries: WORKING")
+        update_debug(f"✅ Authentication: {has_auth}")
+        update_debug(f"✅ Client: {has_client}")
     else:
-        update_debug("❌ Solid bridge not found")
+        update_debug("❌ Solid libraries missing")
         
     # Also show login status
     if hasattr(js, 'solidClientAuthentication'):

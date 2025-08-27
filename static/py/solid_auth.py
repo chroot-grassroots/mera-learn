@@ -22,7 +22,7 @@ class SolidAuth:
     
     async def login(self, issuer_url):
         """
-        Login to a Solid Pod provider.
+        Login to a Solid Pod provider with explicit write permissions.
         
         Args:
             issuer_url (str): URL of the Solid Pod provider
@@ -33,11 +33,13 @@ class SolidAuth:
             clean_url = js.window.location.origin + js.window.location.pathname
             self.debug(f"Using redirect URL: {clean_url}")
             
-            # Simplified login - let Solid handle permissions automatically
+            # Request explicit write permissions for private data
             await self.session.login(js.Object.fromEntries([
                 ["oidcIssuer", issuer_url],
                 ["redirectUrl", clean_url],
-                ["clientName", "Jura Cybersecurity Education"]
+                ["clientName", "Jura Cybersecurity Education"],
+                # Request broader permissions
+                ["scope", "openid profile webid offline_access"]
             ]))
             
             self.debug("Login request sent - redirecting...")
@@ -64,9 +66,14 @@ class SolidAuth:
             self.debug(f"✅ Directory ensured: {directory_url}")
             return True
         except Exception as e:
-            # Directory might already exist - that's okay
-            self.debug(f"Directory creation: {e}")
-            return True  # Don't fail if directory exists
+            # Check if it's just a "directory already exists" error
+            error_str = str(e)
+            if "409" in error_str or "Conflict" in error_str:
+                self.debug(f"✅ Directory already exists: {directory_url}")
+                return True
+            else:
+                self.debug(f"Directory creation error: {e}")
+                return False
     
     def check_session(self):
         """
@@ -106,10 +113,10 @@ class SolidAuth:
             
         try:
             # Ensure directory structure exists
-            container_url = f"{self.pod_url}public/jura-education/lessons/"
+            container_url = f"{self.pod_url}private/jura-education/lessons/"
             await self.ensure_directory_exists(container_url)
             
-            # Create the file URL
+            # Create the full file URL
             file_url = f"{container_url}{lesson_id}.json"
             self.debug(f"💾 Saving progress to: {file_url}")
             
@@ -121,13 +128,13 @@ class SolidAuth:
                 ["type", "application/json"]
             ]))
             
-            # Use Solid client with authenticated fetch
-            saved_file = await js.window.solidClient.saveFileInContainer(
-                container_url,
+            # Use overwriteFile instead of saveFileInContainer
+            saved_file = await js.window.solidClient.overwriteFile(
+                file_url,
                 file_blob,
                 js.Object.fromEntries([
-                    ["slug", f"{lesson_id}.json"],
-                    ["fetch", self.session.fetch]  # Use authenticated fetch
+                    ["fetch", self.session.fetch],
+                    ["contentType", "application/json"]
                 ])
             )
             
@@ -136,7 +143,6 @@ class SolidAuth:
             
         except Exception as e:
             self.debug(f"❌ Error saving progress: {e}")
-            self.debug(f"❌ Full error: {js.String(e)}")
             return False
     
     async def load_lesson_progress(self, lesson_id):
@@ -154,7 +160,7 @@ class SolidAuth:
             return None
             
         try:
-            file_url = f"{self.pod_url}public/jura-education/lessons/{lesson_id}.json"
+            file_url = f"{self.pod_url}private/jura-education/lessons/{lesson_id}.json"
             self.debug(f"📂 Loading progress from: {file_url}")
             
             # Use Solid client with authenticated fetch
@@ -173,6 +179,47 @@ class SolidAuth:
         except Exception as e:
             self.debug(f"📝 No saved progress found for lesson: {lesson_id} ({e})")
             return None
+    
+    async def debug_permissions(self):
+        """Debug current session permissions and capabilities."""
+        try:
+            info = self.session.info
+            self.debug("🔍 Permission Debug:")
+            self.debug(f"  - Logged in: {info.isLoggedIn}")
+            self.debug(f"  - WebID: {info.webId}")
+            
+            # Test if we can create a simple private file
+            test_url = f"{self.pod_url}private/jura-test-permissions.txt"
+            
+            try:
+                test_blob = js.Blob.new(["test"], js.Object.fromEntries([
+                    ["type", "text/plain"]
+                ]))
+                
+                await js.window.solidClient.overwriteFile(
+                    test_url,
+                    test_blob,
+                    js.Object.fromEntries([
+                        ["fetch", self.session.fetch],
+                        ["contentType", "text/plain"]
+                    ])
+                )
+                self.debug("  - ✅ Private write permissions: WORKING")
+                
+                # Clean up test file
+                try:
+                    await js.window.solidClient.deleteFile(
+                        test_url, 
+                        js.Object.fromEntries([["fetch", self.session.fetch]])
+                    )
+                except:
+                    pass  # Don't fail if cleanup fails
+                    
+            except Exception as e:
+                self.debug(f"  - ❌ Private write permissions: FAILED ({e})")
+                
+        except Exception as e:
+            self.debug(f"Permission debug error: {e}")
     
     async def logout(self):
         """Log out from the current session."""

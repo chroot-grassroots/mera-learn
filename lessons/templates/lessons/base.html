@@ -9,18 +9,14 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Solid Pod libraries -->
-    <script src="https://unpkg.com/@inrupt/solid-client-authn-browser@1.17.5/dist/solid-client-authn.bundle.js"></script>
-    <script src="https://cdn.skypack.dev/@inrupt/solid-client@1.30.2"></script>
-
-    <!-- Solid Bridge for PyScript -->
-    <script src="{% static 'js/solid-bridge.js' %}"></script>
+    <!-- Solid Pod libraries - BUNDLED VERSION -->
+    <script src="{% static 'js/solid-bundle.js' %}"></script>
     
     <!-- PyScript CSS and JS -->
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
     
-    <!-- PyScript Configuration - MUST come after script tag -->
+    <!-- PyScript Configuration -->
     <py-config>
     {
         "packages": [],
@@ -40,6 +36,5 @@
         {% block content %}
         {% endblock %}
     </main>
-    
 </body>
 </html>

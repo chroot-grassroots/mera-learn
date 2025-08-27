@@ -214,3 +214,17 @@ credentials/
 
 # rclone
 .rclone-exclude
+
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+static/js/solid-bundle.js
+static/js/*.map
+
+# Package lock files (optional - some prefer to commit these)
+package-lock.json
+yarn.lock

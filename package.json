@@ -1,0 +1,35 @@
+{
+  "name": "jura-learn",
+  "version": "1.0.0",
+  "description": "Cybersecurity Education Platform - Activist-focused learning using Solid Pods for privacy",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+    "scripts": {
+    "build": "esbuild src/solid-bundle.js --bundle --outfile=static/js/solid-bundle.js --format=iife --global-name=SolidClient --define:process.env.NODE_ENV='\"production\"' --define:global=globalThis --platform=browser --target=es2020",
+    "watch": "npm run build -- --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chroot-grassroots/jura-learn.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/chroot-grassroots/jura-learn/issues"
+  },
+  "homepage": "https://github.com/chroot-grassroots/jura-learn#readme",
+  "dependencies": {
+    "@inrupt/solid-client": "^2.1.2",
+    "@inrupt/solid-client-authn-browser": "^3.1.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
+    "events": "^3.3.0",
+    "stream-browserify": "^3.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  }
+}

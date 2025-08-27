@@ -21,28 +21,44 @@ class SolidAuth:
         self.debug("SolidAuth initialized")
     
     async def login(self, issuer_url):
-        """
-        Attempt to log in to a Solid Pod provider.
-        
-        Args:
-            issuer_url (str): The URL of the Solid Pod provider
-        """
         try:
             self.debug(f"Attempting login to {issuer_url}...")
             
             clean_url = js.window.location.origin + js.window.location.pathname
             self.debug(f"Using redirect URL: {clean_url}")
             
+            # Request explicit write permissions
             await self.session.login(js.Object.fromEntries([
                 ["oidcIssuer", issuer_url],
                 ["redirectUrl", clean_url],
-                ["clientName", "Jura Cybersecurity Education"]
+                ["clientName", "Jura Cybersecurity Education"],
+                # Add permission scopes
+                ["scope", "openid profile webid offline_access"],
+                ["requestedPermissions", js.JSON.parse('["read", "write", "append", "control"]')]
             ]))
             
             self.debug("Login request sent - redirecting...")
             
         except Exception as e:
             self.debug(f"Login error: {e}")
+
+    async def ensure_directory_exists(self, directory_url):
+        """Create directory structure if it doesn't exist"""
+        try:
+            # Use the authenticated session's fetch
+            fetch = self.session.fetch
+            
+            # Create container using Solid client
+            await js.window.solidClient.createContainerAt(
+                directory_url,
+                js.Object.fromEntries([["fetch", fetch]])
+            )
+            self.debug(f"✅ Directory ensured: {directory_url}")
+            return True
+        except Exception as e:
+            # Directory might already exist, or we might lack permissions
+            self.debug(f"Directory creation result: {e}")
+            return False
     
     def check_session(self):
         """
@@ -67,7 +83,7 @@ class SolidAuth:
     
     async def save_lesson_progress(self, lesson_id, progress_data):
         """
-        Save lesson progress using JavaScript Solid bridge.
+        Save lesson progress using bundled Solid client library.
         """
         if not self.pod_url:
             self.debug("❌ No pod URL available - user may not be logged in")
@@ -88,28 +104,32 @@ class SolidAuth:
             # Convert to JSON string
             json_data = js.JSON.stringify(save_data)
             
-            # File URL in the pod
+            # File URL in the pod  
             file_url = self.pod_url + f"private/jura-education/lessons/{lesson_id}.json"
             
             self.debug(f"💾 Saving progress to: {file_url}")
             
-            # Check if bridge is available
-            if not hasattr(js.window, 'solidBridge'):
-                self.debug("❌ Solid bridge not available")
-                return False
+            # Use the bundled Solid client library
+            blob = js.Blob.new([json_data], js.Object.fromEntries([["type", "application/json"]]))
+            file = js.File.new([blob], f"{lesson_id}.json", js.Object.fromEntries([["type", "application/json"]]))
             
-            # Use the JavaScript bridge to save data
-            result = await js.window.solidBridge.saveData(file_url, json_data, self.session)
+            # Save using the proper Solid client method
+            saved_file = await js.solidClient.saveFileInContainer(
+                file_url,
+                file,
+                js.Object.fromEntries([
+                    ["slug", f"{lesson_id}.json"],
+                    ["contentType", "application/json"]
+                ])
+            )
             
-            if result.success:
-                self.debug(f"✅ Progress saved successfully for lesson: {lesson_id}")
-                return True
-            else:
-                self.debug(f"❌ Save failed: {result.error}")
-                return False
-                
+            self.debug(f"✅ Progress saved successfully for lesson: {lesson_id}")
+            return True
+            
         except Exception as e:
             self.debug(f"❌ Error saving progress: {e}")
+            import traceback
+            self.debug(f"❌ Full error: {traceback.format_exc()}")
             return False
     
     async def load_lesson_progress(self, lesson_id):

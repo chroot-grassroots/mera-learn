@@ -21,20 +21,23 @@ class SolidAuth:
         self.debug("SolidAuth initialized")
     
     async def login(self, issuer_url):
+        """
+        Login to a Solid Pod provider.
+        
+        Args:
+            issuer_url (str): URL of the Solid Pod provider
+        """
         try:
             self.debug(f"Attempting login to {issuer_url}...")
             
             clean_url = js.window.location.origin + js.window.location.pathname
             self.debug(f"Using redirect URL: {clean_url}")
             
-            # Request explicit write permissions
+            # Simplified login - let Solid handle permissions automatically
             await self.session.login(js.Object.fromEntries([
                 ["oidcIssuer", issuer_url],
                 ["redirectUrl", clean_url],
-                ["clientName", "Jura Cybersecurity Education"],
-                # Add permission scopes
-                ["scope", "openid profile webid offline_access"],
-                ["requestedPermissions", js.JSON.parse('["read", "write", "append", "control"]')]
+                ["clientName", "Jura Cybersecurity Education"]
             ]))
             
             self.debug("Login request sent - redirecting...")
@@ -43,22 +46,27 @@ class SolidAuth:
             self.debug(f"Login error: {e}")
 
     async def ensure_directory_exists(self, directory_url):
-        """Create directory structure if it doesn't exist"""
+        """
+        Create directory structure if it doesn't exist.
+        
+        Args:
+            directory_url (str): URL of the directory to create
+            
+        Returns:
+            bool: True if directory exists or was created successfully
+        """
         try:
             # Use the authenticated session's fetch
-            fetch = self.session.fetch
-            
-            # Create container using Solid client
             await js.window.solidClient.createContainerAt(
                 directory_url,
-                js.Object.fromEntries([["fetch", fetch]])
+                js.Object.fromEntries([["fetch", self.session.fetch]])
             )
             self.debug(f"✅ Directory ensured: {directory_url}")
             return True
         except Exception as e:
-            # Directory might already exist, or we might lack permissions
-            self.debug(f"Directory creation result: {e}")
-            return False
+            # Directory might already exist - that's okay
+            self.debug(f"Directory creation: {e}")
+            return True  # Don't fail if directory exists
     
     def check_session(self):
         """
@@ -83,53 +91,52 @@ class SolidAuth:
     
     async def save_lesson_progress(self, lesson_id, progress_data):
         """
-        Save lesson progress using bundled Solid client library.
+        Save lesson progress to the user's Solid Pod.
+        
+        Args:
+            lesson_id (str): Unique lesson identifier
+            progress_data (dict): Progress data to save
+            
+        Returns:
+            bool: True if saved successfully, False otherwise
         """
         if not self.pod_url:
             self.debug("❌ No pod URL available - user may not be logged in")
             return False
             
         try:
-            # Create the data to save
-            timestamp = js.Date.new().toISOString()
-            save_data = {
-                'lesson_id': lesson_id,
-                'completed': progress_data.get('completed', False),
-                'score': progress_data.get('score', 0),
-                'answers': progress_data.get('answers', {}),
-                'completed_at': timestamp,
-                'app': 'jura-cybersecurity-education'
-            }
+            # Ensure directory structure exists
+            container_url = f"{self.pod_url}public/jura-education/lessons/"
+            await self.ensure_directory_exists(container_url)
             
-            # Convert to JSON string
-            json_data = js.JSON.stringify(save_data)
-            
-            # File URL in the pod  
-            file_url = self.pod_url + f"private/jura-education/lessons/{lesson_id}.json"
-            
+            # Create the file URL
+            file_url = f"{container_url}{lesson_id}.json"
             self.debug(f"💾 Saving progress to: {file_url}")
             
-            # Use the bundled Solid client library
-            blob = js.Blob.new([json_data], js.Object.fromEntries([["type", "application/json"]]))
-            file = js.File.new([blob], f"{lesson_id}.json", js.Object.fromEntries([["type", "application/json"]]))
+            # Convert progress data to JSON string
+            json_data = js.JSON.stringify(progress_data)
             
-            # Save using the proper Solid client method
-            saved_file = await js.solidClient.saveFileInContainer(
-                file_url,
-                file,
+            # Create a blob with the JSON data
+            file_blob = js.Blob.new([json_data], js.Object.fromEntries([
+                ["type", "application/json"]
+            ]))
+            
+            # Use Solid client with authenticated fetch
+            saved_file = await js.window.solidClient.saveFileInContainer(
+                container_url,
+                file_blob,
                 js.Object.fromEntries([
                     ["slug", f"{lesson_id}.json"],
-                    ["contentType", "application/json"]
+                    ["fetch", self.session.fetch]  # Use authenticated fetch
                 ])
             )
             
-            self.debug(f"✅ Progress saved successfully for lesson: {lesson_id}")
+            self.debug("✅ Progress saved successfully!")
             return True
             
         except Exception as e:
             self.debug(f"❌ Error saving progress: {e}")
-            import traceback
-            self.debug(f"❌ Full error: {traceback.format_exc()}")
+            self.debug(f"❌ Full error: {js.String(e)}")
             return False
     
     async def load_lesson_progress(self, lesson_id):
@@ -147,28 +154,24 @@ class SolidAuth:
             return None
             
         try:
-            file_url = self.pod_url + f"private/jura-education/lessons/{lesson_id}.json"
-            
+            file_url = f"{self.pod_url}public/jura-education/lessons/{lesson_id}.json"
             self.debug(f"📂 Loading progress from: {file_url}")
             
-            # Try to fetch the file
-            response = await js.fetch(file_url, js.Object.fromEntries([
-                ["headers", js.Object.fromEntries([
-                    ["Authorization", f"Bearer {self.session.info.sessionId}"]
-                ])]
-            ]))
+            # Use Solid client with authenticated fetch
+            file_data = await js.window.solidClient.getFile(
+                file_url,
+                js.Object.fromEntries([["fetch", self.session.fetch]])
+            )
             
-            if response.ok:
-                json_text = await response.text()
-                progress_data = js.JSON.parse(json_text)
-                self.debug(f"✅ Progress loaded for lesson: {lesson_id}")
-                return progress_data
-            else:
-                self.debug(f"📝 No saved progress found for lesson: {lesson_id}")
-                return None
-                
+            # Convert blob to text and parse JSON
+            json_text = await file_data.text()
+            progress_data = js.JSON.parse(json_text)
+            
+            self.debug(f"✅ Progress loaded for lesson: {lesson_id}")
+            return progress_data
+            
         except Exception as e:
-            self.debug(f"❌ Error loading progress: {e}")
+            self.debug(f"📝 No saved progress found for lesson: {lesson_id} ({e})")
             return None
     
     async def logout(self):

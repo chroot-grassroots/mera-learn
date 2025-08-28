@@ -1,40 +1,58 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Jura - Cybersecurity Education{% endblock %}</title>
-    
+    <title>{% block title %}Jura - Digital Security Education{% endblock %}</title>
+
+    <!-- TODO: Add Subresource Integrity hash for security for all external libraries -->
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Solid Pod libraries - BUNDLED VERSION -->
     <script src="{% static 'js/solid-bundle.js' %}"></script>
-    
+
     <!-- PyScript CSS and JS -->
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    
+
     <!-- PyScript Configuration -->
     <py-config>
-    {
+        {
         "packages": [],
-        "paths": ["/static/py/", "./static/py/"]
-    }
+        "paths": ["/static/py/"]
+        }
     </py-config>
+
+    <!-- Unsplash Protest Photo for Top Bar -->
+    <style>
+        .massive-protest-nav-background {
+            background-image: url('https://images.unsplash.com/photo-1591625991934-ce6df113294d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&h=200&q=80&crop=entropy');
+            background-size: cover;
+            background-position: center;
+        }
+    </style>
+
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <nav class="bg-indigo-600 text-white p-4">
-        <div class="container mx-auto">
-            <h1 class="text-2xl font-bold">Jura - Cybersecurity Education</h1>
-            <p class="text-indigo-200">Privacy-preserving learning for activists</p>
+
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen">
+
+    <!-- Tailwind Code for Consistent Top Bar-->
+    <nav class="massive-protest-nav-background text-white p-4 relative">
+        <div class="absolute inset-0 bg-gradient-to-r from-black/70 to-black/30"></div>
+        <div class="container mx-auto relative z-10">
+            <h1 class="text-2xl font-bold drop-shadow-lg">Jura Digital Security</h1>
+            <p class="text-gray-200 drop-shadow-md">Learning for activists by activists</p>
         </div>
     </nav>
-    
-    <main class="container mx-auto py-8 px-4">
+
+    <!-- Flexible placeholder for child templates-->
+    <main class="py-8"> <!-- No horizontal constraints -->
         {% block content %}
         {% endblock %}
     </main>
 </body>
+
 </html>

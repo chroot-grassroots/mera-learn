@@ -1,5 +1,5 @@
 """
-WSGI config for jura_platform project.
+WSGI config for mera_platform project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -11,6 +11,6 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "jura_platform.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mera_platform.settings")
 
 application = get_wsgi_application()

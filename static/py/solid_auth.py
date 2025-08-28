@@ -1,5 +1,5 @@
 """
-Solid Pod authentication module for Jura platform.
+Solid Pod authentication module for Mera platform.
 Handles user authentication with Solid Pod providers.
 """
 import js
@@ -37,7 +37,7 @@ class SolidAuth:
             await self.session.login(js.Object.fromEntries([
                 ["oidcIssuer", issuer_url],
                 ["redirectUrl", clean_url],
-                ["clientName", "Jura Cybersecurity Education"],
+                ["clientName", "Mera Cybersecurity Education"],
                 # Request broader permissions
                 ["scope", "openid profile webid offline_access"]
             ]))
@@ -113,7 +113,7 @@ class SolidAuth:
             
         try:
             # Ensure directory structure exists
-            container_url = f"{self.pod_url}private/jura-education/lessons/"
+            container_url = f"{self.pod_url}private/mera-education/lessons/"
             await self.ensure_directory_exists(container_url)
             
             # Create the full file URL
@@ -160,7 +160,7 @@ class SolidAuth:
             return None
             
         try:
-            file_url = f"{self.pod_url}private/jura-education/lessons/{lesson_id}.json"
+            file_url = f"{self.pod_url}private/mera-education/lessons/{lesson_id}.json"
             self.debug(f"📂 Loading progress from: {file_url}")
             
             # Use Solid client with authenticated fetch
@@ -189,7 +189,7 @@ class SolidAuth:
             self.debug(f"  - WebID: {info.webId}")
             
             # Test if we can create a simple private file
-            test_url = f"{self.pod_url}private/jura-test-permissions.txt"
+            test_url = f"{self.pod_url}private/mera-test-permissions.txt"
             
             try:
                 test_blob = js.Blob.new(["test"], js.Object.fromEntries([

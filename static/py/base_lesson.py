@@ -1,5 +1,5 @@
 """
-Base lesson class for Jura cybersecurity education.
+Base lesson class for Mera cybersecurity education.
 All lessons inherit from this base class.
 """
 

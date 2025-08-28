@@ -1,11 +1,11 @@
 {% extends 'lessons/base.html' %}
 
-{% block title %}Home - Jura Cybersecurity Education{% endblock %}
+{% block title %}Home - Mera Cybersecurity Education{% endblock %}
 
 {% block content %}
 <div class="max-w-4xl mx-auto">
     <div class="bg-white rounded-lg shadow-md p-8 mb-8">
-        <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to Jura</h2>
+        <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to Mera</h2>
         <p class="text-lg text-gray-700 mb-6">
             Privacy-preserving cybersecurity education designed for activists.
         </p>
@@ -309,7 +309,7 @@ async def login_solidcommunity_click(event):
         await session.login(js.Object.fromEntries([
             ["oidcIssuer", "https://solidcommunity.net"],
             ["redirectUrl", clean_url],
-            ["clientName", "Jura Cybersecurity Education"]
+            ["clientName", "Mera Cybersecurity Education"]
         ]))
 
 # Start the application

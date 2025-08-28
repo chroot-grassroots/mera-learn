@@ -1,5 +1,5 @@
 """
-Utility functions for the Jura learning platform.
+Utility functions for the Mera learning platform.
 """
 
 def update_debug(message):

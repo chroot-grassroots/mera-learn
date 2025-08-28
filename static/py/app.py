@@ -1,5 +1,5 @@
 """
-Main application module for Jura platform.
+Main application module for Mera platform.
 Handles application initialization without event decorators.
 """
 

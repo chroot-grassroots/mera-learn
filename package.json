@@ -1,5 +1,5 @@
 {
-  "name": "jura-learn",
+  "name": "mera-learn",
   "version": "1.0.0",
   "description": "Cybersecurity Education Platform - Activist-focused learning using Solid Pods for privacy",
   "main": "index.js",
@@ -12,15 +12,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chroot-grassroots/jura-learn.git"
+    "url": "git+https://github.com/chroot-grassroots/mera-learn.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/chroot-grassroots/jura-learn/issues"
+    "url": "https://github.com/chroot-grassroots/mera-learn/issues"
   },
-  "homepage": "https://github.com/chroot-grassroots/jura-learn#readme",
+  "homepage": "https://github.com/chroot-grassroots/mera-learn#readme",
   "dependencies": {
     "@inrupt/solid-client": "^2.1.2",
     "@inrupt/solid-client-authn-browser": "^3.1.0",

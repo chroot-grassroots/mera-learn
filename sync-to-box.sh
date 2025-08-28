@@ -3,9 +3,9 @@
 
 SOURCE_DIR="$(pwd)"
 REMOTE_NAME="box"
-TARGET_PATH="Development/jura-learn"
+TARGET_PATH="Development/mera-learn"
 
-echo "Syncing jura-learn to Box..."
+echo "Syncing mera-learn to Box..."
 
 rclone sync "$SOURCE_DIR" "$REMOTE_NAME:$TARGET_PATH" \
     --exclude-from=.rclone-exclude \
@@ -13,4 +13,4 @@ rclone sync "$SOURCE_DIR" "$REMOTE_NAME:$TARGET_PATH" \
     --transfers 8 \
     --checkers 16
 
-echo "✅ Sync complete! Files available in Box/Development/jura-learn"
+echo "✅ Sync complete! Files available in Box/Development/mera-learn"

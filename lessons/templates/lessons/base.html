@@ -33,18 +33,23 @@
             background-size: cover;
             background-position: center;
         }
-    </style>
 
+        .white-emoji {
+            filter: grayscale(1) brightness(0) invert(1);
+        }
+    </style>
 </head>
 
 <body class="bg-gray-50 dark:bg-gray-900 min-h-screen">
 
     <!-- Tailwind Code for Consistent Top Bar-->
     <nav class="massive-protest-nav-background text-white p-4 relative">
-        <div class="absolute inset-0 bg-gradient-to-r from-black/70 to-black/30"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-black/30 to-black/70"></div>
         <div class="container mx-auto relative z-10">
-            <h1 class="text-2xl font-bold drop-shadow-lg">Jura Digital Security</h1>
-            <p class="text-gray-200 drop-shadow-md">Learning for activists by activists</p>
+            <h1 class="text-2xl font-bold drop-shadow-lg text-white">
+                [<span class="white-emoji">&#x1F331;</span>]: Jura
+            </h1>
+            <p class="text-gray-200 drop-shadow-md">Digital security education for activists</p>
         </div>
     </nav>
 

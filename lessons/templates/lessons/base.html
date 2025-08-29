@@ -26,6 +26,13 @@
         }
     </py-config>
 
+    <script>
+        tailwind.config = {
+            darkMode: 'media', // This tells Tailwind to use prefers-color-scheme
+        }
+    </script>
+
+
     <!-- Unsplash Protest Photo for Top Bar -->
     <style>
         .massive-protest-nav-background {
@@ -37,10 +44,19 @@
         .white-emoji {
             filter: grayscale(1) brightness(0) invert(1);
         }
+
+
+        .bg-mera-light {
+            background-color: #84e67b;
+        }
+
+        .bg-mera-dark {
+            background-color: #0f1a0e;
+        }
     </style>
 </head>
 
-<body class="bg-gray-50 dark:bg-gray-900 min-h-screen">
+<body class="bg-mera-light dark:bg-mera-dark min-h-screen">
 
     <!-- Tailwind Code for Consistent Top Bar-->
     <nav class="massive-protest-nav-background text-white p-4 relative">

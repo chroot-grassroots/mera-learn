@@ -1,7 +1,7 @@
 from django.urls import path
 from . import views
 
-app_name = 'pages'  # Add this line
+app_name = 'pages' 
 urlpatterns = [
     # Informative pages
     path("", views.home, name="home"),

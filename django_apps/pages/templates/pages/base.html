@@ -8,8 +8,25 @@
     <title>{% block title %}Mera - Digital Security Education{% endblock %}</title>
 
     <!-- TODO: Add Subresource Integrity hash for security for all external libraries -->
+
+    <!-- Tailwind CSS -->
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Custom Color -->
+    <script>
+        tailwind.config = {
+            darkMode: 'media',
+            theme: {
+                extend: {
+                    colors: {
+                        'mera-light': '#84e67b',
+                        'mera-dark': '#0f1a0e'
+                    }
+                }
+            }
+        }
+    </script>
 
     <!-- Solid Pod libraries - BUNDLED VERSION -->
     <script src="{% static 'js/solid-bundle.js' %}"></script>
@@ -26,13 +43,6 @@
         }
     </py-config>
 
-    <script>
-        tailwind.config = {
-            darkMode: 'media', // This tells Tailwind to use prefers-color-scheme
-        }
-    </script>
-
-
     <!-- Unsplash Protest Photo for Top Bar -->
     <style>
         .massive-protest-nav-background {
@@ -43,15 +53,6 @@
 
         .white-emoji {
             filter: grayscale(1) brightness(0) invert(1);
-        }
-
-
-        .bg-mera-light {
-            background-color: #84e67b;
-        }
-
-        .bg-mera-dark {
-            background-color: #0f1a0e;
         }
     </style>
 </head>
@@ -65,70 +66,79 @@
             <h1 class="text-2xl font-bold drop-shadow-lg text-white">
                 [<span class="white-emoji">&#x1F331;</span>]: Mera
             </h1>
-            <p class="text-gray-200 drop-shadow-md">Digital security education for activists</p>
+            <p class="text-gray-200 font-bold drop-shadow-lg">Digital security education for activists</p>
         </div>
-    
-        <div class="bg-white dark:bg-gray-800 shadow-sm">
-    <div class="container mx-auto px-4">
-        
-        {% if page_mode == 'information' %}
-        <!-- Information Mode: Full navigation menu -->
-        <div class="flex items-center justify-between py-4">
-            <div class="flex space-x-8">
-                <a href="{% url 'django_apps.pages:home' %}" class="text-gray-700 dark:text-gray-300 hover:text-green-600 font-medium">Home</a>
-                <a href="{% url 'django_apps.pages:about' %}" class="text-gray-700 dark:text-gray-300 hover:text-green-600 font-medium">About</a>
-                <a href="{% url 'django_apps.pages:contact' %}" class="text-gray-700 dark:text-gray-300 hover:text-green-600 font-medium">Contact</a>
-                <a href="{% url 'django_apps.pages:privacy' %}" class="text-gray-700 dark:text-gray-300 hover:text-green-600 font-medium">Privacy</a>
+    </nav>
+
+    <div class="bg-mera-light dark:bg-mera-dark">
+        <div class="container mx-auto px-4">
+
+            {% if page_mode == 'information' %}
+            <!-- Information Mode: Full navigation menu -->
+            <div class="flex items-center justify-between py-1">
+                <div class="flex space-x-8 py-3">
+                    <a href="{% url 'pages:home' %}"
+                        class="text-gray-800 dark:text-gray-300 hover:text-gray-9000 dark:hover:text-white font-bold">Home</a>
+                    <a href="{% url 'pages:about' %}"
+                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">About</a>
+                    <a href="{% url 'pages:privacy' %}"
+                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Privacy</a>
+                    <a href="{% url 'pages:privacy' %}"
+                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Resources</a>
+                    <a href="{% url 'pages:privacy' %}"
+                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Contribute</a>
+                    <a href="{% url 'pages:contact' %}"
+                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Contact</a>
+                </div>
+                <button id="main-cta-button"
+                    class="bg-gray-600 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-800 text-white px-9 py-4 font-bold transition-colors">
+                    Start Learning
+                </button>
             </div>
-            <button id="main-cta-button" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
-                Start Learning
-            </button>
-        </div>
-        
-        {% elif page_mode == 'auth' %}
-        <!-- Auth Mode: Minimal navigation -->
-        <div class="py-4 text-center">
-            <p class="text-gray-600 dark:text-gray-400">Setting up your secure learning environment...</p>
-        </div>
-        
-        {% elif page_mode == 'onboarding' %}
-        <!-- Onboarding Mode: Progress indicator -->
-        <div class="py-4">
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-medium text-gray-800 dark:text-gray-200">Orientation</h2>
-                <div class="flex items-center space-x-3">
-                    <span class="text-sm text-gray-500">Step {{ step|default:1 }} of {{ max_steps|default:5 }}</span>
-                    <div class="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div class="bg-green-600 h-2 rounded-full transition-all duration-300" \
-                            <!-- VS Code: ignore next line -->
-                             style="width: {2{ step|default:1|mul:20 }}%"></div>
+
+            {% elif page_mode == 'auth' %}
+            <!-- Auth Mode: Minimal navigation -->
+            <div class="py-4 text-center">
+                <p class="text-gray-800 dark:text-gray-300">Setting up your secure learning environment...</p>
+            </div>
+
+            {% elif page_mode == 'onboarding' %}
+            <!-- Onboarding Mode: Progress indicator -->
+            <div class="py-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-lg font-medium text-gray-800 dark:text-gray-200">Orientation</h2>
+                    <div class="flex items-center space-x-3">
+                        <span class="text-sm text-gray-500">Step {{ step|default:1 }} of {{ max_steps|default:5
+                            }}</span>
+                        <div class="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div class="bg-green-600 h-2 rounded-full transition-all duration-300" \ <!-- VS Code:
+                                ignore next line -->
+                                style="width: {2{ step|default:1|mul:20 }}%"></div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        
-        {% elif page_mode == 'learning' %}
-        <!-- Learning Mode: Just exit button -->
-        <div class="py-4 flex justify-end">
-            <a href="{% url 'django_apps.pages:home' %}" 
-               class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
-                ← Back to Main Site
-            </a>
-        </div>
-        
-        {% else %}
-        <!-- Default fallback -->
-        <div class="py-4 flex justify-center">
-            <a href="{% url 'django_apps.pages:home' %}" class="text-green-600 hover:text-green-700 font-medium">
-                Return to Home
-            </a>
-        </div>
-        {% endif %}
-        
-    </div>
-</div>
 
-    </nav>
+            {% elif page_mode == 'learning' %}
+            <!-- Learning Mode: Just exit button -->
+            <div class="py-4 flex justify-end">
+                <a href="{% url 'pages:home' %}"
+                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
+                    ← Back to Main Site
+                </a>
+            </div>
+
+            {% else %}
+            <!-- Default fallback -->
+            <div class="py-4 flex justify-center">
+                <a href="{% url 'pages:home' %}" class="text-green-600 hover:text-green-700 font-medium">
+                    Return to Home
+                </a>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
 
     <!-- Flexible placeholder for child templates-->
     <main class="py-8"> <!-- No horizontal constraints -->

@@ -49,3 +49,6 @@ def news(request):
 
 def resources(request):
     return render(request, 'pages/resources.html', {'page_mode': 'information'})
+
+def contribute(request):
+    return render(request, 'pages/contribute.html', {'page_mode': 'information'})

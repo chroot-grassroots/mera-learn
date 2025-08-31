@@ -10,6 +10,7 @@ urlpatterns = [
     path("resources/", views.about, name="resources"),
     path("privacy/", views.about, name="privacy"),
     path("contact/", views.about, name="contact"),
+    path("contribute/", views.about, name="contribute"),
     # Solid connection and orientation pages
     path("hello/", views.hello, name="hello"),
     path("connect/", views.connect, name="connect"),

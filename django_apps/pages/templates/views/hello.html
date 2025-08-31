@@ -1,0 +1,30 @@
+{% extends "views/base.html" %}
+
+<!-- To Do: What if an authenticated user ends up here? -->
+
+{% block content %}
+<div class="container mx-auto px-4 py-16">
+    <!-- Simple Hero Section -->
+    <div class="text-center mb-16">
+        <h1 class="text-3xl md:text-5xl font-bold text-gray-900 dark:text-white mb-8">
+            Start learning now!
+        </h1>
+        
+        <!-- Journey Choice Buttons -->
+        <div class="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+            <a href="{% url 'pages:orientation' step=1 %}" 
+               class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors">
+                New Users: Start Your Journey
+            </a>
+            <a href="{% url 'pages:connect' %}" 
+               class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors">
+                Returning User: Reconnect Your Solid Pod
+            </a>
+        </div>
+        
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+            Choose your path to secure digital skills
+        </p>
+    </div>
+</div>
+{% endblock %}

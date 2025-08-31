@@ -6,11 +6,11 @@ urlpatterns = [
     # Informative pages
     path("", views.home, name="home"),
     path("about/", views.about, name="about"),
-    path("news/", views.about, name="news"),
-    path("resources/", views.about, name="resources"),
-    path("privacy/", views.about, name="privacy"),
-    path("contact/", views.about, name="contact"),
-    path("contribute/", views.about, name="contribute"),
+    path("news/", views.news, name="news"),
+    path("resources/", views.resources, name="resources"),
+    path("privacy/", views.privacy, name="privacy"),
+    path("contact/", views.contact, name="contact"),
+    path("contribute/", views.contribute, name="contribute"),
     # Solid connection and orientation pages
     path("hello/", views.hello, name="hello"),
     path("connect/", views.connect, name="connect"),

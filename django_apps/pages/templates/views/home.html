@@ -1,320 +1,102 @@
-{% extends 'views/base.html' %}
-
-{% block title %}Home - Mera Digital Security Education{% endblock %}
+{% extends "views/base.html" %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto">
-    <div class="bg-white rounded-lg shadow-md p-8 mb-8">
-        <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to Mera</h2>
-        <p class="text-lg text-gray-700 mb-6">
-            Digital security education designed for activists by activists.
+<div class="container mx-auto px-4 py-16">
+    <!-- Hero Section -->
+    <div class="text-center mb-16">
+        <h1 class="text-3xl md:text-5xl font-bold text-gray-900 dark:text-white mb-6">
+            Digital Security Skills for Activists
+        </h1>
+        <p class="text-lg md:text-xl text-gray-700 dark:text-gray-300 max-w-3xl mx-auto mb-8">
+            Learn cybersecurity, digital privacy, and secure communications to protect yourself, 
+            your community, and your movement in the digital age.
         </p>
         
-        <div id="debug-info" class="bg-gray-100 p-4 rounded mb-4">
-            <h3 class="font-semibold">Debug Information:</h3>
-            <div id="debug-output"></div>
+        <!-- Dynamic Journey Buttons -->
+        <div id="journey-button-container" class="mb-8">
+            <!-- Not authenticated: Show both options -->
+            <div id="unauthenticated-buttons" class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="{% url 'pages:orientation' step=1 %}" id="start-journey-button"
+                   class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors">
+                    New Users: Start Your Journey
+                </a>
+                <a href="{% url 'pages:connect' %}" id="connect-button"
+                   class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors">
+                    Returning User: Reconnect Your Solid Pod
+                </a>
+            </div>
+            
+            <!-- Authenticated: Show single continue option -->
+            <div id="authenticated-buttons" class="hidden">
+                <a href="{% url 'pages:learn' %}" id="continue-journey-button"
+                   class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors">
+                    Continue Your Journey
+                </a>
+            </div>
         </div>
         
-        <div class="space-y-3">
-            <button id="test-js" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
-                Test JavaScript Access
-            </button>
-            <button id="login-solidcommunity" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700">
-                🌐 Connect with SolidCommunity.net
-            </button>
-            <details class="text-sm">
-                <summary class="cursor-pointer text-gray-600 hover:text-gray-800">Advanced: Custom Pod Provider</summary>
-                <div class="mt-3 p-3 bg-gray-50 rounded">
-                    <input type="url" id="custom-provider" placeholder="https://your-pod-provider.com" 
-                           class="w-full p-2 border rounded mb-2">
-                    <button id="login-custom" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">
-                        Connect
-                    </button>
-                </div>
-            </details>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+            Free • Privacy-focused • No tracking
+        </p>
+    </div>
+    
+    <!-- Feature Cards -->
+    <div class="grid md:grid-cols-3 gap-8 mb-16">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+            <div class="w-12 h-12 bg-red-500 rounded-lg flex items-center justify-center mb-4">
+                <span class="text-white font-bold">🔒</span>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3">Digital Security</h3>
+            <p class="text-gray-700 dark:text-gray-300">
+                Learn to protect your devices, accounts, and communications from surveillance and attacks.
+            </p>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+            <div class="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center mb-4">
+                <span class="text-white font-bold">👥</span>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3">Community Safety</h3>
+            <p class="text-gray-700 dark:text-gray-300">
+                Protect your organization and fellow activists with operational security practices.
+            </p>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+            <div class="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mb-4">
+                <span class="text-white font-bold">📡</span>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-3">Secure Communications</h3>
+            <p class="text-gray-700 dark:text-gray-300">
+                Master encrypted messaging, secure file sharing, and anonymous communications.
+            </p>
         </div>
     </div>
 </div>
 
-<!-- Debug output area -->
-<div class="bg-gray-100 rounded-lg p-4 mb-6">
-    <h3 class="font-bold mb-2">System Status:</h3>
-    <div id="debug-output" class="text-sm"></div>
-</div>
-
-<!-- Lesson Test Section -->
-<div class="bg-white rounded-lg shadow-md p-8 mb-8">
-    <h2 class="text-2xl font-bold text-gray-900 mb-4">Test Lesson</h2>
-    
-    <div class="space-y-4 mb-6">
-        <button id="load-lesson" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700">
-            Load Test Lesson
-        </button>
-        <button id="next-block" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 hidden">
-            Next →
-        </button>
-    </div>
-    
-    <!-- Lesson content will be displayed here -->
-    <div id="lesson-content" class="min-h-32"></div>
-</div>
-
-<!-- Full test -->
+<!-- PyScript for dynamic button behavior -->
 <py-script>
-from pyscript import document, when
-import js
-
-# Initialize debug output  
-debug_div = document.querySelector("#debug-output")
-debug_div.innerHTML = '<p>🔄 Loading modules...</p>'
-
-def update_debug(message):
-    """Update debug output with a message."""
-    debug_output = document.querySelector("#debug-output")
-    if debug_output:
-        current = debug_output.innerHTML
-        current += f'<p class="text-sm text-gray-700 mb-1">{message}</p>'
-        debug_output.innerHTML = current
-    print(message)
-
-async def load_module(module_name):
-    """Load a Python module using direct fetch method."""
-    try:
-        response = await js.fetch(f'/static/py/{module_name}.py')
-        if response.ok:
-            module_code = await response.text()
-            exec(module_code, globals())
-            update_debug(f'✅ {module_name}.py loaded successfully')
-            return True
-        else:
-            update_debug(f'❌ Failed to load {module_name}: {response.status}')
-            return False
-    except Exception as e:
-        update_debug(f'❌ Error loading {module_name}: {e}')
-        return False
-
-# Lesson-related variables
-current_lesson = None
-
-async def load_lesson_modules():
-    """Load lesson-related modules."""
-    try:
-        # Load test lesson
-        test_lesson_loaded = await load_module('lessons/test_lesson')
-        
-        # Load lesson UI components
-        lesson_ui_loaded = await load_module('lesson_ui')
-        
-        if test_lesson_loaded and lesson_ui_loaded:
-            update_debug('✅ Lesson modules loaded')
-            return True
-        else:
-            update_debug('❌ Failed to load some lesson modules')
-            return False
-    except Exception as e:
-        update_debug(f'❌ Error loading lesson modules: {e}')
-        return False
-
-def load_test_lesson():
-    """Load and display the test lesson."""
-    global current_lesson
-    try:
-        if 'TestLesson' not in globals():
-            update_debug('❌ TestLesson class not found in globals')
-            return
-            
-        current_lesson = TestLesson()
-        display_current_block()
-        update_debug('📚 Test lesson loaded!')
-        
-        # Show next button
-        next_btn = document.querySelector("#next-block")
-        next_btn.classList.remove("hidden")
-        
-    except Exception as e:
-        update_debug(f'❌ Error loading lesson: {e}')
-
-def display_current_block():
-    """Display the current lesson block."""
-    if not current_lesson:
-        return
-        
-    block = current_lesson.get_current_block()
-    if not block:
-        update_debug('📖 Lesson completed!')
-        return
+from js import document  
+async def update_journey_buttons():
+    """Update button visibility based on Solid Pod authentication status"""
+    unauthenticated_buttons = document.querySelector("#unauthenticated-buttons")
+    authenticated_buttons = document.querySelector("#authenticated-buttons")
     
-    try:
-        if block['type'] == 'text':
-            render_text_block(block, 'lesson-content')
-        elif block['type'] == 'quiz':
-            render_quiz_block(block, 'lesson-content')
-    except Exception as e:
-        update_debug(f'❌ Error displaying block: {e}')
-
-def handle_quiz_answer(answer_index):
-    """Handle quiz answer selection."""
-    if not current_lesson:
-        return
-        
-    try:
-        result = current_lesson.check_answer(answer_index)
-        show_quiz_result(result['correct'], result['explanation'])
-        
-        update_debug(f'Quiz answer: {"Correct! ✅" if result["correct"] else "Incorrect ❌"}')
-        
-        # Save progress - now with working authentication!
-        if 'solid_auth' in globals() and solid_auth:
-            import asyncio
-            asyncio.create_task(save_progress())
-        
-    except Exception as e:
-        update_debug(f'❌ Quiz error: {e}')
-
-async def save_progress():
-    """Save lesson progress to user's Solid Pod."""
-    if not current_lesson or not solid_auth:
-        return
-        
-    try:
-        progress_data = current_lesson.get_progress_data()
-        
-        update_debug('💾 Saving progress to your Solid Pod...')
-        
-        success = await solid_auth.save_lesson_progress(
-            current_lesson.lesson_id, 
-            progress_data
-        )
-        
-        if success:
-            update_debug('✅ Progress saved to your pod!')
-        else:
-            update_debug('❌ Failed to save progress')
-            
-    except Exception as e:
-        update_debug(f'❌ Save error: {e}')
-
-def next_lesson_block():
-    """Move to next lesson block."""
-    if not current_lesson:
-        return
-        
-    if current_lesson.next_block():
-        display_current_block()
-    else:
-        update_debug('📚 Lesson completed!')
-        next_btn = document.querySelector("#next-block")
-        next_btn.classList.add("hidden")
-
-async def initialize_app():
-    """Initialize the complete application."""
-    try:
-        # CRITICAL: Handle authentication redirect first
-        if hasattr(js, 'solidClientAuthentication'):
-            session = js.solidClientAuthentication.getDefaultSession()
-            await session.handleIncomingRedirect(js.window.location.href)
-            update_debug('🔑 Authentication check complete')
-        
-        # Load core modules
-        utils_loaded = await load_module('utils')
-        solid_auth_loaded = await load_module('solid_auth') 
-        app_loaded = await load_module('app')
-        
-        if not (utils_loaded and solid_auth_loaded and app_loaded):
-            update_debug('❌ Failed to load required modules')
-            return
-        
-        # Initialize the authentication system
-        solid_auth_instance = initialize_solid_auth(update_debug)
-        
-        # Check if user is logged in
-        if solid_auth.check_session():
-            update_debug("🎉 Welcome back! You're logged in and ready to learn.")
-        else:
-            update_debug("👤 Ready to connect your learning storage")
-        
-        # Test the system
-        message = test_imports()
-        update_debug(message)
-        
-        # Load lesson modules
-        lessons_loaded = await load_lesson_modules()
-        if not lessons_loaded:
-            update_debug('❌ Failed to load lesson modules')
-            return
-            
-        update_debug("🚀 All modules loaded successfully!")
-        
-        # Test JavaScript libraries
-        has_solid_auth = hasattr(js, 'solidClientAuthentication')
-        has_solid_client = hasattr(js, 'solidClient')
-        
-        if has_solid_auth and has_solid_client:
-            update_debug("✅ Solid Pod libraries detected")
-        elif has_solid_auth:
-            update_debug("⚠️ Authentication working, data saving may have issues")
-        else:
-            update_debug("❌ Solid Pod libraries not detected")
-            
-        # Make quiz answer handler globally available
-        js.window.handle_quiz_answer = handle_quiz_answer
-            
-    except Exception as e:
-        update_debug(f'❌ App initialization error: {e}')
-
-# Event handlers
-@when("click", "#load-lesson")
-def load_lesson_click(event):
-    update_debug("🔄 Loading test lesson...")
-    load_test_lesson()
-
-@when("click", "#next-block")
-def next_block_click(event):
-    update_debug("➡️ Moving to next block...")
-    next_lesson_block()
-
-@when("click", "#test-js")
-def test_js_click(event):
-    update_debug("🔍 Testing Solid Integration...")
+    # Check if user has active Solid session
+    # TODO: Replace with actual Solid Pod authentication check
+    is_authenticated = False  # Placeholder for your Solid authentication logic
     
-    has_auth = hasattr(js.window, 'solidClientAuthentication')
-    has_client = hasattr(js.window, 'solidClient')
-    
-    if has_auth and has_client:
-        update_debug("✅ Solid libraries: WORKING")
-        update_debug(f"✅ Authentication: {has_auth}")
-        update_debug(f"✅ Client: {has_client}")
+    if is_authenticated:
+        # Show continue button, hide start buttons
+        unauthenticated_buttons.classList.add("hidden")
+        authenticated_buttons.classList.remove("hidden")
     else:
-        update_debug("❌ Solid libraries missing")
-        
-    # Also show login status
-    if hasattr(js, 'solidClientAuthentication'):
-        session = js.solidClientAuthentication.getDefaultSession()
-        info = session.info
-        if info.isLoggedIn:
-            update_debug(f"✅ Logged in as: {info.webId}")
-        else:
-            update_debug("❌ Not logged in")
+        # Show start buttons, hide continue button
+        unauthenticated_buttons.classList.remove("hidden")
+        authenticated_buttons.classList.add("hidden")
 
-@when("click", "#login-solidcommunity") 
-async def login_solidcommunity_click(event):
-    if 'handle_solidcommunity_login' in globals():
-        await handle_solidcommunity_login()
-    else:
-        # Direct login handling
-        update_debug("🌐 Connecting to SolidCommunity.net...")
-        session = js.solidClientAuthentication.getDefaultSession()
-        clean_url = js.window.location.origin + js.window.location.pathname
-        
-        await session.login(js.Object.fromEntries([
-            ["oidcIssuer", "https://solidcommunity.net"],
-            ["redirectUrl", clean_url],
-            ["clientName", "Mera Cybersecurity Education"]
-        ]))
-
-# Start the application
+# Run on page load
 import asyncio
-asyncio.create_task(initialize_app())
+asyncio.create_task(update_journey_buttons())
 </py-script>
-
 {% endblock %}

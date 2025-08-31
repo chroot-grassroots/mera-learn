@@ -30,7 +30,7 @@ class NavigationController:
                 hamburger_icon.classList.remove("hidden")
                 close_icon.classList.add("hidden")
     
-    async def setup_learning_links(self):
+    def setup_learning_links(self):
         """Update learning link text based on Solid authentication"""
         try:
             if hasattr(js.window, 'solidClientAuthentication'):

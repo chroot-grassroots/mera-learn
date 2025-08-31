@@ -1,0 +1,118 @@
+{% extends "views/base.html" %}
+
+<!-- To Do: What if an authenticated user ends up here? -->
+
+<!-- To Do: Handle invalid step numbers (step > max_steps or step < 1) -->
+
+{% block content %}
+<div class="container mx-auto px-4 py-16 max-w-4xl">
+    
+    <!-- Step Content -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-8">
+        {% if step == 1 %}
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Welcome to Mera</h1>
+        <p class="text-base md:text-lg text-gray-700 dark:text-gray-300 mb-6">
+            Mera is a cybersecurity education platform designed specifically for activists, journalists, 
+            and civil rights organizations. We'll teach you how to protect yourself and your community 
+            in the digital world.
+        </p>
+        <p class="text-gray-700 dark:text-gray-300">
+            This quick orientation will introduce you to our approach and help you set up your 
+            secure learning environment using Solid Pods for privacy-preserving progress tracking.
+        </p>
+        
+        {% elif step == 2 %}
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Privacy-First Learning</h1>
+        <p class="text-base md:text-lg text-gray-700 dark:text-gray-300 mb-6">
+            Your learning progress is stored in your own Solid Pod - a personal data storage space 
+            that you control completely. We never see your data, and you can delete it anytime.
+        </p>
+        <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+            <h3 class="font-bold text-green-800 dark:text-green-200 mb-2">Why Solid Pods?</h3>
+            <ul class="text-green-700 dark:text-green-300 space-y-1">
+                <li>• You own your data, not us</li>
+                <li>• End-to-end encryption</li>
+                <li>• No corporate surveillance</li>
+                <li>• Compatible with activist privacy needs</li>
+            </ul>
+        </div>
+        
+        {% elif step == 3 %}
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Learning Approach</h1>
+        <p class="text-base md:text-lg text-gray-700 dark:text-gray-300 mb-6">
+            Our curriculum focuses on practical, actionable security skills. Every lesson includes 
+            real-world scenarios based on actual activist experiences.
+        </p>
+        <div class="grid md:grid-cols-2 gap-6">
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <h3 class="font-bold text-gray-900 dark:text-white mb-2">Interactive Lessons</h3>
+                <p class="text-gray-700 dark:text-gray-300">Learn by doing with simulated scenarios and decision-making exercises.</p>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <h3 class="font-bold text-gray-900 dark:text-white mb-2">Progressive Skills</h3>
+                <p class="text-gray-700 dark:text-gray-300">Build from basic digital hygiene to advanced operational security.</p>
+            </div>
+        </div>
+        
+        {% elif step == 4 %}
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Community-Driven</h1>
+        <p class="text-base md:text-lg text-gray-700 dark:text-gray-300 mb-6">
+            This platform is built by activists, for activists. Our content draws from real experiences 
+            in digital security, journalism, and civil rights work.
+        </p>
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <h3 class="font-bold text-red-800 dark:text-red-200 mb-2">Open Source & Transparent</h3>
+            <p class="text-red-700 dark:text-red-300">
+                All our code is open source. You can verify our security claims, contribute improvements, 
+                or run your own instance for your organization.
+            </p>
+        </div>
+        
+        {% elif step == 5 %}
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Ready to Begin</h1>
+        <p class="text-base md:text-lg text-gray-700 dark:text-gray-300 mb-6">
+            You're all set! The next step is creating your Solid Pod if you don't have one, 
+            or connecting your existing pod to begin learning.
+        </p>
+        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <h3 class="font-bold text-blue-800 dark:text-blue-200 mb-2">What happens next?</h3>
+            <p class="text-blue-700 dark:text-blue-300">
+                We'll help you set up or connect your Solid Pod, then you'll have access to 
+                all our cybersecurity lessons with your progress saved securely.
+            </p>
+        </div>
+        
+        {% else %}
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Orientation</h1>
+        <p class="text-gray-700 dark:text-gray-300">Welcome to Mera orientation.</p>
+        {% endif %}
+    </div>
+    
+    <!-- Navigation Buttons -->
+    <div class="flex justify-between items-center">
+        {% if step > 1 %}
+        <a href="{% url 'pages:orientation' step=step|add:-1 %}" 
+           class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+            ← Previous
+        </a>
+        {% else %}
+        <a href="{% url 'pages:hello' %}" 
+           class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+            ← Back
+        </a>
+        {% endif %}
+        
+        {% if step < max_steps %}
+        <a href="{% url 'pages:orientation' step=step|add:1 %}" 
+           class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+            Next →
+        </a>
+        {% else %}
+        <a href="{% url 'pages:create' %}" 
+           class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+            Create Pod →
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

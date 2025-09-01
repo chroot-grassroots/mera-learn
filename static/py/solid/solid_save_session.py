@@ -87,7 +87,7 @@ async def handle_solid_connection():
     
     try:
         # Load and initialize SolidAuth
-        from . import _utils
+        from ..core import _utils
         print("✅ SolidAuth module loaded successfully")
         
         # Verify Solid libraries are available

@@ -1,72 +1,63 @@
-/**
- * JavaScript bridge for Solid Pod operations
- * Exposes Solid client functions to PyScript
- */
-
-// Wait for both libraries to load
-window.solidBridge = {
-    // Check if libraries are ready
-    isReady: () => {
-        return typeof window.solidClientAuthentication !== 'undefined' && 
-               typeof window.solidClient !== 'undefined';
-    },
-
-    // Save data to Solid Pod
-    saveData: async (url, jsonData, authSession) => {
-        try {
-            console.log('SolidBridge: Saving data to', url);
-            
-            // Create a Blob with the JSON data
-            const blob = new Blob([jsonData], { type: 'application/json' });
-            const file = new File([blob], 'progress.json', { type: 'application/json' });
-            
-            // Use Solid client to save the file
-            const savedFile = await window.solidClient.saveFileInContainer(
-                url,
-                file,
-                {
-                    slug: url.split('/').pop(),
-                    contentType: 'application/json'
-                }
-            );
-            
-            console.log('SolidBridge: File saved successfully', savedFile);
-            return { success: true, url: savedFile };
-            
-        } catch (error) {
-            console.error('SolidBridge: Save error', error);
-            return { success: false, error: error.message };
+// Simplified session-bridge-auth.js
+(function() {
+    'use strict';
+    
+    console.log('🔗 Solid Session Bridge initializing...');
+    
+    // Initialize session bridge
+    async function initSessionBridge() {
+        // Wait for Solid to be available
+        while (!window.solidClientAuthentication) {
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
-    },
-
-    // Load data from Solid Pod
-    loadData: async (url, authSession) => {
+        
+        const session = window.solidClientAuthentication.getDefaultSession();
+        
+        // Handle OAuth redirect if present
         try {
-            console.log('SolidBridge: Loading data from', url);
-            
-            // Try to fetch the file
-            const file = await window.solidClient.getFile(url, { fetch: authSession.fetch });
-            const text = await file.text();
-            const data = JSON.parse(text);
-            
-            console.log('SolidBridge: Data loaded successfully');
-            return { success: true, data: data };
-            
+            await session.handleIncomingRedirect(window.location.href);
+            console.log('🔑 Session bridge: OAuth redirect processed');
         } catch (error) {
-            console.error('SolidBridge: Load error', error);
-            return { success: false, error: error.message };
+            console.warn('Session bridge: No redirect to process or error:', error);
         }
-    },
-
-    // Test function
-    test: () => {
-        console.log('SolidBridge: Test function called');
-        return {
-            solidClientAuthentication: typeof window.solidClientAuthentication !== 'undefined',
-            solidClient: typeof window.solidClient !== 'undefined',
-            bridge: true
+        
+        // Simple session info update function
+        const updateSessionInfo = () => {
+            const info = session.info;
+            window._solidSessionInfo = {
+                isLoggedIn: info ? info.isLoggedIn : false,
+                webId: info ? info.webId : null,
+                timestamp: Date.now()
+            };
+            
+            console.log('📋 Session bridge: Updated session info', window._solidSessionInfo);
+            
+            // Store in localStorage
+            if (info && info.isLoggedIn) {
+                localStorage.setItem('mera_solid_session', JSON.stringify({
+                    webId: info.webId,
+                    timestamp: Date.now()
+                }));
+                console.log('✅ Session bridge: User authenticated -', info.webId);
+            } else {
+                localStorage.removeItem('mera_solid_session');
+                console.log('❌ Session bridge: User not authenticated');
+            }
         };
+        
+        // Update immediately
+        updateSessionInfo();
+        
+        // Update periodically (simpler than event listeners)
+        setInterval(updateSessionInfo, 1000);  // Check every second
+        
+        console.log('✅ Session bridge ready');
     }
-};
-
-console.log('SolidBridge: JavaScript bridge initialized');
+    
+    // Start when ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSessionBridge);
+    } else {
+        initSessionBridge();
+    }
+})();

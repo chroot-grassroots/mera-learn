@@ -1,4 +1,5 @@
 {% extends "views/base.html" %}
+{% load static %}
 
 <!-- To Do: Add more detailed error handling for different OAuth failure modes -->
 <!-- To Do: Handle account mismatch scenarios -->
@@ -49,185 +50,25 @@
     </div>
 </div>
 
-<py-script>
-from js import document, window, fetch
-import asyncio
+<script>
+console.log('🔍 Raw URL check (before PyScript):');
+console.log('Full URL:', window.location.href);
+console.log('Search params:', window.location.search);
+console.log('Has code:', window.location.href.includes('code='));
+console.log('Has state:', window.location.href.includes('state='));
 
-# Use the same module loading pattern as your working old_home.html
-async def load_module(module_name):
-    """Load a Python module using direct fetch method."""
-    try:
-        response = await fetch(f'/static/py/{module_name}.py')
-        if response.ok:
-            module_code = await response.text()
-            exec(module_code, globals())
-            print(f'✅ {module_name}.py loaded successfully')
-            return True
-        else:
-            print(f'❌ Failed to load {module_name}: {response.status}')
-            return False
-    except Exception as e:
-        print(f'❌ Error loading {module_name}: {e}')
-        return False
+// Store URL parameters for PyScript to access
+window._oauthParams = {
+    fullUrl: window.location.href,
+    searchParams: window.location.search,
+    hasCode: window.location.href.includes('code='),
+    hasState: window.location.href.includes('state='),
+    isOAuthCallback: window.location.href.includes('code=') && window.location.href.includes('state=')
+};
 
-# Global variables
-solid_auth = None
-status_div = None
-error_section = None
-success_section = None
+console.log('📋 Stored OAuth params for PyScript:', window._oauthParams);
+</script>
 
-def update_status(message):
-    """Update the connection status display."""
-    if status_div:
-        status_div.innerHTML = f"""
-            <div class="flex items-center justify-center space-x-2 text-blue-600">
-                <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span class="font-medium">{message}</span>
-            </div>
-        """
+<py-script src="{% static 'py/core/solid.py' %}"></py-script>
 
-def show_error(error_msg):
-    """Show error section with specific error message."""
-    if status_div:
-        status_div.classList.add('hidden')
-    if error_section:
-        error_section.classList.remove('hidden')
-    
-    error_message_el = document.getElementById('error-message')
-    if error_message_el:
-        error_message_el.textContent = error_msg
-
-def show_success():
-    """Show success message and redirect."""
-    if status_div:
-        status_div.classList.add('hidden')
-    if success_section:
-        success_section.classList.remove('hidden')
-    
-    # Redirect to learn page immediately (like your working code does)
-    print("Redirecting to learning environment...")
-    window.location.href = "{% url 'pages:learn' %}"
-
-async def handle_solid_connection():
-    """Main OAuth handling logic using existing SolidAuth."""
-    global solid_auth, status_div, error_section, success_section
-    
-    print("🔄 Starting handle_solid_connection...")
-    
-    # Get DOM elements
-    status_div = document.getElementById('connection-status')
-    error_section = document.getElementById('error-section')
-    success_section = document.getElementById('success-section')
-    
-    try:
-        update_status("Loading authentication modules...")
-        print("📦 Loading core/solid_auth module...")
-        
-        # Load the SolidAuth module first using the working pattern
-        solid_auth_loaded = await load_module('core/solid_auth')
-        if not solid_auth_loaded:
-            show_error("Failed to load authentication modules. Please refresh and try again.")
-            return
-        
-        print("✅ SolidAuth module loaded successfully")
-        
-        update_status("Checking Solid Pod libraries...")
-        
-        # Check if Solid libraries are available
-        if not hasattr(window, 'solidClientAuthentication'):
-            show_error("Solid Pod libraries are not loaded. Please refresh and try again.")
-            return
-        
-        print("✅ Solid libraries are available")
-        
-        # Initialize SolidAuth using existing architecture
-        solid_auth = SolidAuth(debug_callback=print)
-        print("✅ SolidAuth instance created")
-        
-        update_status("Processing authentication...")
-        
-        # Handle incoming OAuth redirect first (like in old_home.html)
-        session = window.solidClientAuthentication.getDefaultSession()
-        await session.handleIncomingRedirect(window.location.href)
-        print(f"🔑 Processed redirect for: {window.location.href}")
-        
-        # Check session info after processing redirect
-        session_info = session.info
-        print(f"Session info after redirect: isLoggedIn={session_info.isLoggedIn if session_info else 'No info'}")
-        
-        # Check if we're now authenticated (wait a moment for session to update)
-        await asyncio.sleep(1)  # Give session time to update
-        
-        if solid_auth.check_session():
-            # Success! User is authenticated
-            print("✅ Authentication successful, WebID detected")
-            show_success()
-            return
-        
-        # Not authenticated yet - need to initiate OAuth flow
-        update_status("Redirecting to pod provider...")
-        print("🔄 Not authenticated, starting OAuth flow...")
-        
-        # Get custom provider from URL parameters (fix URLSearchParams usage)
-        search_params = window.location.search
-        custom_provider = None
-        
-        if search_params:
-            # Parse URL parameters manually (like working code does)
-            if 'provider=' in search_params:
-                provider_start = search_params.find('provider=') + 9
-                provider_end = search_params.find('&', provider_start)
-                if provider_end == -1:
-                    provider_end = len(search_params)
-                custom_provider = search_params[provider_start:provider_end]
-                # URL decode if needed
-                custom_provider = custom_provider.replace('%3A', ':').replace('%2F', '/')
-        
-        if custom_provider and custom_provider.strip():
-            # Use custom provider
-            print(f"Using custom provider: {custom_provider}")
-            await solid_auth.login(custom_provider.strip())
-        else:
-            # Use default SolidCommunity.net (same as old_home.html)
-            print("Using default SolidCommunity.net provider")
-            await solid_auth.login("https://solidcommunity.net")
-        
-    except Exception as e:
-        error_msg = f"Authentication error: {str(e)}"
-        print(error_msg)
-        show_error(error_msg)
-
-def handle_retry():
-    """Handle retry button click."""
-    # Hide error section and restart the process
-    if error_section:
-        error_section.classList.add('hidden')
-    if status_div:
-        status_div.classList.remove('hidden')
-    
-    # Restart the authentication process
-    asyncio.create_task(handle_solid_connection())
-
-# Set up retry button event listener
-def setup_retry_button():
-    retry_btn = document.getElementById('retry-btn')
-    if retry_btn:
-        retry_btn.addEventListener('click', handle_retry)
-
-# Initialize the page
-def initialize_solid_page():
-    print("🔄 /solid page PyScript starting...")
-    setup_retry_button()
-    # Start the OAuth handling process
-    asyncio.create_task(handle_solid_connection())
-
-# Add immediate debug output
-print("🚀 /solid PyScript loaded!")
-
-# Start when page loads
-initialize_solid_page()
-</py-script>
 {% endblock %}

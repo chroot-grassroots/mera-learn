@@ -21,24 +21,28 @@ class SolidAuth:
         self.debug("SolidAuth initialized")
     
     async def login(self, issuer_url):
-        """
-        Login to a Solid Pod provider with explicit write permissions.
-        
-        Args:
-            issuer_url (str): URL of the Solid Pod provider
-        """
+        """Login to a Solid Pod provider with explicit write permissions."""
         try:
             self.debug(f"Attempting login to {issuer_url}...")
             
-            clean_url = js.window.location.origin + js.window.location.pathname
-            self.debug(f"Using redirect URL: {clean_url}")
+            # Debug the URL calculation
+            origin = js.window.location.origin
+            pathname = js.window.location.pathname
+            clean_url = origin + pathname
+            
+            self.debug(f"🔍 Origin: {origin}")
+            self.debug(f"🔍 Pathname: {pathname}")
+            self.debug(f"🔍 Clean URL: {clean_url}")
+            
+            # Also debug the current full URL
+            current_url = str(js.window.location.href)
+            self.debug(f"🔍 Current full URL: {current_url}")
             
             # Request explicit write permissions for private data
             await self.session.login(js.Object.fromEntries([
                 ["oidcIssuer", issuer_url],
                 ["redirectUrl", clean_url],
                 ["clientName", "Mera Cybersecurity Education"],
-                # Request broader permissions
                 ["scope", "openid profile webid offline_access"]
             ]))
             

@@ -121,8 +121,22 @@ async def handle_solid_connection():
         if is_oauth_callback:
             # This is an OAuth callback - wait for session to establish
             print("🔄 OAuth callback detected - starting session establishment...")
+            
+            # Safety mechanisms to prevent infinite loops
+            import time
+            start_time = time.time()
+            timeout_seconds = 30
+            persistence_failures = 0
+            max_persistence_failures = 3
+            
             max_attempts = 15
             for attempt in range(max_attempts):
+                # Overall timeout check
+                if time.time() - start_time > timeout_seconds:
+                    print("❌ Authentication timeout reached (30 seconds)")
+                    show_error("Authentication is taking too long. Please clear your browser data and try again.")
+                    return
+                
                 print(f"🔄 Session attempt {attempt + 1}/{max_attempts}")
                 await asyncio.sleep(0.5)
                 
@@ -134,25 +148,48 @@ async def handle_solid_connection():
                     webid = session_info.webId
                     print(f"✅ Session established on attempt {attempt + 1}: {webid}")
                     
-                    # Store backup session data
+                    # Store backup session data with current timestamp
                     import js
+                    current_timestamp = js.Date.now()
                     backup_data = {
                         'webId': webid,
-                        'timestamp': js.Date.now(),
+                        'timestamp': current_timestamp,
                         'isLoggedIn': True
                     }
                     js.localStorage.setItem('mera_solid_session_backup', js.JSON.stringify(backup_data))
-                    print("💾 Backup session data stored")
+                    print(f"💾 Backup session data stored with timestamp: {current_timestamp}")
+
                     
-                    print("🎉 Authentication successful, session persisted")
-                    await asyncio.sleep(1)  # Final delay for persistence
-                    show_success()
-                    return
+                    # Wait for Solid's internal session persistence to complete
+                    print("⏳ Waiting for session to persist to storage...")
+                    await asyncio.sleep(2)  # Give time for session to persist to IndexedDB/localStorage
+                    
+                    # Verify session is still there after persistence delay
+                    session = window.solidClientAuthentication.getDefaultSession()
+                    final_session = session.info
+                    if final_session and final_session.isLoggedIn:
+                        print(f"✅ Session persistence verified: {final_session.webId}")
+                        print("🎉 Authentication successful, session persisted")
+                        await asyncio.sleep(1)  # Final delay before redirect
+                        show_success()
+                        return
+                    else:
+                        persistence_failures += 1
+                        print(f"❌ Session lost during persistence - failure {persistence_failures}/{max_persistence_failures}")
+                        
+                        if persistence_failures >= max_persistence_failures:
+                            print("❌ Too many persistence failures, stopping authentication")
+                            show_error("Session persistence is failing repeatedly. Please try using a different browser or clear all browser data.")
+                            return
+                        
+                        print(f"Retrying session establishment (attempt {attempt + 1})...")
+                        continue  # Continue the loop to try again
                 else:
                     print(f"⏳ Attempt {attempt + 1}: Session not ready (isLoggedIn={session_info.isLoggedIn if session_info else 'No info'})")
             
-            # OAuth callback failed to establish session
-            show_error("OAuth callback processing failed. Please try again.")
+            # If we exit the loop without success
+            print(f"❌ Failed to establish persistent session after {max_attempts} attempts and {timeout_seconds} seconds")
+            show_error("Authentication failed after multiple attempts. Please clear your browser data, restart your browser, and try again.")
             return
         
         else:

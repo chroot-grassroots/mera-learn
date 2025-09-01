@@ -167,23 +167,6 @@
                 <p class="text-gray-800 dark:text-gray-300">Setting up your secure learning environment...</p>
             </div>
 
-            {% elif page_mode == 'onboarding' %}
-            <!-- Onboarding Mode: Progress indicator -->
-            <div class="py-4">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-medium text-gray-800 dark:text-gray-200">Orientation</h2>
-                    <div class="flex items-center space-x-3">
-                        <span class="text-sm text-gray-500">Step {{ step|default:1 }} of {{ max_steps|default:5
-                            }}</span>
-                        <div class="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div class="bg-green-600 h-2 rounded-full transition-all duration-300" \ <!-- VS Code:
-                                ignore next line -->
-                                style="width: {2{ step|default:1|mul:20 }}%"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {% elif page_mode == 'learning' %}
             <!-- Learning Mode: Just exit button -->
             <div class="py-4 flex justify-end">

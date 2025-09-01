@@ -21,4 +21,6 @@ urlpatterns = [
     path(
         "lesson/<str:lesson_id>/", views.lesson, name="lesson"
     ),  # Page for test code. Will be deleted
+    path("solid/", views.solid, name="solid"),
 ]
+

@@ -52,3 +52,7 @@ def resources(request):
 
 def contribute(request):
     return render(request, 'views/contribute.html', {'page_mode': 'information'})
+
+def solid(request):
+    """OAuth handling and redirect logic."""
+    return render(request, 'views/solid.html', {'page_mode': 'auth'})

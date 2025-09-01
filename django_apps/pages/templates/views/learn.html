@@ -1,0 +1,120 @@
+{% extends "views/base.html" %}
+
+<!-- To Do: Add actual learning content -->
+<!-- To Do: Handle edge cases and error states -->
+
+{% block content %}
+<div class="container mx-auto px-4 py-16 max-w-4xl">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center">
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Mera Learning Platform</h1>
+        
+        <!-- Authentication status display -->
+        <div id="auth-status" class="mb-8">
+            <div class="animate-pulse">
+                <div class="bg-gray-200 dark:bg-gray-600 h-4 w-48 mx-auto rounded mb-2"></div>
+                <div class="bg-gray-200 dark:bg-gray-600 h-3 w-32 mx-auto rounded"></div>
+            </div>
+        </div>
+        
+        <!-- Learning content placeholder -->
+        <div id="learning-content" class="hidden">
+            <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 mb-6">
+                <h2 class="text-xl font-semibold text-green-800 dark:text-green-200 mb-3">🎉 Welcome to Your Learning Environment</h2>
+                <p class="text-green-700 dark:text-green-300">
+                    Your Solid Pod is connected and ready. Your progress will be saved securely to your private storage.
+                </p>
+            </div>
+            
+            <div class="text-left">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Coming Soon:</h3>
+                <ul class="text-gray-700 dark:text-gray-300 space-y-2">
+                    <li>• Interactive cybersecurity lessons</li>
+                    <li>• Progress tracking and achievements</li>
+                    <li>• Scenario-based learning exercises</li>
+                    <li>• Community resources and tools</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<py-script>
+from js import document, window
+import asyncio
+
+async def check_authentication():
+    """Check if user is authenticated with Solid Pod."""
+    auth_status_div = document.getElementById('auth-status')
+    learning_content_div = document.getElementById('learning-content')
+    
+    try:
+        # Check if Solid libraries are available
+        if not hasattr(window, 'solidClientAuthentication'):
+            show_error("Solid libraries not loaded")
+            return
+            
+        # Get the default session
+        session = window.solidClientAuthentication.getDefaultSession()
+        
+        # CRITICAL: Handle any incoming redirect first (like old_home.html does)
+        await session.handleIncomingRedirect(window.location.href)
+        print('🔑 Authentication redirect handling complete')
+        
+        # Wait for session to stabilize (fresh PyScript context needs time)
+        await asyncio.sleep(2)
+        
+        # Re-get session after wait (session state may have updated)
+        session = window.solidClientAuthentication.getDefaultSession()
+        session_info = session.info
+        
+        print(f"Final session check: isLoggedIn={session_info.isLoggedIn if session_info else 'No info'}")
+        print(f"WebID: {session_info.webId if session_info and session_info.isLoggedIn else 'None'}")
+        
+        # NOW check if user is logged in
+        is_logged_in = session_info and session_info.isLoggedIn
+        
+        if is_logged_in:
+            # Show authenticated status
+            webid = session_info.webId or "Unknown"
+            auth_status_div.innerHTML = f"""
+                <div class="flex items-center justify-center space-x-2 text-green-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <span class="font-semibold">✅ Connected to Solid Pod</span>
+                </div>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">WebID: {webid}</p>
+            """
+            
+            # Show learning content
+            learning_content_div.classList.remove('hidden')
+            print("🎉 Successfully displayed learning environment!")
+            
+        else:
+            # Not authenticated - redirect to /hello
+            print("User not authenticated, redirecting to /hello")
+            window.location.href = "{% url 'pages:hello' %}"
+            
+    except Exception as e:
+        show_error(f"Authentication check failed: {e}")
+
+def show_error(message):
+    """Show error message in auth status div."""
+    auth_status_div = document.getElementById('auth-status')
+    auth_status_div.innerHTML = f"""
+        <div class="flex items-center justify-center space-x-2 text-red-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="font-semibold">❌ Authentication Error</span>
+        </div>
+        <p class="text-sm text-red-500 mt-2">{message}</p>
+        <a href="{% url 'pages:hello' %}" class="inline-block mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
+            Try Again
+        </a>
+    """
+
+# Start authentication check when page loads
+asyncio.create_task(check_authentication())
+</py-script>
+{% endblock %}

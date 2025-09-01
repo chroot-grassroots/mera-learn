@@ -1,0 +1,77 @@
+{% extends "views/base.html" %}
+
+<!-- To Do: Handle case of already authenticated user -->
+<!-- To Do: Add actual security pause content -->
+
+{% block content %}
+<div class="container mx-auto px-4 py-16 max-w-4xl">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center">
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Connect Your Existing Pod</h1>
+        
+        <p class="text-base md:text-lg text-gray-700 dark:text-gray-300 mb-8">
+            Welcome back! Let's connect to your existing Solid Pod to continue your 
+            cybersecurity education with all your progress intact.
+        </p>
+        
+        <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold text-yellow-800 dark:text-yellow-200 mb-3">Security Pause</h2>
+            <p class="text-yellow-700 dark:text-yellow-300">
+                We're about to connect to an external service. Verify you're on a secure network 
+                and ready to authenticate with your pod provider.
+            </p>
+        </div>
+        
+        <div class="space-y-4">
+            <a href="{% url 'pages:solid' %}" 
+               class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors inline-block">
+                Connect to Solid Pod →
+            </a>
+            
+            <details class="text-left max-w-md mx-auto">
+                <summary class="text-sm text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-200">
+                    Advanced: Use Custom Provider
+                </summary>
+                <div class="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <label for="custom-provider" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Pod Provider URL:
+                    </label>
+                    <input type="url" 
+                           id="custom-provider" 
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                           placeholder="https://example.solidcommunity.net">
+                    <button id="custom-connect-btn"
+                            class="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                        Connect to Custom Provider
+                    </button>
+                </div>
+            </details>
+        </div>
+        
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-6">
+            This will redirect you to your pod provider for secure authentication.
+        </p>
+    </div>
+</div>
+
+<py-script>
+from js import document, window
+
+def handle_custom_connect(event):
+    """Handle custom provider connection."""
+    provider_input = document.getElementById('custom-provider')
+    provider_url = provider_input.value.strip()
+    
+    if provider_url:
+        # Redirect to /solid with provider parameter
+        redirect_url = "{% url 'pages:solid' %}?provider=" + provider_url
+        window.location.href = redirect_url
+    else:
+        # Could add user feedback here later
+        print("Please enter a provider URL")
+
+# Attach event listener
+custom_btn = document.getElementById('custom-connect-btn')
+if custom_btn:
+    custom_btn.addEventListener('click', handle_custom_connect)
+</py-script>
+{% endblock %}

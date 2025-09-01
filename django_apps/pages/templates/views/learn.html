@@ -43,38 +43,56 @@ from js import document, window
 import asyncio
 
 async def check_authentication():
-    """Check if user is authenticated with Solid Pod."""
+    """Check if user is authenticated with Solid Pod using session bridge."""
     auth_status_div = document.getElementById('auth-status')
     learning_content_div = document.getElementById('learning-content')
     
     try:
-        # Check if Solid libraries are available
-        if not hasattr(window, 'solidClientAuthentication'):
-            show_error("Solid libraries not loaded")
-            return
-            
-        # Get the default session
-        session = window.solidClientAuthentication.getDefaultSession()
+        print('🔍 Starting authentication check...')
         
-        # CRITICAL: Handle any incoming redirect first (like old_home.html does)
-        await session.handleIncomingRedirect(window.location.href)
-        print('🔑 Authentication redirect handling complete')
+        # Check if session bridge has stored session info
+        session_info = None
+        if hasattr(window, '_solidSessionInfo'):
+            session_info = window._solidSessionInfo
+            print(f'📋 Session bridge info: isLoggedIn={session_info.isLoggedIn}')
         
-        # Wait for session to stabilize (fresh PyScript context needs time)
-        await asyncio.sleep(2)
+        # Fallback: Check Solid session directly
+        if not session_info or not session_info.isLoggedIn:
+            if hasattr(window, 'solidClientAuthentication'):
+                session = window.solidClientAuthentication.getDefaultSession()
+                await session.handleIncomingRedirect(window.location.href)
+                
+                # Wait for session to stabilize
+                await asyncio.sleep(1)
+                
+                # Re-check session
+                session_info_raw = session.info
+                session_info = {
+                    'isLoggedIn': session_info_raw.isLoggedIn if session_info_raw else False,
+                    'webId': session_info_raw.webId if session_info_raw and session_info_raw.isLoggedIn else None
+                }
+                print(f'🔍 Direct session check: isLoggedIn={session_info["isLoggedIn"]}')
         
-        # Re-get session after wait (session state may have updated)
-        session = window.solidClientAuthentication.getDefaultSession()
-        session_info = session.info
+        # Check localStorage as final fallback
+        if not session_info or not session_info.isLoggedIn:
+            try:
+                import js
+                stored_session = js.localStorage.getItem('mera_solid_session')
+                if stored_session:
+                    stored_data = js.JSON.parse(stored_session)
+                    # Check if session is recent (within 24 hours)
+                    age = js.Date.now() - stored_data.timestamp
+                    if age < 24 * 60 * 60 * 1000:  # 24 hours in milliseconds
+                        session_info = {
+                            'isLoggedIn': True,
+                            'webId': stored_data.webId
+                        }
+                        print(f'💾 Using stored session: {stored_data.webId}')
+            except:
+                pass
         
-        print(f"Final session check: isLoggedIn={session_info.isLoggedIn if session_info else 'No info'}")
-        print(f"WebID: {session_info.webId if session_info and session_info.isLoggedIn else 'None'}")
-        
-        # NOW check if user is logged in
-        is_logged_in = session_info and session_info.isLoggedIn
-        
-        if is_logged_in:
-            # Show authenticated status
+        # Display results
+        if session_info and session_info.isLoggedIn:
             webid = session_info.webId or "Unknown"
             auth_status_div.innerHTML = f"""
                 <div class="flex items-center justify-center space-x-2 text-green-600">
@@ -86,13 +104,11 @@ async def check_authentication():
                 <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">WebID: {webid}</p>
             """
             
-            # Show learning content
             learning_content_div.classList.remove('hidden')
             print("🎉 Successfully displayed learning environment!")
             
         else:
-            # Not authenticated - redirect to /hello
-            print("User not authenticated, redirecting to /hello")
+            print("❌ User not authenticated, redirecting to /hello")
             window.location.href = "{% url 'pages:hello' %}"
             
     except Exception as e:

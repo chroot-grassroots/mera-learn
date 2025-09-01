@@ -1,5 +1,5 @@
 import js
-from pyscript import document
+from js import document
 
 class NavigationController:
     def __init__(self):

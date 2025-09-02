@@ -1,52 +1,304 @@
 {% extends "views/base.html" %}
-{% load static %} 
+{% load static %}
+
+{% block title %}Learning Environment - Mera{% endblock %}
+
+{% block extra_head %}
+<!-- Solid Pod Client Libraries -->
+<script src="{% static 'js/solid-bundle.js' %}"></script>
+
+<!-- Enhanced Session Bridge (read-only monitoring) -->
+<script src="{% static 'js/session-bridge-auth.js' %}"></script>
+{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-16 max-w-4xl">
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center">
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6">Mera Learning Platform</h1>
-        
-        <!-- Authentication status display -->
-        <div id="auth-status" class="mb-8">
-            <div class="animate-pulse">
-                <div class="bg-gray-200 dark:bg-gray-600 h-4 w-48 mx-auto rounded mb-2"></div>
-                <div class="bg-gray-200 dark:bg-gray-600 h-3 w-32 mx-auto rounded"></div>
-            </div>
-        </div>
-        
-        <!-- Learning content placeholder -->
-        <div id="learning-content" class="hidden">
-            <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 mb-6">
-                <h2 class="text-xl font-semibold text-green-800 dark:text-green-200 mb-3">🎉 Welcome to Your Learning Environment</h2>
-                <p class="text-green-700 dark:text-green-300">
-                    Your Solid Pod is connected and ready. Your progress will be saved securely to your private storage.
-                </p>
-            </div>
-            
-            <div class="text-left">
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Coming Soon:</h3>
-                <ul class="text-gray-700 dark:text-gray-300 space-y-2">
-                    <li>• Interactive cybersecurity lessons</li>
-                    <li>• Progress tracking and achievements</li>
-                    <li>• Scenario-based learning exercises</li>
-                    <li>• Community resources and tools</li>
-                </ul>
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+    
+    <!-- Header -->
+    <div class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                    Learning Environment
+                </h1>
+                <div class="flex items-center space-x-4">
+                    <!-- Authentication status will be updated by PyScript -->
+                    <div id="header-auth-status" class="text-sm text-gray-600 dark:text-gray-400">
+                        Checking authentication...
+                    </div>
+                    
+                    {% if debug %}
+                    <button onclick="window.debugAuthState?.()" class="bg-gray-600 text-white px-3 py-1 rounded text-xs hover:bg-gray-700 transition-colors">
+                        Debug Auth
+                    </button>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        
+        <!-- Authentication Status Section -->
+        <div id="auth-status" class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
+            <div class="flex items-center justify-center space-x-2 text-gray-600 dark:text-gray-400">
+                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span class="font-medium">Verifying your authentication...</span>
+            </div>
+            <p class="text-center text-sm text-gray-500 dark:text-gray-500 mt-2">
+                Please wait while we confirm your Solid Pod connection
+            </p>
+        </div>
+
+        <!-- Learning Content (hidden until authenticated) -->
+        <div id="learning-content" class="hidden space-y-8">
+            
+            <!-- Welcome Section -->
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                    Welcome to Your Secure Learning Environment
+                </h2>
+                <p class="text-gray-600 dark:text-gray-400">
+                    Your learning progress is being saved securely to your Solid Pod. 
+                    All data remains under your complete control and privacy.
+                </p>
+            </div>
+
+            <!-- Learning Progress Overview -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                    Your Learning Progress
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Progress cards will be populated by PyScript -->
+                    <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                        <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">0%</div>
+                        <div class="text-sm text-gray-600 dark:text-gray-400">Overall Progress</div>
+                    </div>
+                    <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                        <div class="text-2xl font-bold text-green-600 dark:text-green-400">0</div>
+                        <div class="text-sm text-gray-600 dark:text-gray-400">Lessons Completed</div>
+                    </div>
+                    <div class="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
+                        <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">0</div>
+                        <div class="text-sm text-gray-600 dark:text-gray-400">Skills Mastered</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Available Lessons -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">
+                    Available Lessons
+                </h3>
+                <div class="space-y-4">
+                    
+                    <!-- Lesson 1 -->
+                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <h4 class="font-medium text-gray-900 dark:text-white">
+                                    Introduction to Digital Security
+                                </h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                    Learn the fundamentals of protecting your digital privacy and security
+                                </p>
+                                <div class="flex items-center mt-2 space-x-4">
+                                    <span class="text-xs text-gray-500 dark:text-gray-500">
+                                        ⏱️ 15-20 minutes
+                                    </span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-500">
+                                        📊 Beginner
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                                    Start Lesson
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lesson 2 -->
+                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 opacity-60">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <h4 class="font-medium text-gray-900 dark:text-white">
+                                    Password Security & Management
+                                </h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                    Master the art of creating and managing secure passwords
+                                </p>
+                                <div class="flex items-center mt-2 space-x-4">
+                                    <span class="text-xs text-gray-500 dark:text-gray-500">
+                                        ⏱️ 20-25 minutes
+                                    </span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-500">
+                                        📊 Beginner
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <button class="bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed">
+                                    Complete Previous Lesson
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lesson 3 -->
+                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 opacity-60">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <h4 class="font-medium text-gray-900 dark:text-white">
+                                    Safe Web Browsing Practices
+                                </h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                    Learn to identify and avoid online threats while browsing
+                                </p>
+                                <div class="flex items-center mt-2 space-x-4">
+                                    <span class="text-xs text-gray-500 dark:text-gray-500">
+                                        ⏱️ 18-22 minutes
+                                    </span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-500">
+                                        📊 Beginner
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <button class="bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 px-4 py-2 rounded-lg text-sm font-medium cursor-not-allowed">
+                                    Complete Previous Lessons
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Debug Panel (development only) -->
+        {% if debug %}
+        <div class="mt-8 bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+            <h3 class="font-medium text-gray-900 dark:text-white mb-3">Debug Tools</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <button onclick="window.debugAuthState?.()" class="bg-blue-600 text-white px-3 py-2 rounded text-xs hover:bg-blue-700 transition-colors">
+                    Debug Auth State
+                </button>
+                <button onclick="window.debugSolidSession?.()" class="bg-green-600 text-white px-3 py-2 rounded text-xs hover:bg-green-700 transition-colors">
+                    Debug Solid Session
+                </button>
+                <button onclick="localStorage.clear(); location.reload()" class="bg-red-600 text-white px-3 py-2 rounded text-xs hover:bg-red-700 transition-colors">
+                    Clear Storage
+                </button>
+                <button onclick="location.reload()" class="bg-gray-600 text-white px-3 py-2 rounded text-xs hover:bg-gray-700 transition-colors">
+                    Reload Page
+                </button>
+            </div>
+            <div class="mt-3 text-xs text-gray-600 dark:text-gray-400">
+                <div>Page Mode: {{ page_mode }}</div>
+                <div>Debug Mode: Active</div>
+                <div>Session Storage Key: mera_solid_session_backup</div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
 </div>
 
-<!-- Remove session bridge - no longer needed -->
+<!-- Set up global variables for PyScript -->
+<script>
+console.log('🐍 Setting up learning environment...');
 
-<py-script>
-# Set up URLs for Python to use
-import js
-js.window.HELLO_URL = "{% url 'pages:hello' %}"
-js.window.SOLID_URL = "{% url 'pages:solid' %}"
-print("📋 URLs configured for Python")
-</py-script>
+// Global variables that Python modules expect
+window.HELLO_URL = "{% url 'pages:hello' %}";
+window.CREATE_URL = "{% url 'pages:create' %}";
+window.CONNECT_URL = "{% url 'pages:connect' %}";
 
-<!-- Load core learn module -->
+// Enhanced error handling for PyScript
+window.addEventListener('py:error', function(event) {
+    console.error('❌ PyScript Error in learn.html:', event.detail);
+    
+    const authStatus = document.getElementById('auth-status');
+    if (authStatus) {
+        authStatus.innerHTML = `
+            <div class="flex items-center justify-center space-x-2 text-red-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span class="font-semibold">PyScript Loading Error</span>
+            </div>
+            <p class="text-sm text-red-500 mt-2 text-center">
+                Failed to load authentication system. Please refresh the page.
+            </p>
+            <div class="text-center mt-4">
+                <button onclick="location.reload()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors">
+                    Reload Page
+                </button>
+            </div>
+        `;
+    }
+});
+
+// Success indicator for PyScript loading
+window.addEventListener('py:ready', function(event) {
+    console.log("✅ PyScript ready in learning environment");
+});
+
+// Update header authentication status - make this compatible with your existing code
+window.updateHeaderAuthStatus = function(isAuthenticated, webId) {
+    const headerStatus = document.getElementById('header-auth-status');
+    if (headerStatus) {
+        if (isAuthenticated && webId) {
+            headerStatus.innerHTML = `
+                <span class="text-green-600 dark:text-green-400">✅ Connected</span>
+                <span class="text-xs text-gray-500">• ${webId.split('/')[2]}</span>
+            `;
+        } else {
+            headerStatus.innerHTML = `
+                <span class="text-yellow-600 dark:text-yellow-400">⚠️ Not Connected</span>
+            `;
+        }
+    }
+};
+
+// Make this function available for your existing learn_solid_initialize.py if needed
+window.showLearningContent = function() {
+    const learningContent = document.getElementById('learning-content');
+    if (learningContent) {
+        learningContent.classList.remove('hidden');
+    }
+};
+
+window.showAuthError = function(message) {
+    const authStatus = document.getElementById('auth-status');
+    if (authStatus) {
+        authStatus.innerHTML = `
+            <div class="flex items-center justify-center space-x-2 text-red-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span class="font-semibold">❌ Authentication Error</span>
+            </div>
+            <p class="text-sm text-red-500 mt-2 text-center">${message}</p>
+            <div class="text-center mt-4">
+                <a href="${window.HELLO_URL}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                    Try Again
+                </a>
+            </div>
+        `;
+    }
+};
+
+console.log('🌐 Learning environment JavaScript initialized');
+</script>
+
+<!-- Load your existing authentication check module -->
 <py-script src="{% static 'py/solid/learn_solid_initialize.py' %}"></py-script>
 
 {% endblock %}

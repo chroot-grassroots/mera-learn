@@ -112,6 +112,8 @@ window.HELLO_URL = "{% url 'pages:hello' %}";
 window.LEARN_URL = "{% url 'pages:learn' %}";
 
 // Update debug display if in debug mode
+
+/*
 {% if debug %}
 document.addEventListener('DOMContentLoaded', function() {
     const debugUrl = document.getElementById('debug-url');
@@ -120,6 +122,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (debugCallback) debugCallback.textContent = window._oauthParams.isOAuthCallback ? 'Yes' : 'No';
 });
 {% endif %}
+*/
+
 
 // Enhanced error handling for PyScript
 window.addEventListener('py:error', function(event) {
@@ -156,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Set debug flag for JavaScript (passed from Django template)
-window.DEBUG_MODE = {% if debug %}true{% else %}false{% endif %};
+// window.DEBUG_MODE = {% if debug %}true{% else %}false{% endif %};
 </script>
 
 <!-- Load the updated Solid authentication handler -->

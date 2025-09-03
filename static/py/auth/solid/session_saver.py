@@ -17,13 +17,13 @@ import js
 try:
     # Try to import using your existing module structure
     # First try: assume solid_auth.py is in the same solid/ directory
-    from auth.core.solid_auth import SolidAuth
+    from auth.solid.solid_auth import SolidAuth
     print("✅ Imported SolidAuth from solid_auth module (same directory)")
 except ImportError:
     # Fallback: try alternative import patterns based on your current structure
     try:
         # If it's imported as a module
-        from auth.core import solid_auth
+        from auth.solid import solid_auth
         SolidAuth = solid_auth.SolidAuth
         print("✅ Imported SolidAuth via module import")
     except ImportError:

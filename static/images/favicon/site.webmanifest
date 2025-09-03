@@ -1,0 +1,19 @@
+{
+    "name": "Mera - Digital Security Education",
+    "short_name": "Mera",
+    "icons": [
+        {
+            "src": "mera_favicon_192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "mera_favicon_512.png", 
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ],
+    "theme_color": "#0f1a0e",
+    "background_color": "#84e67b",
+    "display": "standalone"
+}

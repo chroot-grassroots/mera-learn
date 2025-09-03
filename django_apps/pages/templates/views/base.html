@@ -7,9 +7,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Mera - Digital Security Education{% endblock %}</title>
 
+    <!-- Favicon Implementation -->
+    <link rel="icon" href="{% static 'images/favicon/mera_favicon.svg' %}" type="image/svg+xml">
+    <link rel="icon" href="{% static 'images/favicon/mera_favicon_32.png' %}" type="image/png" sizes="32x32">
+    <link rel="icon" href="{% static 'images/favicon/mera_favicon_16.png' %}" type="image/png" sizes="16x16">
+    <link rel="apple-touch-icon" href="{% static 'images/favicon/mera_favicon_180.png' %}" sizes="180x180">
+    <link rel="manifest" href="{% static 'images/favicon/site.webmanifest' %}">
+    <meta name="theme-color" content="#0f1a0e">
+
     <!-- TODO: Add Subresource Integrity hash for security for all external libraries -->
 
-    <!-- Tailwind CSS -->
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -108,7 +115,7 @@
                 </a>
                 <a href="{% url 'pages:about' %}"
                     class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
-                    About
+                   About
                 </a>
                 <a href="{% url 'pages:privacy' %}"
                     class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
@@ -142,7 +149,7 @@
             <div class="hidden md:flex items-center justify-between py-1">
                 <div class="flex space-x-8 py-3">
                     <a href="{% url 'pages:home' %}"
-                        class="text-gray-800 dark:text-gray-300 hover:text-gray-9000 dark:hover:text-white font-bold">Home</a>
+                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Home</a>
                     <a href="{% url 'pages:about' %}"
                         class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">About</a>
                     <a href="{% url 'pages:privacy' %}"

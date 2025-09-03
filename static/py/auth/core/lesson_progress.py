@@ -3,7 +3,7 @@ Solid Pod loading and saving module for Mera platform.
 """
 
 import js
-from .solid_auth import SolidAuth
+from auth.core.solid_auth import SolidAuth
 
 
 class LessonProgress(SolidAuth):

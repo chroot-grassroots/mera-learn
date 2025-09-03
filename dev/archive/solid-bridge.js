@@ -1,3 +1,5 @@
+/*
+
 // Simplified session-bridge-auth.js
 (function() {
     'use strict';
@@ -61,3 +63,5 @@
         initSessionBridge();
     }
 })();
+
+*/

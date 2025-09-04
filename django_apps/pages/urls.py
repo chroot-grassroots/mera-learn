@@ -17,10 +17,7 @@ urlpatterns = [
     path("orientation/<int:step>/", views.orientation, name="orientation"),
     path("create/", views.create, name="create"),
     # Learning (Main App)
-    path("learn/", views.learn, name="learn"),
-    path(
-        "lesson/<str:lesson_id>/", views.lesson, name="lesson"
-    ),  # Page for test code. Will be deleted
     path("solid/", views.solid, name="solid"),
+    path("learn/", views.learn, name="learn"),
 ]
 

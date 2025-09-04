@@ -7,14 +7,6 @@ def home(request):
     """Main education platform page"""
     return render(request, 'views/home.html', {'page_mode': 'information'})
 
-def lesson(request, lesson_id):
-    """Individual lesson page"""
-    context = {
-        'lesson_id': lesson_id,
-        'page_mode': 'learning'
-    }
-    return render(request, 'views/lesson.html', context)
-
 def about(request):
     return render(request, 'views/about.html', {'page_mode': 'information'})
 

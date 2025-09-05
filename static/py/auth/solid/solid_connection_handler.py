@@ -6,6 +6,23 @@ import asyncio
 from js import document, window, console, URL
 import js
 
+# PyScript shared global scope - for type checking only
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from pyscript_globals import (
+        handle_solid_connection,
+        show_error,
+        show_loading,
+        show_success,
+        SolidClientWrapper,
+        load_solid_client_wrapper,
+        check_authentication,
+        setup_retry_button,
+        SOLID_SESSION_BACKUP_KEY,
+        STORAGE_KEY
+    )
+
+
 # Storage key constant
 SOLID_SESSION_BACKUP_KEY = 'mera_solid_session_backup'
 

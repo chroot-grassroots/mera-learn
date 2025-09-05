@@ -12,60 +12,60 @@ import asyncio
 from js import document, window, console, URL
 import js
 
-# Import existing SolidAuth class using PyScript-compatible patterns
-# Updated to work with your existing solid_auth.py location
+# Import existing SolidClientWrapper class using PyScript-compatible patterns
+# Updated to work with your existing solid_client_wrapper.py location
 try:
     # Try to import using your existing module structure
-    # First try: assume solid_auth.py is in the same solid/ directory
-    from auth.solid.solid_auth import SolidAuth
-    print("✅ Imported SolidAuth from solid_auth module (same directory)")
+    # First try: assume solid_client_wrapper.py is in the same solid/ directory
+    from auth.solid.solid_client_wrapper import SolidClientWrapper
+    print("✅ Imported SolidClientWrapper from solid_client_wrapper module (same directory)")
 except ImportError:
     # Fallback: try alternative import patterns based on your current structure
     try:
         # If it's imported as a module
-        from auth.solid import solid_auth
-        SolidAuth = solid_auth.SolidAuth
-        print("✅ Imported SolidAuth via module import")
+        from auth.solid import solid_client_wrapper
+        SolidClientWrapper = solid_client_wrapper.SolidClientWrapper
+        print("✅ Imported SolidClientWrapper via module import")
     except ImportError:
-        # Dynamic loading - will find your solid_auth.py wherever it lives
+        # Dynamic loading - will find your solid_client_wrapper.py wherever it lives
         try:
-            async def load_solid_auth():
-                """Load SolidAuth dynamically using your existing patterns."""
+            async def load_solid_client_wrapper():
+                """Load SolidClientWrapper dynamically using your existing patterns."""
                 try:
-                    # Try common locations where your solid_auth.py might live
+                    # Try common locations where your solid_client_wrapper.py might live
                     possible_paths = [
-                        '/static/py/solid/solid_auth.py',  # In refactored solid/ directory
-                        '/static/py/solid_auth.py',       # Original location
-                        '/static/py/core/solid_auth.py'   # Alternative location
+                        '/static/py/auth/solid/solid_client_wrapper.py',  # In refactored solid/ directory
+                        '/static/py/solid_client_wrapper.py',       # Original location
+                        '/static/py/core/solid_client_wrapper.py'   # Alternative location
                     ]
                     
                     for path in possible_paths:
                         try:
-                            print(f"🔍 Trying to load SolidAuth from: {path}")
+                            print(f"🔍 Trying to load SolidClientWrapper from: {path}")
                             response = await window.fetch(path)
                             if response.ok:
                                 module_code = await response.text()
                                 exec(module_code, globals())
-                                print(f"✅ Successfully loaded SolidAuth from: {path}")
+                                print(f"✅ Successfully loaded SolidClientWrapper from: {path}")
                                 return True
                         except Exception as path_error:
                             print(f"❌ Failed to load from {path}: {path_error}")
                             continue
                     
-                    print("❌ Could not find solid_auth.py in any expected location")
+                    print("❌ Could not find solid_client_wrapper.py in any expected location")
                     return False
                     
                 except Exception as e:
-                    print(f"❌ Failed to load solid_auth.py dynamically: {e}")
+                    print(f"❌ Failed to load solid_client_wrapper.py dynamically: {e}")
                     return False
             
             # This will be handled in the main function
-            SolidAuth = None
-            print("⚠️ SolidAuth will be loaded dynamically from your existing file")
+            SolidClientWrapper = None
+            print("⚠️ SolidClientWrapper will be loaded dynamically from your existing file")
             
         except Exception as e:
-            print(f"❌ All SolidAuth import methods failed: {e}")
-            SolidAuth = None
+            print(f"❌ All SolidClientWrapper import methods failed: {e}")
+            SolidClientWrapper = None
 
 # STANDARDIZED STORAGE KEY - Use this consistently across all files
 STORAGE_KEY = 'mera_solid_session_backup'
@@ -152,28 +152,28 @@ async def handle_solid_connection():
         error_section.classList.add('hidden')
     
     try:
-        # Handle dynamic loading of SolidAuth if needed
-        if SolidAuth is None:
-            print("🔄 Loading SolidAuth dynamically...")
-            success = await load_solid_auth()
+        # Handle dynamic loading of SolidClientWrapper if needed
+        if SolidClientWrapper is None:
+            print("🔄 Loading SolidClientWrapper dynamically...")
+            success = await load_solid_client_wrapper()
             if not success:
-                raise Exception("Failed to load SolidAuth module dynamically")
-            print("✅ SolidAuth loaded dynamically")
+                raise Exception("Failed to load SolidClientWrapper module dynamically")
+            print("✅ SolidClientWrapper loaded dynamically")
         
-        # Verify SolidAuth is available
-        if 'SolidAuth' not in globals():
-            raise Exception("SolidAuth class not available after import attempts")
+        # Verify SolidClientWrapper is available
+        if 'SolidClientWrapper' not in globals():
+            raise Exception("SolidClientWrapper class not available after import attempts")
         
-        print("✅ SolidAuth module loaded successfully")
+        print("✅ SolidClientWrapper module loaded successfully")
         
         # Verify Solid libraries are available
         if not hasattr(window, 'solidClientAuthentication'):
             raise Exception("Solid client libraries not loaded")
         print("✅ Solid libraries are available")
         
-        # Initialize SolidAuth instance
-        solid_auth = SolidAuth(debug_callback=print)
-        print("✅ SolidAuth initialized")
+        # Initialize SolidClientWrapper instance
+        solid_client = SolidClientWrapper(debug_callback=print)
+        print("✅ SolidClientWrapper initialized")
         
         # Get session reference
         session = window.solidClientAuthentication.getDefaultSession()
@@ -357,10 +357,10 @@ async def handle_solid_connection():
             # Start OAuth login flow - now properly inside the else block
             if custom_provider and custom_provider.strip():
                 print(f"🔗 Using custom provider: {custom_provider}")
-                await solid_auth.login(custom_provider.strip())
+                await solid_client.login(custom_provider.strip())
             else:
                 print("🔗 Using default SolidCommunity.net provider")
-                await solid_auth.login("https://solidcommunity.net")
+                await solid_client.login("https://solidcommunity.net")
         
     except Exception as e:
         error_msg = f"Authentication error: {str(e)}"

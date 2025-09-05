@@ -2,23 +2,27 @@
 Solid Pod authentication module for Mera platform.
 Handles user authentication with Solid Pod providers.
 """
-import js
 
-
-class SolidClientWrapper:
+class SolidAuth:
     """Handles Solid Pod authentication and session management."""
-    
+
     def __init__(self, debug_callback=None):
         """
-        Initialize the SolidClientWrapper system.
+        Initialize the SolidAuth system.
         
         Args:
             debug_callback: Function to call for debug messages
         """
+    
+        # Get a reference to the Solid JavaScript global session manager
+        # (this session manager was created when solid-bundle.js loaded)
         self.session = js.solidClientAuthentication.getDefaultSession()
+        # Debug either to the function provided or print if nothing is specified
         self.debug = debug_callback if debug_callback else print
+        # Start with a blank pod URL and extract from WebID later
         self.pod_url = None
-        self.debug("SolidClientWrapper initialized")
+        # Provide a debug message that this class is initiated
+        self.debug("SolidAuth initialized")
     
     async def login(self, issuer_url):
         """Login to a Solid Pod provider with explicit write permissions."""

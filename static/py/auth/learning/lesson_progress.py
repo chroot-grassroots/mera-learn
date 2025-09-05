@@ -3,10 +3,10 @@ Solid Pod loading and saving module for Mera platform.
 """
 
 import js
-from auth.solid.solid_auth import SolidAuth
+from auth.solid.solid_client_wrapper import SolidClientWrapper
 
 
-class LessonProgress(SolidAuth):
+class LessonProgress(SolidClientWrapper):
     """Handles lesson progress storage in Solid Pods, inherits authentication"""
     
     def __init__(self, debug_callback=None):

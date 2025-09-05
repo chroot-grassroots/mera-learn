@@ -15,9 +15,15 @@ class SolidClientWrapper:
         Args:
             debug_callback: Function to call for debug messages
         """
+
+        # Get a reference to the Solid JavaScript global session manager
+        # (this session manager was created when solid-bundle.js loaded)
         self.session = js.solidClientAuthentication.getDefaultSession()
+        # Debug either to the function provided or print if nothing is specified
         self.debug = debug_callback if debug_callback else print
+        # Start with a blank pod URL and extract from WebID later
         self.pod_url = None
+        # Provide a debug message that this class is initiated
         self.debug("SolidClientWrapper initialized")
     
     async def login(self, issuer_url):

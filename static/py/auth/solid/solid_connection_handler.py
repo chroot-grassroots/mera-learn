@@ -6,7 +6,7 @@ import asyncio
 from js import document, window, console, URL
 import js
 
-# PyScript shared global scope - for type checking only
+# To fix annoying linter error. No production use.
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pyscript_globals import (
@@ -29,17 +29,6 @@ SOLID_SESSION_BACKUP_KEY = 'mera_solid_session_backup'
 async def handle_solid_connection():
     """
     Handle Solid OAuth connection with PyScript-compatible imports and fixed OAuth flow.
-    
-    This function implements the corrected OAuth flow:
-    1. Check if this is an OAuth callback (has code/state parameters)
-    2. If callback: Process tokens and establish session
-    3. If not callback: Check if already logged in, otherwise start OAuth flow
-    
-    Key fixes:
-    - OAuth initiation code moved inside proper conditional block
-    - Enhanced error handling and debugging
-    - PyScript-compatible import patterns
-    - Consistent localStorage key usage
     """
     print("🔗 Solid OAuth handler loaded!")
     print("🔄 Starting handle_solid_connection...")
@@ -53,19 +42,6 @@ async def handle_solid_connection():
         error_section.classList.add('hidden')
     
     try:
-        # Handle dynamic loading of SolidClientWrapper if needed
-        if SolidClientWrapper is None:
-            print("🔄 Loading SolidClientWrapper dynamically...")
-            success = await load_solid_client_wrapper()
-            if not success:
-                raise Exception("Failed to load SolidClientWrapper module dynamically")
-            print("✅ SolidClientWrapper loaded dynamically")
-        
-        # Verify SolidClientWrapper is available
-        if 'SolidClientWrapper' not in globals():
-            raise Exception("SolidClientWrapper class not available after import attempts")
-        
-        print("✅ SolidClientWrapper module loaded successfully")
         
         # Verify Solid libraries are available
         if not hasattr(window, 'solidClientAuthentication'):
@@ -73,8 +49,13 @@ async def handle_solid_connection():
         print("✅ Solid libraries are available")
         
         # Initialize SolidClientWrapper instance
-        solid_client = SolidClientWrapper(debug_callback=print)
-        print("✅ SolidClientWrapper initialized")
+        try:
+            solid_client = SolidClientWrapper(debug_callback=print)
+            print("✅ SolidClientWrapper initialized")
+        except NameError:
+            raise Exception("SolidClientWrapper class not available")
+        except Exception as e:
+            raise Exception(f"Failed to initialize SolidClientWrapper: {e}")
         
         # Get session reference
         session = window.solidClientAuthentication.getDefaultSession()
@@ -86,6 +67,7 @@ async def handle_solid_connection():
         print(f"🔍 Current URL: {current_url}")
         print(f"🔍 Is OAuth callback: {is_oauth_callback}")
         
+        # Runs if the an OAuth callback is detected and a session must be established.
         if is_oauth_callback:
             print("🔑 OAuth callback detected - starting session establishment...")
             
@@ -116,23 +98,36 @@ async def handle_solid_connection():
                 if session_info and getattr(session_info, 'isLoggedIn', False):
                     webid = getattr(session_info, 'webId', None)
                     
-                    # Validate WebID format (security check)
+                  # Validate WebID format (security check)
                     if not webid or not webid.strip():
                         print(f"❌ Session has no WebID, retrying...")
                         continue
-                    
-                    # URL validation for security
+
+                    # URL validation for security using browser's built-in parser
                     try:
-                        if not (webid.startswith('http://') or webid.startswith('https://')):
-                            raise Exception(f"WebID must be a valid URL: {webid}")
+                        # Use browser's URL constructor for proper parsing
+                        parsed_url = js.URL.new(webid)
                         
-                        # Test URL constructor (this was causing errors in logs)
-                        test_url = URL.new(webid)
-                        print(f"✅ WebID URL validation passed: {webid}")
+                        # Only allow secure protocols
+                        if parsed_url.protocol not in ['http:', 'https:']:
+                            raise Exception(f"WebID must use HTTP/HTTPS protocol, got: {parsed_url.protocol}")
+                        
+                        # Ensure it has a valid domain
+                        if not parsed_url.hostname or parsed_url.hostname.strip() == '':
+                            raise Exception("WebID must have a valid hostname")
+                        
+                        # Additional security: reject localhost/private IPs in production
+                        hostname = parsed_url.hostname.lower()
+                        if hostname in ['localhost', '127.0.0.1', '::1'] or hostname.startswith('192.168.') or hostname.startswith('10.'):
+                            print("⚠️ Warning: WebID points to private/local address")
+                        
+                        print(f"✅ WebID validation passed: {webid}")
+                        
                     except Exception as url_error:
-                        print(f"❌ WebID URL validation failed: {url_error}")
-                        print("⚠️ Continuing with potentially invalid WebID")
-                    
+                        print(f"❌ WebID validation failed: {url_error}")
+                        print("🛑 Cannot continue with invalid WebID - security risk")
+                        continue  # Don't proceed with invalid WebID
+                        
                     print(f"✅ Session established on attempt {attempt + 1}: {webid}")
                     
                     # Store backup session data with current timestamp
@@ -144,8 +139,7 @@ async def handle_solid_connection():
                     }
                     
                     try:
-                        # FIXED: Use proper JavaScript JSON serialization
-                        # Create a plain JavaScript object instead of Python dict
+                        # Uses proper JavaScript JSON serialization to create a plain JavaScript object 
                         js.eval(f'''
                             const backupData = {{
                                 webId: "{webid}",
@@ -169,14 +163,7 @@ async def handle_solid_connection():
                             print(f"💾 Storage verification: FAILED - data not found")
                     except Exception as storage_error:
                         print(f"💾 Storage error: {storage_error}")
-                        # Fallback: try Python-based storage
-                        try:
-                            backup_json = f'{{"webId":"{webid}","timestamp":{current_timestamp},"isLoggedIn":true}}'
-                            js.localStorage.setItem(SOLID_SESSION_BACKUP_KEY, backup_json)
-                            print(f"💾 Fallback storage successful")
-                        except Exception as fallback_error:
-                            print(f"💾 Fallback storage also failed: {fallback_error}")
-                    
+                        
                     # Wait for Solid's internal session persistence
                     print("⏳ Waiting for session to persist to storage...")
                     await asyncio.sleep(2)
@@ -214,7 +201,6 @@ async def handle_solid_connection():
             return
         
         else:
-            # *** CRITICAL FIX: OAuth initiation code moved INSIDE this else block ***
             # Not an OAuth callback - check if already logged in or start OAuth flow
             session_info = session.info if session else None
             if session_info and getattr(session_info, 'isLoggedIn', False):
@@ -223,7 +209,7 @@ async def handle_solid_connection():
                 show_success()
                 return
             
-            # Not logged in - start OAuth flow (THIS IS THE KEY FIX!)
+            # Not logged in - start OAuth flow
             print("🔄 Not authenticated, starting OAuth flow...")
             
             # Parse custom provider from URL parameters
@@ -254,8 +240,7 @@ async def handle_solid_connection():
                         show_error(f"Invalid custom provider URL: {provider_error}")
                         return
             
-            # *** THIS IS THE CRITICAL CODE THAT WAS MISPLACED ***
-            # Start OAuth login flow - now properly inside the else block
+            # Start OAuth login flow
             if custom_provider and custom_provider.strip():
                 print(f"🔗 Using custom provider: {custom_provider}")
                 await solid_client.login(custom_provider.strip())

@@ -6,7 +6,7 @@ import asyncio
 from js import document, window, console, URL
 import js
 
-# PyScript shared global scope - for type checking only
+# To fix annoying linter error. No production use.
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pyscript_globals import (
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         SOLID_SESSION_BACKUP_KEY,
         STORAGE_KEY
     )
+
 # STANDARDIZED STORAGE KEY for solid session backup - Use this consistently across all files
 SOLID_SESSION_BACKUP_KEY = 'mera_solid_session_backup'
 

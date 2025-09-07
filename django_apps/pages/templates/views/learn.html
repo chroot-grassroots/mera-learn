@@ -133,10 +133,7 @@ window.addEventListener('py:error', function(event) {
 
 <!-- PyScript will be loaded here -->
 <!-- Your polling PyScript code will go in this section -->
-<py-script>
-# This is where your polling loop will go!
-# The bridge is ready at window.meraBridge
-print("🐍 PyScript loaded - ready for your polling code!")
-</py-script>
+
+<py-script src="/static/py/initialization/bootstrap.py"></py-script>
 
 {% endblock %}

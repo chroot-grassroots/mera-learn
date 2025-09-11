@@ -18,16 +18,18 @@ async def start_bootstrap():
     if solid_session_ready:
         await initialize_state_solid()
     else:
-        print("Solid pod not connected. Attempting local load.")
-        await initialize_state_local()
+        print("Solid pod is not connected.")
+        await no_solid_connection()
+
+# Initialization if Solid is NOT connected
+async def no_solid_connection():
+    # Code to display error and option to try reconnecting to user
+    pass
+
+
 
 # Initialization if Solid IS connected
 async def initialize_state_solid():
-    # Your state initialization code here
-    pass
-
-# Initialization if Solid is NOT connected
-async def initialize_state_local():
     # Your state initialization code here
     pass
 

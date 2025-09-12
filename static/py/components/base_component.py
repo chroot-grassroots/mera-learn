@@ -22,8 +22,6 @@ class BaseComponentConfig(BaseModel, ABC):
         """Each child must implement type validation"""
 
 class BaseComponentProgress(BaseModel, ABC):
-    # This class CANNOT be instantiated directly
-    complete: bool = TrumpField(..., trump="true_wins")
 
     # Every child must implement these for every field they add
     @field_validator('complete', mode='before')

@@ -4,6 +4,13 @@
 {% block title %}Learning Environment - Mera{% endblock %}
 
 {% block extra_head %}
+
+<!-- Fire YAML requests immediately - before anything else -->
+<script>
+console.log("Starting YAML downloads...");
+// To Do: Add logic to load YAMLS from list
+</script>
+    
 <!-- Solid Pod Client Libraries -->
 <script src="{% static 'js/solid-bundle.js' %}"></script>
 
@@ -131,9 +138,17 @@ window.addEventListener('py:error', function(event) {
 
 </script>
 
-<!-- PyScript will be loaded here -->
-<!-- Your polling PyScript code will go in this section -->
 
-<py-script src="/static/py/initialization/bootstrap.py"></py-script>
+<!-- Load all PyScript modules -->
+<script src="/static/py/initialization/validation_builder.py"></script>
+<script src="/static/py/bootstrap.py"></script>
+    
+<!-- Wait for everything, then start -->
+<script>
+window.addEventListener("py:all-done", function(event) {
+    console.log("All PyScript modules loaded - starting bootstrap...");
+     pyscript.interpreter.globals.get('start_bootstrap')();
+});
+</script>
 
 {% endblock %}

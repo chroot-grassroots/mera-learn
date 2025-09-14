@@ -1,0 +1,21 @@
+{
+  "packages": [],
+  "files": {
+    "/static/py/__init__.py": "./__init__.py",
+    "/static/py/ui/timeline_container.py": "./ui/timeline_container.py",
+    "/static/py/ui/__init__.py": "./ui/__init__.py",
+    "/static/py/ui/error_display.py": "./ui/error_display.py",
+    "/static/py/navigation/site_menu.py": "./navigation/site_menu.py",
+    "/static/py/navigation/custom_solid_handler.py": "./navigation/custom_solid_handler.py",
+    "/static/py/navigation/update_home_journey_button.py": "./navigation/update_home_journey_button.py",
+    "/static/py/initialization/bootstrap.py": "./initialization/bootstrap.py",
+    "/static/py/initialization/validation_builder.py": "./initialization/validation_builder.py",
+    "/static/py/initialization/__init__.py": "./initialization/__init__.py",
+    "/static/py/utils/__init__.py": "./utils/__init__.py",
+    "/static/py/components/base_component.py": "./components/base_component.py",
+    "/static/py/components/__init__.py": "./components/__init__.py",
+    "/static/py/models/__init__.py": "./models/__init__.py",
+    "/static/py/persistence/__init__.py": "./persistence/__init__.py",
+    "/static/py/core/__init__.py": "./core/__init__.py"
+  }
+}

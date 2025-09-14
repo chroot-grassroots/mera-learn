@@ -35,20 +35,14 @@
         }
     </script>
 
-    <!-- Solid Pod libraries - BUNDLED VERSION -->
-    <script src="{% static 'js/solid-bundle.js' %}"></script>
-
     <!-- PyScript CSS and JS -->
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
 
     <!-- PyScript Configuration -->
-    <py-config>
-        {
-        "packages": [],
-        "paths": ["/static/py/"]
-        }
-    </py-config>
+    <py-config src="/static/config/pyscript-config.json"></py-config>
+
+    {% block extra_head %}{% endblock %}
 
     <!-- Unsplash Protest Photo for Top Bar -->
     <style>

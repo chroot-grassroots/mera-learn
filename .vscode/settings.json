@@ -1,2 +1,23 @@
 {
+    "python-envs.pythonProjects": [
+        {
+            "path": "static/py/ui",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
+    ],
+    "emeraldwalk.runonsave": {
+        "commands": [
+            {
+                "match": "static/py/.*\\.py$",
+                "isAsync": true,
+                "cmd": "/home/james/Code/mera-learn/venv/bin/python static/py/dev/pyscript_config_generator.py"
+            },
+            {
+                "match": "static/lessons/.*\\.yaml$",
+                "isAsync": true,
+                "cmd": "/home/james/Code/mera-learn/venv/bin/python static/py/dev/initialization_javascript_writer.py"
+            }
+        ]
+    }
 }

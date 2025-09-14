@@ -6,11 +6,8 @@
 {% block extra_head %}
 
 <!-- Fire YAML requests immediately - before anything else -->
-<script>
-console.log("Starting YAML downloads...");
-// To Do: Add logic to load YAMLS from list
-</script>
-    
+<script src="{% static 'js/initialization.js' %}"></script>
+
 <!-- Solid Pod Client Libraries -->
 <script src="{% static 'js/solid-bundle.js' %}"></script>
 
@@ -70,24 +67,13 @@ console.log("Starting YAML downloads...");
             </p>
         </div>
 
-        <!-- Learning Content (hidden until authenticated) -->
-        <div id="learning-content" class="hidden">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
-                <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                    Welcome to Mera!
-                </h2>
-                <p class="text-gray-600 dark:text-gray-400 mb-6">
-                    Your secure learning environment is ready. PyScript will load lesson content here.
-                </p>
-                
-                <!-- Lesson content will be inserted here by PyScript -->
-                <div id="lesson-container">
-                    <!-- PyScript will populate this area -->
-                </div>
-            </div>
+        <!-- Timeline Container (hidden until authenticated) -->
+        <!-- TimelineContainer will create its own structure inside this div -->
+        <div id="lesson-container" class="hidden">
+            <!-- PyScript TimelineContainer will populate this entire area -->
         </div>
 
-        <!-- Error Section -->
+        <!-- Authentication Error Section (for auth failures only) -->
         <div id="error-section" class="hidden text-center py-12">
             <div class="flex items-center justify-center space-x-2 text-red-600">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,7 +92,6 @@ console.log("Starting YAML downloads...");
             </div>
         </div>
     </div>
-</div>
 
 <!-- Set up global variables for PyScript -->
 <script>
@@ -138,17 +123,6 @@ window.addEventListener('py:error', function(event) {
 
 </script>
 
-
-<!-- Load all PyScript modules -->
-<script src="/static/py/initialization/validation_builder.py"></script>
-<script src="/static/py/bootstrap.py"></script>
-    
-<!-- Wait for everything, then start -->
-<script>
-window.addEventListener("py:all-done", function(event) {
-    console.log("All PyScript modules loaded - starting bootstrap...");
-     pyscript.interpreter.globals.get('start_bootstrap')();
-});
-</script>
+<py-script src="/static/py/initialization/bootstrap.py"></py-script>
 
 {% endblock %}

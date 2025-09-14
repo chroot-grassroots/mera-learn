@@ -114,12 +114,21 @@ async def start_bootstrap():
     solid_session_ready = False 
     
     for attempt in range(MAX_ATTEMPTS):
-        if await js.window.meraBridge.check():
-            solid_session_ready = True
-            break
-        else:
+        try:
+            # Check if bridge exists and is ready
+            if hasattr(js.window, 'meraBridge') and await js.window.meraBridge.check():
+                solid_session_ready = True
+                break
+            else:
+                print(f"BOOTSTRAP: Attempt {attempt + 1}/{MAX_ATTEMPTS} - Bridge not ready")
+                # Wait before next attempt
+                await asyncio.sleep(0.1)
+                
+        except Exception as e:
+            print(f"BOOTSTRAP: Attempt {attempt + 1}/{MAX_ATTEMPTS} - Error: {e}")
+             # Wait before next attempt
             await asyncio.sleep(0.1)
-
+            
     if solid_session_ready:
         await initialize_state_solid()
     else:

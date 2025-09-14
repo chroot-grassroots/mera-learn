@@ -125,3 +125,18 @@ STATICFILES_DIRS = [
 ]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Fix SameSite cookie warnings
+SESSION_COOKIE_SAMESITE = 'Lax'  # or 'Strict' for more security
+SESSION_COOKIE_SECURE = True     # Requires HTTPS in production
+SESSION_COOKIE_HTTPONLY = True   # Prevents JavaScript access to session cookies
+
+# Also fix CSRF cookies
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = True        # Requires HTTPS in production
+CSRF_COOKIE_HTTPONLY = True
+
+# For development only (if you're not using HTTPS locally)
+if DEBUG:
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False

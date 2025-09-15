@@ -1,17 +1,43 @@
 # static/initialization/validation_builder.py
 import inspect
 from typing import Dict, List, Type, Any
+import os
+import importlib.util
+from pathlib import Path
+from static.py.components.base_component import BaseComponent, BaseComponentConfig, BaseComponentInternal, BaseComponentProgress
 
 def discover_component_classes():
-    """Find ALL component model classes during startup"""
+    component_dir = Path("static/py/components")
+    component_classes = []
     component_configs = []
-    component_progress = []
+    component_progresses = [] 
     component_internals = []
-    
-    pass
-    
-    return component_configs, component_progress, component_internals
 
+    # Iterate through .py files in components directory
+    for py_file in component_dir.glob("*.py"):
+        if py_file.name == "__init__.py" or py_file.name == "base_component.py":
+            continue
+            
+        # Import the module dynamically
+        module_name = py_file.stem
+        spec = importlib.util.spec_from_file_location(module_name, py_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        # Iterate through classes in each .py file to make list of models
+        for _name, discovered_class in inspect.getmembers(module, inspect.isclass):
+            if issubclass(discovered_class, BaseComponent):
+                component_classes.append(discovered_class)
+            if issubclass(discovered_class, BaseComponentConfig):
+                component_configs.append(discovered_class)
+            if issubclass(discovered_class, BaseComponentProgress):
+                component_progresses.append(discovered_class)
+            if issubclass(discovered_class, BaseComponentInternal):
+                component_internals.append(discovered_class)
+    
+    return component_classes, component_configs, component_progresses, component_internals
+
+1. 
 def build_config_type_registry() -> Dict[str, Type]:
     pass
 

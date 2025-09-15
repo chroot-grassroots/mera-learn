@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, PrivateAttr, field_validator
 from typing import List, Optional, Union, Any
 from abc import ABC, abstractmethod
 
+from static.py.models.delete_me_later import ComponentProgressMessage, NavigationProgressMessage, OverallProgressMessage, SettingProgressMessage
+
 def TrumpField(default: Any, trump: str):
     """Custom field with trump strategy for merge conflicts"""
     field = Field(default)
@@ -56,3 +58,43 @@ class BaseComponentInternal(BaseModel, ABC):
     def get_all_defaults(self) -> dict:
         """Return default values for every field in this component"""
         pass
+
+class BaseComponent (ABC):
+    def __init__(self, config: BaseComponentConfig, progress: BaseComponentProgress, timeline):
+        self.config = config
+        self.progress = progress
+        self.timeline = timeline
+        self.internal = self._create_internal_model()  # Must be implemented
+        
+        # Component creates its own slot and renders
+        # TO DO add logic that interacts with timeline
+        pass
+
+    @abstractmethod
+    def _create_internal_model(self):
+        """Each component must implement this to return its internal model instance"""
+        pass
+    
+    def _render(self, container_element):
+        # Build initial DOM in assigned container
+        pass
+        
+    def get_component_progress_messages(self) -> List[ComponentProgressMessage]:
+        # Core polling interface - return and clear message queue
+        return []  # TODO: implement message queue
+
+    def get_overall_progress_messages(self) -> List[OverallProgressMessage]:
+        # Core polling interface - return and clear message queue
+        return []  # TODO: implement message queue
+
+    def get_navigation_messages(self) -> List[NavigationProgressMessage]:
+        # Core polling interface - return and clear message queue
+        return []  # TODO: implement message queue
+
+    def get_setting_messages(self) -> List[SettingProgressMessage]:
+        # Core polling interface - return and clear message queue
+        return []  # TODO: implement message queue
+
+    def destroy(self):
+        if hasattr(self, 'timeline'):
+            self.timeline.remove_component_slot(self.config.id)

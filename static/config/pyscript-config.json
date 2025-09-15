@@ -12,9 +12,11 @@
     "/static/py/initialization/validation_builder.py": "./initialization/validation_builder.py",
     "/static/py/initialization/__init__.py": "./initialization/__init__.py",
     "/static/py/utils/__init__.py": "./utils/__init__.py",
+    "/static/py/components/basic_task.py": "./components/basic_task.py",
     "/static/py/components/base_component.py": "./components/base_component.py",
     "/static/py/components/__init__.py": "./components/__init__.py",
     "/static/py/models/__init__.py": "./models/__init__.py",
+    "/static/py/models/delete_me_later.py": "./models/delete_me_later.py",
     "/static/py/persistence/__init__.py": "./persistence/__init__.py",
     "/static/py/core/__init__.py": "./core/__init__.py"
   }

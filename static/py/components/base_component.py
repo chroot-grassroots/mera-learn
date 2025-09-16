@@ -22,42 +22,25 @@ class BaseComponentConfig(BaseModel, ABC):
     @abstractmethod
     def validate_type_matches_class(cls, v):
         """Each child must implement type validation"""
+        pass
 
 class BaseComponentProgress(BaseModel, ABC):
-
-    # Every child must implement these for every field they add
-    @field_validator('complete', mode='before')
-    @abstractmethod 
-    def set_complete_default(cls, v):
-        """Each child must implement default logic for complete"""
+    
+    # Core lifecycle methods
+    @abstractmethod
+    def create_fields_for_config(self, config) -> dict:
+        """Create all fields with proper initial values for this config"""
         pass
-        
-    # Future: force this pattern for ANY field they add
+
+    # Merge strategy
     @abstractmethod
     def get_all_trump_strategies(self) -> dict:
         """Return trump strategy for every field in this component"""
         pass
-    
-    @abstractmethod  
-    def get_all_defaults(self) -> dict:
-        """Return default values for every field in this component"""
-        pass
 
 class BaseComponentInternal(BaseModel, ABC):
     """Internal state that is never serialized or shared with core"""
-    rendered: bool = False
-    
-    @field_validator('rendered', mode='before')
-    @abstractmethod 
-    def set_rendered_default(cls, v):
-        """Each child must implement default logic for rendered"""
-        pass  # Should return v or default
-    
-    # Future: force this pattern for ANY field they add
-    @abstractmethod  
-    def get_all_defaults(self) -> dict:
-        """Return default values for every field in this component"""
-        pass
+    pass
 
 class BaseComponent (ABC):
     def __init__(self, config: BaseComponentConfig, progress: BaseComponentProgress, timeline):
@@ -71,11 +54,16 @@ class BaseComponent (ABC):
         pass
 
     @abstractmethod
+    def is_complete(self) -> bool:
+        """Each component must implement this to let the navigator know if it is ready to move on"""
+        pass
+
+    @abstractmethod
     def _create_internal_model(self):
         """Each component must implement this to return its internal model instance"""
         pass
     
-    def _render(self, container_element):
+    def _render(self):
         # Build initial DOM in assigned container
         pass
         

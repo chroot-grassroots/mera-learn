@@ -35,13 +35,6 @@
         }
     </script>
 
-    <!-- PyScript CSS and JS -->
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
-    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-
-    <!-- PyScript Configuration -->
-    <py-config src="/static/config/pyscript-config.json"></py-config>
-
     {% block extra_head %}{% endblock %}
 
     <!-- Unsplash Protest Photo for Top Bar -->
@@ -109,7 +102,7 @@
                 </a>
                 <a href="{% url 'pages:about' %}"
                     class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
-                   About
+                    About
                 </a>
                 <a href="{% url 'pages:privacy' %}"
                     class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
@@ -196,7 +189,8 @@
     </main>
 
     <!-- Load navigation module -->
-    <py-script src="/static/py/navigation/site_menu.py"></py-script>
+
+    <script src="/static/ts-build/navigation/siteMenu.js"></script>
 
 </body>
 

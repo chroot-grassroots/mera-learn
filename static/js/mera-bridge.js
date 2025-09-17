@@ -1,7 +1,7 @@
 /**
- * mera-bridge.js - Storage Bridge for PyScript
+ * mera-bridge.js - Storage Bridge for TypeScript
  * Uses pre-bundled Solid libraries (window.solidClientAuthentication)
- * Provides the singleton interface between PyScript and Solid Pod storage
+ * Provides the singleton interface between TypeScript and Solid Pod storage
  * 
  * FIXES:
  * - Proper session restoration with session ID mismatch handling

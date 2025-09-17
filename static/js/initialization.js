@@ -1,9 +1,8 @@
 /*
  * Auto-generated initialization.js
- * Generated on: 2025-09-14T14:41:39.466328
+ * Generated on: 2025-09-16T22:59:32.008743
  * 
  * Loads YAML lessons with error tracking
- * PyScript modules now handled via py-config in HTML
  */
 
 console.log('🚀 Initializing Mera learning platform...');
@@ -66,7 +65,7 @@ async function loadLessons() {
     }
 }
 
-// Utility function for PyScript to check initialization status
+// Utility function for TypeScript to check initialization status
 window.getInitializationStatus = function() {
     return {
         yamlsLoaded: window.initializationStatus.yamlsLoaded,
@@ -80,4 +79,4 @@ window.getInitializationStatus = function() {
 console.log('📥 Starting YAML lesson loading...');
 loadLessons();
 
-console.log('⏱️ YAML loading started - ready for PyScript');
+console.log('⏱️ YAML loading started - ready for TypeScript');

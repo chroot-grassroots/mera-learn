@@ -228,3 +228,7 @@ static/js/*.map
 # Package lock files (optional - some prefer to commit these)
 package-lock.json
 yarn.lock
+
+# TypeScript build outputs  
+static/ts-build/
+*.tsbuildinfo

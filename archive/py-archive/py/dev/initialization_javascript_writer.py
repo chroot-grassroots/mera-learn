@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate initialization.js file for TypeScript-based learning platform
+Generate initialization.js file for PyScript-based learning platform
 """
 
 import os
@@ -34,6 +34,7 @@ def generate_javascript(lessons):
  * Generated on: {datetime.now().isoformat()}
  * 
  * Loads YAML lessons with error tracking
+ * PyScript modules now handled via py-config in HTML
  */
 
 console.log('🚀 Initializing Mera learning platform...');
@@ -96,7 +97,7 @@ async function loadLessons() {{
     }}
 }}
 
-// Utility function for TypeScript to check initialization status
+// Utility function for PyScript to check initialization status
 window.getInitializationStatus = function() {{
     return {{
         yamlsLoaded: window.initializationStatus.yamlsLoaded,
@@ -110,7 +111,7 @@ window.getInitializationStatus = function() {{
 console.log('📥 Starting YAML lesson loading...');
 loadLessons();
 
-console.log('⏱️ YAML loading started - ready for TypeScript');'''
+console.log('⏱️ YAML loading started - ready for PyScript');'''
 
 def main():
     """Generate the initialization file"""
@@ -129,6 +130,7 @@ def main():
     
     print(f"✅ Generated {OUTPUT_FILE}")
     print(f"📊 Summary: {len(lessons)} lessons")
+    print("📝 Note: PyScript modules now handled via py-config")
 
 if __name__ == "__main__":
     main()

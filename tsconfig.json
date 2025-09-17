@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020", 
+    "moduleResolution": "node",
+    "outDir": "./static/ts-build",
+    "rootDir": "./src/ts",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": false,
+    "sourceMap": true,
+    "typeRoots": ["./src/ts/types", "./node_modules/@types"]
+  },
+  "include": ["src/ts/**/*"],
+  "exclude": ["node_modules", "static/js", "static/ts-build"]
+}

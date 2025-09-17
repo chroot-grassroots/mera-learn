@@ -11,7 +11,7 @@
 <!-- Solid Pod Client Libraries -->
 <script src="{% static 'js/solid-bundle.js' %}"></script>
 
-<!-- Mera Bridge (loads before PyScript) -->
+<!-- Mera Bridge (loads before TypeScript) -->
 <script src="{% static 'js/mera-bridge.js' %}"></script>
 {% endblock %}
 
@@ -26,7 +26,7 @@
                     Learning Environment
                 </h1>
                 <div class="flex items-center space-x-4">
-                    <!-- Authentication status will be updated by PyScript -->
+                    <!-- Authentication status will be updated by TypeScript -->
                     <div id="header-auth-status" class="text-sm text-gray-600 dark:text-gray-400">
                         Checking authentication...
                     </div>
@@ -70,7 +70,7 @@
         <!-- Timeline Container (hidden until authenticated) -->
         <!-- TimelineContainer will create its own structure inside this div -->
         <div id="lesson-container" class="hidden">
-            <!-- PyScript TimelineContainer will populate this entire area -->
+            <!-- TypeScript TimelineContainer will populate this entire area -->
         </div>
 
         <!-- Authentication Error Section (for auth failures only) -->
@@ -92,37 +92,5 @@
             </div>
         </div>
     </div>
-
-<!-- Set up global variables for PyScript -->
-<script>
-console.log('🐍 Setting up learning environment...');
-
-// Global variables that Python modules expect
-window.HELLO_URL = "{% url 'pages:hello' %}";
-window.CREATE_URL = "{% url 'pages:create' %}";
-window.CONNECT_URL = "{% url 'pages:connect' %}";
-
-// Enhanced error handling for PyScript
-window.addEventListener('py:error', function(event) {
-    console.error('❌ PyScript Error in learn.html:', event.detail);
-    
-    const authStatus = document.getElementById('auth-status');
-    if (authStatus) {
-        authStatus.innerHTML = `
-            <div class="flex items-center justify-center space-x-2 text-red-600">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span class="font-semibold">PyScript Loading Error</span>
-            </div>
-            <p class="text-sm text-red-500 mt-2 text-center">
-                Failed to load learning system. Please refresh the page.
-            </p>`;
-    }
-});
-
-</script>
-
-<py-script src="/static/py/initialization/bootstrap.py"></py-script>
 
 {% endblock %}

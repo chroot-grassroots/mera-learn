@@ -22,5 +22,5 @@ window.SolidAPI = {
     logout: solidClientAuth.logout
 };
 
-console.log('✅ Solid libraries bundled and ready for PyScript');
+console.log('✅ Solid libraries bundled and ready for TypeScript');
 console.log('Available: window.solidClient, window.solidClientAuthentication, window.SolidAPI');

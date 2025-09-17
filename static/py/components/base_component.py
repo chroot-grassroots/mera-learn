@@ -1,5 +1,5 @@
 # base_component.py
-from pydantic import BaseModel, Field, PrivateAttr, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, validator
 from typing import List, Optional, Union, Any
 from abc import ABC, abstractmethod
 
@@ -18,7 +18,7 @@ class BaseComponentConfig(BaseModel, ABC):
     accessibility_label: str = Field(..., min_length=3) #Description for screen reader
     order: int = Field(...) #Components on a lesson go from least to greatest. Start with 100, 200, 300, .., to give room.
 
-    @field_validator('type')
+    @validator('type')
     @abstractmethod
     def validate_type_matches_class(cls, v):
         """Each child must implement type validation"""

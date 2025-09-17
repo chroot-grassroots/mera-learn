@@ -1,5 +1,7 @@
 {
-  "packages": [],
+  "packages": [
+    "pydantic<2.0.0"
+  ],
   "files": {
     "/static/py/__init__.py": "./__init__.py",
     "/static/py/ui/timeline_container.py": "./ui/timeline_container.py",

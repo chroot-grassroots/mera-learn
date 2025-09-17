@@ -4,7 +4,9 @@ from typing import Dict, List, Type, Any
 import os
 import importlib.util
 from pathlib import Path
-from static.py.components.base_component import BaseComponent, BaseComponentConfig, BaseComponentInternal, BaseComponentProgress
+import sys
+sys.path.append('/static/py')
+from components.base_component import BaseComponent, BaseComponentConfig, BaseComponentInternal, BaseComponentProgress
 
 def discover_component_classes():
     component_dir = Path("static/py/components")
@@ -37,7 +39,6 @@ def discover_component_classes():
     
     return component_classes, component_configs, component_progresses, component_internals
 
-1. 
 def build_config_type_registry() -> Dict[str, Type]:
     pass
 
@@ -61,5 +62,8 @@ def validate_all_yamls() -> Dict[int, str]:
 def build_validation_system():
     """Main builder - creates all validation registries"""
     print("Building validation system...")
+    component_classes, component_configs, component_progresses, component_internals = discover_component_classes()
+    print("Component Classes:", component_classes)
+    print("Component Configs:", component_configs)
     # Coordinates all the above functions
     pass

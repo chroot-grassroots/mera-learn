@@ -1,6 +1,6 @@
 # basic_task.py
 from typing import List, Annotated
-from pydantic import Field, field_validator, StringConstraints, BaseModel
+from pydantic import Field, validator, StringConstraints, BaseModel
 from static.py.components.base_component import BaseComponent, BaseComponentConfig, BaseComponentInternal, BaseComponentProgress
 from itertools import zip_longest
 
@@ -15,7 +15,7 @@ class BasicTaskComponentConfig(BaseComponentConfig):
     description: str = Field(..., min_length=1, max_length=1000)  
     checkboxes: List[CheckboxItem] = Field(..., min_items=1, max_items=10)
     
-    @field_validator('type')
+    @validator('type')
     def validate_type_matches_class(cls, v):
         if v != "basic_task":
             raise ValueError("BasicTaskComponentConfig type must be 'basic_task'")

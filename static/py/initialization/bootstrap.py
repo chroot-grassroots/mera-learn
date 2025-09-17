@@ -1,5 +1,8 @@
 import js
 import asyncio
+import sys
+sys.path.append('/static/py')
+from initialization.validation_builder import build_validation_system
 from ui.error_display import ErrorDisplay
 from ui.timeline_container import TimelineContainer
 
@@ -94,7 +97,7 @@ js.window.bootstrap_instance = bootstrap_instance
 async def initialize_state_solid():
     setup_ui()
     print("Solid Pod connected - initializing with cloud sync")
-    # Your state initialization code here
+    build_validation_system()
     pass
 
 # NO initialization if Solid is NOT connected

@@ -38,16 +38,37 @@ def scan_python_modules():
 def generate_pyconfig(file_mappings):
     """Generate PyScript configuration"""
     config = {
-        "packages": [],
+        "packages": ["pydantic<2.0.0"],
         "files": file_mappings
     }
     
-    # Add generation timestamp as comment (JSON doesn't support comments, but helpful for debugging)
     return config
+
+def validate_config(config):
+    """Validate the generated configuration"""
+    required_files = [
+        "/static/py/__init__.py",
+        "/static/py/components/__init__.py", 
+        "/static/py/components/base_component.py"
+    ]
+    
+    missing_files = []
+    for required_file in required_files:
+        if required_file not in config["files"]:
+            missing_files.append(required_file)
+    
+    if missing_files:
+        print("⚠️  Warning: Missing critical files:")
+        for missing in missing_files:
+            print(f"   - {missing}")
+        return False
+    
+    print("✅ Configuration validation passed")
+    return True
 
 def main():
     """Generate the PyScript configuration file"""
-    print("Generating PyScript configuration...")
+    print("🔧 Generating PyScript configuration...")
     
     # Scan for Python modules
     file_mappings = scan_python_modules()
@@ -55,14 +76,21 @@ def main():
     # Generate PyScript config
     pyconfig = generate_pyconfig(file_mappings)
     
+    # Validate configuration
+    validate_config(pyconfig)
+    
     # Write output
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
     with open(OUTPUT_FILE, 'w') as f:
         json.dump(pyconfig, f, indent=2)
     
-    print(f"Generated {OUTPUT_FILE}")
-    print(f"Summary: {len(file_mappings)} Python files mapped")
-    print(f"Generated on: {datetime.now().isoformat()}")
+    print(f"📄 Generated {OUTPUT_FILE}")
+    print(f"📊 Summary: {len(file_mappings)} Python files mapped")
+    print(f"⏰ Generated on: {datetime.now().isoformat()}")
+    print("\n🎯 Key changes:")
+    print("   - Removed invalid 'paths' configuration")
+    print("   - Use sys.path.append('/static/py') in your Python code instead")
+    print("   - Then import with: from components.base_component import ...")
 
 if __name__ == "__main__":
     main()

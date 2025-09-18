@@ -9,7 +9,8 @@
   "scripts": {
     "build-solid": "esbuild src/solid-bundle-source.js --bundle --outfile=static/js/solid-bundle.js --format=iife --global-name=SolidClient --define:process.env.NODE_ENV='\"production\"' --define:global=globalThis --platform=browser --target=es2020",
     "build-ts": "tsc",
-    "build": "npm run build-ts && npm run build-solid",
+    "build-ts-bundle": "esbuild src/ts/initialization/bootstrap.ts --bundle --outfile=static/js/mera-app.js --format=iife --platform=browser",
+    "build": "npm run build-ts && npm run build-solid && npm run build-ts-bundle",
     "watch-solid": "npm run build-solid -- --watch",
     "watch-ts": "tsc --watch",
     "dev": "concurrently \"npm run watch-ts\" \"npm run watch-solid\"",
@@ -19,7 +20,13 @@
     "type": "git",
     "url": "git+https://github.com/chroot-grassroots/mera-learn.git"
   },
-  "keywords": ["cybersecurity", "education", "solid-pod", "typescript", "privacy"],
+  "keywords": [
+    "cybersecurity",
+    "education",
+    "solid-pod",
+    "typescript",
+    "privacy"
+  ],
   "author": "",
   "license": "ISC",
   "bugs": {
@@ -32,7 +39,8 @@
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
     "events": "^3.3.0",
-    "stream-browserify": "^3.0.0"
+    "stream-browserify": "^3.0.0",
+    "zod": "^4.1.9"
   },
   "devDependencies": {
     "@types/node": "^24.5.1",

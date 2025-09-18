@@ -13364,6 +13364,22 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   var timeline = null;
   var errorDisplay = null;
   var initialized = false;
+  function initializeWhenReady() {
+    console.log("\u{1F680} Starting initialization...");
+    window.bootstrapInstance = bootstrapInstance;
+    try {
+      setupUI();
+      console.log("Error UI setup successfully!");
+    } catch (uiError) {
+      console.error("\u{1F4A5} UI setup failed:", uiError);
+      console.error("Cannot continue - refresh the page");
+      return;
+    }
+    startBootstrap().catch((error45) => {
+      console.error("\u{1F4A5} Bootstrap startup failed:", error45);
+      showBootstrapError(error45);
+    });
+  }
   function setupUI() {
     console.log("\u{1F3A8} Setting up UI components...");
     const authStatus = document.getElementById("auth-status");
@@ -13376,32 +13392,34 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }
     timeline = new TimelineContainer("lesson-container");
     errorDisplay = new SolidConnectionErrorDisplay(timeline);
+    bootstrapInstance.timeline = timeline;
+    bootstrapInstance.errorDisplay = errorDisplay;
     console.log("\u2705 UI components initialized");
   }
-  async function initializeStateSolid() {
-    setupUI();
-    console.log("\u{1F517} Solid Pod connected - initializing with cloud sync");
-    try {
-      await buildValidationSystem();
-      console.log("\u2705 Validation system built successfully");
-      console.log("\u{1F680} Learning platform ready!");
-      initialized = true;
-    } catch (error45) {
-      console.error("\u274C Validation system build failed:", error45);
-      if (errorDisplay) {
-        errorDisplay.showSystemError(
-          "validation-build",
-          "Validation system initialization failed",
-          error45 instanceof Error ? error45.message : "Unknown error"
-        );
-      }
-    }
-  }
-  async function noSolidConnection() {
-    console.log("\u{1F510} No Solid connection - authentication required");
-    setupUI();
+  function showBootstrapError(error45) {
+    const errorMessage = error45 instanceof Error ? error45.message : "Unknown error occurred";
     if (errorDisplay) {
-      errorDisplay.showSolidConnectionError();
+      errorDisplay.showSystemError(
+        "bootstrap-init",
+        "Bootstrap initialization failed",
+        errorMessage
+      );
+      return;
+    }
+    const authStatus = document.getElementById("auth-status");
+    if (authStatus) {
+      authStatus.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-red-600 mb-4">
+                    <span class="font-semibold">Bootstrap Failed</span>
+                </div>
+                <p class="text-sm text-red-500 mb-4">${errorMessage}</p>
+                <button onclick="location.reload()" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
+                    Reload
+                </button>
+            </div>
+        `;
     }
   }
   async function startBootstrap() {
@@ -13433,6 +13451,30 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       await noSolidConnection();
     }
   }
+  async function initializeStateSolid() {
+    console.log("\u{1F517} Solid Pod connected - initializing with cloud sync");
+    try {
+      await buildValidationSystem();
+      console.log("\u2705 Validation system built successful");
+      console.log("\u{1F680} Learning platform ready!");
+      initialized = true;
+    } catch (error45) {
+      console.error("\u274C Validation system build failed:", error45);
+      if (errorDisplay) {
+        errorDisplay.showSystemError(
+          "validation-build",
+          "Validation system initialization failed",
+          error45 instanceof Error ? error45.message : "Unknown error"
+        );
+      }
+    }
+  }
+  async function noSolidConnection() {
+    console.log("\u{1F510} No Solid connection - authentication required");
+    if (errorDisplay) {
+      errorDisplay.showSolidConnectionError();
+    }
+  }
   var BootstrapManager = class {
     constructor() {
       this.timeline = null;
@@ -13454,42 +13496,6 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }
   };
   var bootstrapInstance = new BootstrapManager();
-  bootstrapInstance.timeline = timeline;
-  bootstrapInstance.errorDisplay = errorDisplay;
-  function initializeWhenReady() {
-    console.log("\u{1F680} Starting initialization...");
-    window.bootstrapInstance = bootstrapInstance;
-    startBootstrap().catch((error45) => {
-      console.error("\u{1F4A5} Bootstrap startup failed:", error45);
-      showBootstrapError(error45);
-    });
-  }
-  function showBootstrapError(error45) {
-    const errorMessage = error45 instanceof Error ? error45.message : "Unknown error occurred";
-    if (errorDisplay) {
-      errorDisplay.showSystemError(
-        "bootstrap-init",
-        "Bootstrap initialization failed",
-        errorMessage
-      );
-      return;
-    }
-    const authStatus = document.getElementById("auth-status");
-    if (authStatus) {
-      authStatus.innerHTML = `
-            <div class="text-center py-12">
-                <div class="text-red-600 mb-4">
-                    <span class="font-semibold">Bootstrap Failed</span>
-                </div>
-                <p class="text-sm text-red-500 mb-4">${errorMessage}</p>
-                <button onclick="location.reload()" 
-                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
-                    Reload
-                </button>
-            </div>
-        `;
-    }
-  }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initializeWhenReady);
   } else {

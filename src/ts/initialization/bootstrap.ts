@@ -13,6 +13,27 @@ let timeline: TimelineContainer | null = null;
 let errorDisplay: SolidConnectionErrorDisplay | null = null;
 let initialized = false;
 
+// Starts the module once DOM is ready.
+function initializeWhenReady() {
+  console.log("🚀 Starting initialization...");
+  window.bootstrapInstance = bootstrapInstance;
+
+  // Setup UI first, with simple console error handling
+  try {
+    setupUI();
+    console.log("Error UI setup successfully!");
+  } catch (uiError) {
+    console.error("💥 UI setup failed:", uiError);
+    console.error("Cannot continue - refresh the page");
+    return; // Don't continue if UI failed
+  }
+
+  startBootstrap().catch((error) => {
+    console.error("💥 Bootstrap startup failed:", error);
+    showBootstrapError(error);
+  });
+}
+
 /**
  * Initialize UI components and prepare the learning environment
  */
@@ -36,45 +57,43 @@ function setupUI(): void {
   timeline = new TimelineContainer("lesson-container");
   errorDisplay = new SolidConnectionErrorDisplay(timeline);
 
+  // Store references for JavaScript access
+  bootstrapInstance.timeline = timeline;
+  bootstrapInstance.errorDisplay = errorDisplay;
+
   console.log("✅ UI components initialized");
 }
 
-/**
- * Initialize when Solid IS connected - full learning environment setup
- */
-async function initializeStateSolid(): Promise<void> {
-  setupUI();
-  console.log("🔗 Solid Pod connected - initializing with cloud sync");
+// Shows an error if startBootstrap fails.
+function showBootstrapError(error: Error | unknown): void {
+  const errorMessage =
+    error instanceof Error ? error.message : "Unknown error occurred";
 
-  try {
-    await buildValidationSystem();
-    console.log("✅ Validation system built successfully");
-
-    // System is ready for lesson loading
-    console.log("🚀 Learning platform ready!");
-    initialized = true;
-  } catch (error) {
-    console.error("❌ Validation system build failed:", error);
-    if (errorDisplay) {
-      errorDisplay.showSystemError(
-        "validation-build",
-        "Validation system initialization failed",
-        error instanceof Error ? error.message : "Unknown error"
-      );
-    }
-  }
-}
-
-/**
- * Handle case where Solid is NOT connected - show error and require authentication
- */
-async function noSolidConnection(): Promise<void> {
-  console.log("🔐 No Solid connection - authentication required");
-  setupUI();
-
-  // Show Solid connection error - authentication required
+  // Use your existing error display system if available
   if (errorDisplay) {
-    errorDisplay.showSolidConnectionError();
+    errorDisplay.showSystemError(
+      "bootstrap-init",
+      "Bootstrap initialization failed",
+      errorMessage
+    );
+    return;
+  }
+
+  // Simple fallback if error display isn't ready yet
+  const authStatus = document.getElementById("auth-status");
+  if (authStatus) {
+    authStatus.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-red-600 mb-4">
+                    <span class="font-semibold">Bootstrap Failed</span>
+                </div>
+                <p class="text-sm text-red-500 mb-4">${errorMessage}</p>
+                <button onclick="location.reload()" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
+                    Reload
+                </button>
+            </div>
+        `;
   }
 }
 
@@ -118,6 +137,43 @@ async function startBootstrap(): Promise<void> {
 }
 
 /**
+ * Initialize when Solid IS connected - full learning environment setup
+ */
+async function initializeStateSolid(): Promise<void> {
+  console.log("🔗 Solid Pod connected - initializing with cloud sync");
+
+  try {
+    await buildValidationSystem();
+    console.log("✅ Validation system built successful");
+
+    // System is ready for lesson loading
+    console.log("🚀 Learning platform ready!");
+    initialized = true;
+  } catch (error) {
+    console.error("❌ Validation system build failed:", error);
+    if (errorDisplay) {
+      errorDisplay.showSystemError(
+        "validation-build",
+        "Validation system initialization failed",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }
+}
+
+/**
+ * Handle case where Solid is NOT connected - show error and require authentication
+ */
+async function noSolidConnection(): Promise<void> {
+  console.log("🔐 No Solid connection - authentication required");
+
+  // Show Solid connection error - authentication required
+  if (errorDisplay) {
+    errorDisplay.showSolidConnectionError();
+  }
+}
+
+/**
  * Bootstrap manager class for JavaScript interop
  */
 class BootstrapManager {
@@ -149,59 +205,11 @@ class BootstrapManager {
 // Create global bootstrap instance
 const bootstrapInstance = new BootstrapManager();
 
-// Store references for JavaScript access
-bootstrapInstance.timeline = timeline;
-bootstrapInstance.errorDisplay = errorDisplay;
-
 // Make bootstrap instance available globally
 declare global {
   interface Window {
     bootstrapInstance: BootstrapManager;
     meraBridge: any; // Will be properly typed later
-  }
-}
-
-// Starts the module once DOM is ready.
-function initializeWhenReady() {
-  console.log("🚀 Starting initialization...");
-  window.bootstrapInstance = bootstrapInstance;
-
-  startBootstrap().catch((error) => {
-    console.error("💥 Bootstrap startup failed:", error);
-    showBootstrapError(error);
-  });
-}
-
-// Shws an error if startBootstrap fails.
-function showBootstrapError(error: Error | unknown): void {
-  const errorMessage =
-    error instanceof Error ? error.message : "Unknown error occurred";
-
-  // Use your existing error display system if available
-  if (errorDisplay) {
-    errorDisplay.showSystemError(
-      "bootstrap-init",
-      "Bootstrap initialization failed",
-      errorMessage
-    );
-    return;
-  }
-
-  // Simple fallback if error display isn't ready yet
-  const authStatus = document.getElementById("auth-status");
-  if (authStatus) {
-    authStatus.innerHTML = `
-            <div class="text-center py-12">
-                <div class="text-red-600 mb-4">
-                    <span class="font-semibold">Bootstrap Failed</span>
-                </div>
-                <p class="text-sm text-red-500 mb-4">${errorMessage}</p>
-                <button onclick="location.reload()" 
-                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
-                    Reload
-                </button>
-            </div>
-        `;
   }
 }
 

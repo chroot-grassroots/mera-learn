@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 import { TimelineContainer } from "../ui/timelineContainer.js";
+import { BaseComponentInterface} from "./baseComponentInterface.js";
 
 /**
  * Trump strategy function type for merge conflicts
@@ -44,12 +45,18 @@ export type BaseComponentProgress = Record<string, any>;
 export abstract class BaseComponentProgressManager<
   TComponentProgress extends BaseComponentProgress
 > {
+
   // Constructured from a complete version of itself
   constructor(protected progress: TComponentProgress) {}
 
   /**
    * Initially create all fields with proper initial values for this config. Eg: If the config has 3 checkboxes so does the schema.
    */
+
+  getProgress(): TComponentProgress {
+    return this.progress;
+  }
+
   abstract createInitialProgress(
     config: BaseComponentConfig
   ): TComponentProgress;
@@ -61,14 +68,6 @@ export abstract class BaseComponentProgressManager<
     keyof TComponentProgress,
     TrumpStrategy<any>
   >;
-}
-
-/**
- * Base internal state interface - never serialized or shared with core
- */
-export interface BaseComponentInternal {
-  rendered: boolean;
-  [key: string]: any;
 }
 
 // Delete me and move later starting here =========================================================================================
@@ -83,12 +82,12 @@ export interface ComponentProgressMessage {
   data: any;
 }
 
-export interface NavigationProgressMessage {
+export interface NavigationMessage {
   type: "navigation";
   data: any;
 }
 
-export interface SettingProgressMessage {
+export interface SettingMessage {
   type: "setting";
   data: any;
 }
@@ -98,55 +97,43 @@ export interface SettingProgressMessage {
  * Abstract base component class
  * All interactive learning components must extend this
  */
-export abstract class BaseComponent<
+export abstract class BaseComponentCore<
   TConfig extends BaseComponentConfig,
-  TComponentProgress extends BaseComponentProgress,
-  TInternal extends BaseComponentInternal
+  TComponentProgress extends BaseComponentProgress
 > {
-  protected config: TConfig;
-  protected progressManager: BaseComponentProgressManager<TComponentProgress>;
-  protected internal: TInternal;
-  protected timeline: TimelineContainer;
+  private _config: TConfig;
+  private _progressManager: BaseComponentProgressManager<TComponentProgress>;
+  private _componentProgressMessageQueue: ComponentProgressMessage[];
+  private _overallProgressMessageQueue: OverallProgressMessage[];
+  private _navigationMessageQueue: NavigationMessage[];
+  private _settingMessageQueue: SettingMessage[];
+  private _interface: BaseComponentInterface<TConfig, TComponentProgress, any>;
 
   constructor(
     config: TConfig,
     progressManager: BaseComponentProgressManager<TComponentProgress>,
-    timeline: TimelineContainer
+    timeline_container: TimelineContainer
   ) {
-    this.config = config;
-    this.progressManager = progressManager;
-    this.timeline = timeline;
-    this.internal = this.createInternalModel();
+    this._config = config;
+    this._progressManager = progressManager;
+    this._componentProgressMessageQueue = [];
+    this._overallProgressMessageQueue = [];
+    this._navigationMessageQueue = [];
+    this._settingMessageQueue = [];
 
-    // Component creates its own slot and renders
-    this.initializeComponent();
+    // Create the interface and pass it this core + timeline
+    this._interface = this.createInterface(timeline_container);
   }
 
-  /**
-   * Initialize the component - create slot and initial render
-   */
-  private initializeComponent(): void {
-    // Add slot to timeline
-    this.timeline.addComponentSlot(this.config.id.toString());
-
-    // Initial render
-    this.render();
-  }
+  // Abstract factory method - concrete classes implement this
+  protected abstract createInterface(
+    timeline: TimelineContainer
+  ): BaseComponentInterface<TConfig, TComponentProgress, any>;
 
   /**
    * Each component must implement completion check
    */
   abstract isComplete(): boolean;
-
-  /**
-   * Each component must create its internal model
-   */
-  protected abstract createInternalModel(): TInternal;
-
-  /**
-   * Each component must implement rendering
-   */
-  protected abstract render(): void;
 
   /**
    * Get component progress messages for core polling
@@ -167,7 +154,7 @@ export abstract class BaseComponent<
   /**
    * Get navigation messages for core polling
    */
-  getNavigationMessages(): NavigationProgressMessage[] {
+  getNavigationMessages(): NavigationMessage[] {
     // TODO: implement message queue
     return [];
   }
@@ -175,53 +162,26 @@ export abstract class BaseComponent<
   /**
    * Get setting messages for core polling
    */
-  getSettingMessages(): SettingProgressMessage[] {
+  getSettingMessages(): SettingMessage[] {
     // TODO: implement message queue
     return [];
+  }
+
+  get config(): Readonly<TConfig> {
+    return this._config;
+  }
+
+  get progress(): Readonly<TComponentProgress> {
+    return this._progressManager.getProgress();
   }
 
   /**
    * Clean up component resources
    */
   destroy(): void {
-    if (this.timeline) {
-      this.timeline.removeComponentSlot(this.config.id.toString());
-    }
-  }
-
-  /**
-   * Get component area in timeline for custom rendering
-   */
-  protected getComponentArea(): HTMLElement | null {
-    return this.timeline.getComponentArea(this.config.id.toString());
-  }
-
-  /**
-   * Update component status in timeline
-   */
-  protected updateStatus(status: "active" | "completed" | "locked"): void {
-    this.timeline.updateComponentStatus(this.config.id.toString(), status);
+    // To Do: Send command to interface to clean up
   }
 }
-
-/**
- * Component registry type for mapping types to classes
- */
-export type ComponentRegistry = Map<
-  string,
-  new (...args: any[]) => BaseComponent<any, any, any>
->;
-
-/**
- * Schema registry type for mapping types to Zod schemas
- */
-export type SchemaRegistry = Map<
-  string,
-  {
-    config: z.ZodSchema<any>;
-    progress: z.ZodSchema<any>;
-  }
->;
 
 /**
  * Helper function to create trump field with strategy

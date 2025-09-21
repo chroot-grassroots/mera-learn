@@ -11,7 +11,7 @@ import {
   BaseComponentProgressManager,
   BaseComponentInternal,
   TrumpStrategy,
-} from "./baseComponent.js";
+} from "./baseComponentCore.js";
 import { TimelineContainer } from "../ui/timelineContainer.js";
 
 /**

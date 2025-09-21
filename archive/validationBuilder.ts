@@ -8,7 +8,7 @@ import type {
     BaseComponentProgress,
     ComponentRegistry,
     SchemaRegistry 
-} from '../components/baseComponent.js';
+} from '../components/baseComponentCore.js';
 
 // Import all component types for discovery
 import { 

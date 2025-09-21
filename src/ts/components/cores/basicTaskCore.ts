@@ -9,9 +9,9 @@ import {
   BaseComponentProgressManager,
   TrumpStrategy,
   ComponentProgressMessage,
-} from "./baseComponentCore.js";
-import { BaseComponentInterface } from "./baseComponentInterface.js";
-import { TimelineContainer } from "../ui/timelineContainer.js";
+} from "../cores/baseComponentCore.js";
+import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
+import { TimelineContainer } from "../../ui/timelineContainer.js";
 
 /**
  * Checkbox item schema

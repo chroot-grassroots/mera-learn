@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "ES2020", 
+    "module": "ES2020",
     "moduleResolution": "bundler",
     "outDir": "./static/ts-build",
     "rootDir": "./src/ts",
@@ -14,5 +14,5 @@
     "typeRoots": ["./src/ts/types", "./node_modules/@types"]
   },
   "include": ["src/ts/**/*"],
-  "exclude": ["node_modules", "static/js", "static/ts-build"]
+  "exclude": ["node_modules", "static/js", "static/ts-build", "src/ts/web/**/*"]
 }

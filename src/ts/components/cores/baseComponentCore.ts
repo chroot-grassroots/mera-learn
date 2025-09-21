@@ -2,8 +2,8 @@
 // Base classes for all learning components
 
 import { z } from "zod";
-import { TimelineContainer } from "../ui/timelineContainer.js";
-import { BaseComponentInterface } from "./baseComponentInterface.js";
+import { TimelineContainer } from "../../ui/timelineContainer.js";
+import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import {
   OverallProgressData,
   NavigationState, 
@@ -12,7 +12,7 @@ import {
   ComponentProgressMessage,
   NavigationMessage,
   SettingMessage
-} from "../core/coreSchemas.js";
+} from "../../core/coreSchemas.js";
 
 /**
  * Trump strategy function type for merge conflicts

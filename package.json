@@ -6,20 +6,19 @@
   "directories": {
     "doc": "docs"
   },
-
   "scripts": {
     "generate-lessons": "python dev/py/yaml_loader_javascript_writer.py",
     "build-solid": "esbuild src/solid-bundle-source.js --bundle --outfile=static/js/solid-bundle.js --format=iife --global-name=SolidClient --define:process.env.NODE_ENV='\"production\"' --define:global=globalThis --platform=browser --target=es2020",
     "build-ts": "tsc",
     "build-ts-bundle": "esbuild src/ts/initialization/bootstrap.ts --bundle --outfile=static/js/mera-app.js --format=iife --platform=browser",
     "generate-components": "python dev/py/component_registrar.py",
-    "build": "npm run generate-components && npm run generate-lessons && npm run build-ts && npm run build-solid && npm run build-ts-bundle",
+    "copy-web": "cp -r src/ts/web static/ 2>/dev/null || xcopy src\\ts\\web static\\web\\ /E /I /Y /Q 2>nul || true",
+    "build": "npm run generate-components && npm run generate-lessons && npm run build-ts && npm run copy-web && npm run build-solid && npm run build-ts-bundle",
     "dev-server": "python manage.py runserver",
     "watch-solid": "npm run build-solid -- --watch",
     "watch-ts": "tsc --watch",
     "dev": "concurrently \"npm run watch-ts\" \"npm run watch-solid\""
-  }
-,
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/chroot-grassroots/mera-learn.git"

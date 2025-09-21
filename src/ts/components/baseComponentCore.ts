@@ -3,7 +3,16 @@
 
 import { z } from "zod";
 import { TimelineContainer } from "../ui/timelineContainer.js";
-import { BaseComponentInterface} from "./baseComponentInterface.js";
+import { BaseComponentInterface } from "./baseComponentInterface.js";
+import {
+  OverallProgressData,
+  NavigationState, 
+  SettingsData,
+  OverallProgressMessage,
+  ComponentProgressMessage,
+  NavigationMessage,
+  SettingMessage
+} from "../core/coreSchemas.js";
 
 /**
  * Trump strategy function type for merge conflicts
@@ -45,7 +54,6 @@ export type BaseComponentProgress = Record<string, any>;
 export abstract class BaseComponentProgressManager<
   TComponentProgress extends BaseComponentProgress
 > {
-
   // Constructured from a complete version of itself
   constructor(protected progress: TComponentProgress) {}
 
@@ -70,29 +78,6 @@ export abstract class BaseComponentProgressManager<
   >;
 }
 
-// Delete me and move later starting here =========================================================================================
-// Placeholder message types (to be properly defined later)
-export interface OverallProgressMessage {
-  type: "overall_progress";
-  data: any;
-}
-
-export interface ComponentProgressMessage {
-  type: "overall_progress";
-  data: any;
-}
-
-export interface NavigationMessage {
-  type: "navigation";
-  data: any;
-}
-
-export interface SettingMessage {
-  type: "setting";
-  data: any;
-}
-// End Delete me later here ========================================================================================================
-
 /**
  * Abstract base component class
  * All interactive learning components must extend this
@@ -101,8 +86,8 @@ export abstract class BaseComponentCore<
   TConfig extends BaseComponentConfig,
   TComponentProgress extends BaseComponentProgress
 > {
-  private _config: TConfig;
-  private _progressManager: BaseComponentProgressManager<TComponentProgress>;
+  protected _config: TConfig;
+  protected _progressManager: BaseComponentProgressManager<TComponentProgress>;
   private _componentProgressMessageQueue: ComponentProgressMessage[];
   private _overallProgressMessageQueue: OverallProgressMessage[];
   private _navigationMessageQueue: NavigationMessage[];
@@ -110,9 +95,12 @@ export abstract class BaseComponentCore<
   private _interface: BaseComponentInterface<TConfig, TComponentProgress, any>;
 
   constructor(
-    config: TConfig,
+    config: Readonly<TConfig>, 
     progressManager: BaseComponentProgressManager<TComponentProgress>,
-    timelineContainer: TimelineContainer
+    timeline: TimelineContainer,
+    readonly overallProgress: Readonly<OverallProgressData>,
+    readonly navigationState: Readonly<NavigationState>,
+    readonly settings: Readonly<SettingsData>
   ) {
     this._config = config;
     this._progressManager = progressManager;
@@ -122,7 +110,7 @@ export abstract class BaseComponentCore<
     this._settingMessageQueue = [];
 
     // Create the interface and pass it this core + timeline
-    this._interface = this.createInterface(timelineContainer);
+    this._interface = this.createInterface(timeline);
   }
 
   // Abstract factory method - concrete classes implement this
@@ -134,6 +122,37 @@ export abstract class BaseComponentCore<
    * Each component must implement completion check
    */
   abstract isComplete(): boolean;
+
+  protected updateComponentProgress(method: string, args: any[]): void {
+    // Don't call setter here - let concrete class handle that
+    this._componentProgressMessageQueue.push({
+      type: "component_progress",
+      componentId: this._config.id,
+      method,
+      args,
+    });
+  }
+
+  protected updateOverallProgress(data: any): void {
+    this._overallProgressMessageQueue.push({
+      type: "overall_progress",
+      data,
+    });
+  }
+
+  protected updateNavigation(data: any): void {
+    this._navigationMessageQueue.push({
+      type: "navigation",
+      data,
+    });
+  }
+
+  protected updateSettings(data: any): void {
+    this._settingMessageQueue.push({
+      type: "setting",
+      data,
+    });
+  }
 
   /**
    * Get component progress messages for core polling

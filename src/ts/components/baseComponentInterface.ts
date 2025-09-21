@@ -8,7 +8,7 @@ import {
 /**
  * Base internal state interface - never serialized or shared with core
  */
-export interface BaseComponentInternal {
+export interface BaseComponentInterfaceInternalState {
   rendered: boolean;
   [key: string]: any;
 }
@@ -16,26 +16,26 @@ export interface BaseComponentInternal {
 export abstract class BaseComponentInterface<
   TConfig extends BaseComponentConfig,
   TComponentProgress extends BaseComponentProgress,
-  TInternal extends BaseComponentInternal
+  TInternal extends BaseComponentInterfaceInternalState
 > {
   protected internal: TInternal;
 
   constructor(
-    protected component_core: BaseComponentCore<TConfig, TComponentProgress>,
-    protected timeline_container: TimelineContainer
+    protected componentCore: BaseComponentCore<TConfig, TComponentProgress>,
+    protected timelineContainer: TimelineContainer
   ) {
-    this.internal = this.createInternalModel();
+    this.internal = this.createInternalState();
     this.initializeComponent();
   }
 
   // Abstract methods for concrete interfaces to implement
-  protected abstract createInternalModel(): TInternal;
+  protected abstract createInternalState(): TInternal;
   abstract render(): void;
   abstract destroy(): void;
 
   // Initialize component in timeline
   private initializeComponent(): void {
-    this.timeline_container.addComponentSlot(this.component_core.config.id.toString());
+    this.timelineContainer.addComponentSlot(this.componentCore.config.id.toString());
     this.render();
   }
 }

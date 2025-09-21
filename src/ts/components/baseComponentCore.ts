@@ -112,7 +112,7 @@ export abstract class BaseComponentCore<
   constructor(
     config: TConfig,
     progressManager: BaseComponentProgressManager<TComponentProgress>,
-    timeline_container: TimelineContainer
+    timelineContainer: TimelineContainer
   ) {
     this._config = config;
     this._progressManager = progressManager;
@@ -122,7 +122,7 @@ export abstract class BaseComponentCore<
     this._settingMessageQueue = [];
 
     // Create the interface and pass it this core + timeline
-    this._interface = this.createInterface(timeline_container);
+    this._interface = this.createInterface(timelineContainer);
   }
 
   // Abstract factory method - concrete classes implement this

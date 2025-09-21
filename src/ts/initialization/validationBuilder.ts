@@ -208,14 +208,34 @@ export function validateComponentConfig(type: string, config: any): { valid: boo
 }
 
 /**
- * Main builder - creates all validation registries
- * This is called by bootstrap after UI setup
+ * Helper function to register new component types at runtime
  */
+export function registerComponent(
+    typeName: string,
+    componentClass: ComponentClass,
+    configSchema: z.ZodSchema<any>,
+    progressSchema: z.ZodSchema<any>
+): void {
+    componentRegistrations.push({
+        componentClass,
+        configSchema,
+        progressSchema,
+        typeName
+    });
+    
+    console.log(`📝 Registered component type: ${typeName}`);
+}
+
+/**
+ * Main builder - creates all validation registries
+ * This is called by bootstrap after UI setup and Solid connection is verified
+ */
+
 export async function buildValidationSystem(): Promise<void> {
     console.log('🔧 Building validation system...');
     
     try {
-        // Step 1: Discover all component classes (replaces Python file scanning)
+        // Step 1: Discover all component classes
         const discovery = discoverComponentClasses();
         
         // Step 2: Build type registries
@@ -259,23 +279,4 @@ export async function buildValidationSystem(): Promise<void> {
         console.error('❌ Validation system build failed:', error);
         throw error;
     }
-}
-
-/**
- * Helper function to register new component types at runtime
- */
-export function registerComponent(
-    typeName: string,
-    componentClass: ComponentClass,
-    configSchema: z.ZodSchema<any>,
-    progressSchema: z.ZodSchema<any>
-): void {
-    componentRegistrations.push({
-        componentClass,
-        configSchema,
-        progressSchema,
-        typeName
-    });
-    
-    console.log(`📝 Registered component type: ${typeName}`);
 }

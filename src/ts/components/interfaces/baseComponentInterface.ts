@@ -1,9 +1,9 @@
-import { TimelineContainer } from "../ui/timelineContainer.js";
+import { TimelineContainer } from "../../ui/timelineContainer.js";
 import {
   BaseComponentConfig,
   BaseComponentCore,
   BaseComponentProgress,
-} from "./baseComponentCore.js";
+} from "../cores/baseComponentCore.js";
 
 /**
  * Base internal state interface - never serialized or shared with core

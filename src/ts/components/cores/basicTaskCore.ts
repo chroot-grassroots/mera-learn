@@ -8,16 +8,20 @@ import {
   BaseComponentProgressSchema,
   BaseComponentProgressManager,
   TrumpStrategy,
-  ComponentProgressMessage,
-} from "../cores/baseComponentCore.js";
+} from "./baseComponentCore.js";
 import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import { TimelineContainer } from "../../ui/timelineContainer.js";
+import {
+  OverallProgressData,
+  NavigationState,
+  SettingsData,
+} from "../../core/coreSchemas.js";
 
 /**
  * Checkbox item schema
  */
 export const CheckboxItemSchema = z.object({
-  content: z.string().min(1).max(100),
+  content: z.string().min(1).max(1000),
   required: z.boolean().default(false),
 });
 
@@ -30,7 +34,7 @@ export const BasicTaskComponentConfigSchema = BaseComponentConfigSchema.extend({
   type: z.literal("basic_task"),
   title: z.string().min(1).max(200),
   description: z.string().min(1).max(1000),
-  checkboxes: z.array(CheckboxItemSchema).min(1).max(10),
+  checkboxes: z.array(CheckboxItemSchema).min(1).max(20),
 });
 
 export type BasicTaskComponentConfig = z.infer<
@@ -75,6 +79,7 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<Basic
     currentProgress.checkbox_checked[index] = checked;
   }
 
+  // Create a new array of the config length all false for new schemas.
   createInitialProgress(
     config: BasicTaskComponentConfig
   ): BasicTaskComponentProgress {
@@ -83,27 +88,23 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<Basic
     };
   }
 
+  // Return true if true for either of the component progress schemas being merged.
   getAllTrumpStrategies(): Record<
     keyof BasicTaskComponentProgress,
     TrumpStrategy<any>
   > {
     return {
       checkbox_checked: (a: boolean[], b: boolean[]): boolean[] => {
-        const maxLength = Math.max(a?.length || 0, b?.length || 0);
-        const result: boolean[] = [];
-
-        for (let i = 0; i < maxLength; i++) {
-          const aVal = a?.[i] || false;
-          const bVal = b?.[i] || false;
-          result[i] = aVal || bVal; // OR logic for checkboxes
-        }
-
-        return result;
+        const maxLen = Math.max(a?.length || 0, b?.length || 0);
+        return Array(maxLen)
+          .fill(false)
+          .map((_, i) => a?.[i] || b?.[i] || false);
       },
     };
   }
 }
 
+/**
 /**
  * Basic task core - data processing and state management
  */
@@ -114,9 +115,19 @@ export class BasicTaskCore extends BaseComponentCore<
   constructor(
     config: BasicTaskComponentConfig,
     progressManager: BasicTaskProgressManager,
-    timeline: TimelineContainer
+    timeline: TimelineContainer,
+    overallProgress: Readonly<OverallProgressData>,
+    navigationState: Readonly<NavigationState>,
+    settings: Readonly<SettingsData>
   ) {
-    super(config, progressManager, timeline);
+    super(
+      config,
+      progressManager,
+      timeline,
+      overallProgress,
+      navigationState,
+      settings
+    );
   }
 
   /**
@@ -129,9 +140,8 @@ export class BasicTaskCore extends BaseComponentCore<
     BasicTaskComponentProgress,
     any
   > {
-    // Import here to avoid circular dependency
-    const { BasicTaskInterface } = require("./basicTaskInterface.js");
-    return new BasicTaskInterface(this, timeline);
+    // We'll implement this after creating BasicTaskInterface
+    throw new Error("BasicTaskInterface not yet implemented");
   }
 
   /**
@@ -144,12 +154,7 @@ export class BasicTaskCore extends BaseComponentCore<
       checked
     );
 
-    this.queueMessage({
-      type: "component_progress",
-      componentId: this._config.id,
-      method: "setCheckboxState",
-      args: [index, checked],
-    });
+    this.updateComponentProgress("setCheckboxState", [index, checked]);
   }
 
   /**

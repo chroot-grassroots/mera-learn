@@ -2,7 +2,7 @@
 
 import { TimelineContainer } from "../ui/timelineContainer.js";
 import { SolidConnectionErrorDisplay } from "../ui/errorDisplay.js";
-import { buildValidationSystem } from "./validationBuilder.js";
+import { orchestrateComponentDiscovery } from "./componentDiscovery.js";
 
 // Configuration constants
 const MAX_ATTEMPTS = 50;
@@ -11,7 +11,6 @@ const POLL_INTERVAL_MS = 100;
 // Global UI components
 let timeline: TimelineContainer | null = null;
 let errorDisplay: SolidConnectionErrorDisplay | null = null;
-let initialized = false;
 
 // Starts the module once DOM is ready.
 function initializeWhenReady() {
@@ -56,11 +55,6 @@ function setupUI(): void {
   // Initialize timeline and error display
   timeline = new TimelineContainer("lesson-container");
   errorDisplay = new SolidConnectionErrorDisplay(timeline);
-
-  // Store references for JavaScript access
-  bootstrapInstance.timeline = timeline;
-  bootstrapInstance.errorDisplay = errorDisplay;
-
   console.log("✅ UI components initialized");
 }
 
@@ -129,33 +123,30 @@ async function startBootstrap(): Promise<void> {
 
   // Initialize based on Solid connection status
   if (solidSessionReady) {
-    await initializeStateSolid();
+    continueToNext();
   } else {
     console.log("❌ Solid pod not connected. Authentication required.");
-    await noSolidConnection();
+    noSolidConnection();
   }
 }
 
 /**
  * Initialize when Solid IS connected - full learning environment setup
  */
-async function initializeStateSolid(): Promise<void> {
-  console.log("🔗 Solid Pod connected - initializing with cloud sync");
+function continueToNext(): void {
+  console.log("🔗 Solid Pod connected - initializing learning platform");
 
   try {
-    await buildValidationSystem();
-    console.log("✅ Validation system built successful");
-
-    // System is ready for lesson loading
-    console.log("🚀 Learning platform ready!");
-    initialized = true;
+    orchestrateComponentDiscovery();
+    console.log("✅ Initialization sequence started successfully");
+    // Bootstrap's job is done - no need to track further
   } catch (error) {
-    console.error("❌ Validation system build failed:", error);
+    console.error("❌ Failed to start initialization sequence:", error);
     if (errorDisplay) {
       errorDisplay.showSystemError(
-        "validation-build",
-        "Validation system initialization failed",
-        error instanceof Error ? error.message : "Unknown error"
+        "initialization-startup",
+        "Failed to start learning platform initialization",
+        error instanceof Error ? error.message : "Unknown startup error"
       );
     }
   }
@@ -164,7 +155,7 @@ async function initializeStateSolid(): Promise<void> {
 /**
  * Handle case where Solid is NOT connected - show error and require authentication
  */
-async function noSolidConnection(): Promise<void> {
+function noSolidConnection(): void {
   console.log("🔐 No Solid connection - authentication required");
 
   // Show Solid connection error - authentication required
@@ -177,28 +168,13 @@ async function noSolidConnection(): Promise<void> {
  * Bootstrap manager class for JavaScript interop
  */
 class BootstrapManager {
-  public timeline: TimelineContainer | null = null;
-  public errorDisplay: SolidConnectionErrorDisplay | null = null;
-
   async retrySolidConnection(): Promise<void> {
     console.log("🔄 Retrying Solid Pod connection...");
-    if (this.errorDisplay) {
-      this.errorDisplay.clearError("solid-connection");
+    if (errorDisplay) {
+      // Uses global directly
+      errorDisplay.clearError("solid-connection");
     }
-    // Restart the bootstrap process
-    await startBootstrap();
-  }
-
-  getInitializationStatus(): {
-    initialized: boolean;
-    hasTimeline: boolean;
-    hasErrorDisplay: boolean;
-  } {
-    return {
-      initialized,
-      hasTimeline: timeline !== null,
-      hasErrorDisplay: errorDisplay !== null,
-    };
+    return startBootstrap();
   }
 }
 

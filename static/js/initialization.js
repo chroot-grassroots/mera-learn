@@ -1,6 +1,6 @@
 /*
  * Auto-generated initialization.js
- * Generated on: 2025-09-23T21:32:18.285785
+ * Generated on: 2025-09-23T23:38:41.393245
  * 
  * Loads YAML lessons with error tracking
  */

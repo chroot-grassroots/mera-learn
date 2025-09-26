@@ -2,7 +2,7 @@
 
 import { TimelineContainer } from "../ui/timelineContainer.js";
 import { SolidConnectionErrorDisplay } from "../ui/errorDisplay.js";
-import { orchestrateComponentDiscovery } from "./componentDiscovery.js";
+import { orchestrateProgressLoading } from "./progressLoading.js";
 
 // Configuration constants
 const MAX_ATTEMPTS = 50;
@@ -123,7 +123,7 @@ async function startBootstrap(): Promise<void> {
 
   // Initialize based on Solid connection status
   if (solidSessionReady) {
-    continueToNext();
+    continueToNextModule();
   } else {
     console.log("❌ Solid pod not connected. Authentication required.");
     noSolidConnection();
@@ -133,11 +133,15 @@ async function startBootstrap(): Promise<void> {
 /**
  * Initialize when Solid IS connected - full learning environment setup
  */
-function continueToNext(): void {
+function continueToNextModule(): void {
   console.log("🔗 Solid Pod connected - initializing learning platform");
 
+  // TODO: Start background progress loading from Solid Pod
+  // Fire-and-forget network request since we know Solid is connected
+  // This can load in parallel with component discovery + YAML loading
+
   try {
-    orchestrateComponentDiscovery();
+    orchestrateProgressLoading();
     console.log("✅ Initialization sequence started successfully");
     // Bootstrap's job is done - no need to track further
   } catch (error) {

@@ -2,7 +2,7 @@
 // Just a stub. Does not accurately represent what the file needs to be.
 
 import { z } from "zod";
-import { curriculumData } from "../registry/mera-registry.js;
+import { curriculumData } from "../registry/mera-registry.js";
 
 export type TrumpStrategy<T> =
   | "NOR"

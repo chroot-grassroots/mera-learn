@@ -1,11 +1,13 @@
-/*
- * Auto-generated initialization.js
- * Generated on: 2025-09-23T23:38:41.393245
+/**
+ * yaml-loader.js - Mera Platform YAML Content Loader
+ * Loads lesson YAML files using registry-driven discovery
  * 
- * Loads YAML lessons with error tracking
+ * Uses registry from yaml-registry.js (data-only, no TypeScript imports)
  */
 
-console.log('🚀 Initializing Mera learning platform...');
+import { lessonRegistry } from './yaml-registry.js';
+
+console.log('🚀 YAML Loader initializing...');
 
 // Global registries
 window.lessonRegistry = {};
@@ -14,16 +16,17 @@ window.yamlLoadingErrors = [];
 // Track loading completion
 window.initializationStatus = {
     yamlsLoaded: 0,
-    yamlsTotal: 0,
+    yamlsTotal: lessonRegistry.length,
     yamlsComplete: false
 };
 
-// Load lessons with error tracking
+/**
+ * Load all lessons from the registry
+ */
 async function loadLessons() {
-    const lessons = [];
-    console.log(`📚 Loading ${lessons.length} lesson files...`);
+    console.log(`📚 Loading ${lessonRegistry.length} lesson files from registry...`);
     
-    const promises = lessons.map(async (lesson) => {
+    const promises = lessonRegistry.map(async (lesson) => {
         try {
             const response = await fetch(lesson.path);
             
@@ -42,7 +45,7 @@ async function loadLessons() {
             window.lessonRegistry[lesson.id] = yamlText;
             window.initializationStatus.yamlsLoaded++;
             
-            console.log(`✅ Loaded lesson: ${lesson.id}`);
+            console.log(`✅ Loaded lesson: ${lesson.id} (${lesson.title || 'Untitled'})`);
             
         } catch (error) {
             window.yamlLoadingErrors.push({
@@ -65,7 +68,9 @@ async function loadLessons() {
     }
 }
 
-// Utility function for TypeScript to check initialization status
+/**
+ * Utility function for TypeScript to check initialization status
+ */
 window.getInitializationStatus = function() {
     return {
         yamlsLoaded: window.initializationStatus.yamlsLoaded,
@@ -73,6 +78,20 @@ window.getInitializationStatus = function() {
         yamlsComplete: window.initializationStatus.yamlsComplete,
         yamlErrors: window.yamlLoadingErrors
     };
+};
+
+/**
+ * Get lesson metadata from registry (without loading content)
+ */
+window.getLessonMetadata = function(lessonId) {
+    return lessonRegistry.find(lesson => lesson.id === lessonId);
+};
+
+/**
+ * Get all lesson metadata from registry
+ */
+window.getAllLessonMetadata = function() {
+    return lessonRegistry;
 };
 
 // Start loading immediately

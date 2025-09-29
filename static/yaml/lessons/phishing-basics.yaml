@@ -1,0 +1,56 @@
+# /static/yaml/lessons/phishing-basics.yaml
+metadata:
+  id: 12345
+  title: "Phishing Recognition Basics"
+  description: "Learn to identify and avoid common phishing attacks through email and web links"
+  domainId: 1001
+  estimatedMinutes: 8
+  difficulty: "beginner"
+  version: "1.0.0"
+
+pages:
+  - id: 123001
+    title: "Email Red Flags"
+    description: "Learn to spot suspicious emails before they trick you"
+    order: 100
+    components:
+      - id: 123456
+        type: "basic_task"
+        title: "Email Warning Signs"
+        description: "Check off the red flags you should watch for in suspicious emails"
+        order: 100
+        accessibility_label: "Email warning signs checklist"
+        checkboxes:
+          - content: "Urgent language like 'Act Now!' or 'Limited Time!'"
+            required: true
+          - content: "Generic greetings like 'Dear Customer' or 'Dear User'"
+            required: true
+          - content: "Requests for passwords or personal information"
+            required: true
+          - content: "Spelling and grammar mistakes"
+            required: false
+          - content: "Mismatched sender addresses"
+            required: false
+
+  - id: 123002  
+    title: "Link Safety"
+    description: "How to safely examine and verify suspicious links"
+    order: 200
+    components:
+      - id: 123457
+        type: "basic_task"
+        title: "Safe Link Practices"
+        description: "Essential habits for handling suspicious links"
+        order: 100
+        accessibility_label: "Link safety practices checklist"
+        checkboxes:
+          - content: "Hover over links to preview the destination"
+            required: true
+          - content: "Look for HTTPS (the lock icon) on login pages"
+            required: true
+          - content: "Type website addresses manually instead of clicking"
+            required: false
+          - content: "Use a link checker tool for suspicious URLs"
+            required: false
+          - content: "Never download files from untrusted links"
+            required: true

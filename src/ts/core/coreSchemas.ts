@@ -2,7 +2,7 @@
 // Just a stub. Does not accurately represent what the file needs to be.
 
 import { z } from "zod";
-import { CurriculumRegistry } from "../generated/registries.js";
+import { curriculumData } from "../registry/mera-registry.js;
 
 export type TrumpStrategy<T> =
   | "NOR"
@@ -13,7 +13,7 @@ export type TrumpStrategy<T> =
   | "PREFER_NON_EMPTY"
   | "ASSERT_EQUAL";
 
-const ImmutableId = z.number().int().min(1).max(999999999999);
+export const ImmutableId = z.number().int().min(1).max(999999999999);
 
 /**
  * Overall progress data schema
@@ -32,7 +32,7 @@ export type OverallProgressData = z.infer<typeof OverallProgressDataSchema>;
 export class OverallProgressManager {
   constructor(
     private progress: OverallProgressData,
-    private curriculumRegistry: CurriculumRegistry
+    private curriculumData: curriculumData
   ) {}
 
   getProgress(): OverallProgressData {
@@ -86,7 +86,7 @@ export class OverallProgressManager {
   }
 
   markLessonComplete(lessonId: number): void {
-    if (!this.curriculumRegistry.hasLesson(lessonId)) {
+    if (!this.curriculumData.hasLesson(lessonId)) {
       throw new Error(`Invalid lesson ID: ${lessonId}`);
     }
 
@@ -99,7 +99,7 @@ export class OverallProgressManager {
   }
 
   markLessonIncomplete(lessonId: number): void {
-    if (!this.curriculumRegistry.hasLesson(lessonId)) {
+    if (!this.curriculumData.hasLesson(lessonId)) {
       throw new Error(`Invalid lesson ID: ${lessonId}`);
     }
 
@@ -196,7 +196,7 @@ export type OverallProgressMessage = z.infer<
 export class OverallProgressMessageManager {
   constructor(
     private progressManager: OverallProgressManager,
-    private curriculumRegistry: CurriculumRegistry
+    private curriculumRegistry: curriculumData
   ) {}
 
   validateMessage(message: OverallProgressMessage): void {

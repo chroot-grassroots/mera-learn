@@ -1,6 +1,6 @@
 /*
  * Auto-generated YAML File Registry for Runtime Loading
- * Generated on: 2025-09-29T06:11:33.241124
+ * Generated on: 2025-10-03T21:22:04.130749
  * 
  * This file contains ONLY file paths for loading YAML content at runtime.
  * All parsed data and mappings are in mera-registry.ts (bundled with TypeScript).

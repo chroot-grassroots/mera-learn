@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2025-09-29T06:11:33.241170
+ * Generated on: 2025-10-03T21:22:04.130792
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -101,7 +101,30 @@ export const domainLessonMap = new Map<number, number[]>([
  * MAPPING 9: Curriculum Data
  * Complete parsed curriculum structure
  */
-export const curriculumData = null;
+const curriculumDataRaw = null;
+
+/**
+ * Curriculum Registry - provides methods for querying curriculum data
+ */
+export class CurriculumRegistry {
+    constructor(
+        private curriculum: any,
+        private lessonIds: Set<number>,
+        private domainMap: Map<number, number[]>
+    ) {}
+    
+    hasLesson(lessonId: number): boolean {
+        return this.lessonIds.has(lessonId);
+    }
+    
+    // Add other methods as needed
+}
+
+export const curriculumData = new CurriculumRegistry(
+    curriculumDataRaw,
+    new Set(allLessonIds),
+    domainLessonMap
+);
 
 /**
  * MAPPING 10: Domain Data

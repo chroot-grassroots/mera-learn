@@ -1,7 +1,7 @@
 // lessonSchemas.ts - YAML lesson content schemas
 
 import { z } from "zod";
-import { ImmutableId } from './coreSchemas.js';
+import { ImmutableId } from './coreTypes.js';
 import { BasicTaskComponentConfigSchema } from '../components/cores/basicTaskCore.js';
 
 // Lesson metadata schema

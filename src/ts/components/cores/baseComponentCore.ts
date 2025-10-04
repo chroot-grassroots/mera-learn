@@ -6,13 +6,17 @@ import { TimelineContainer } from "../../ui/timelineContainer.js";
 import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import {
   OverallProgressData,
-  NavigationState, 
-  SettingsData,
   OverallProgressMessage,
-  ComponentProgressMessage,
+} from "../../core/overallProgressSchema.js";
+
+import {
+  NavigationState,
   NavigationMessage,
-  SettingMessage
-} from "../../core/coreSchemas.js";
+} from "../../core/navigationSchema.js";
+
+import { SettingsData, SettingMessage } from "../../core/settingsSchema.js";
+
+import { ComponentProgressMessage, ImmutableId } from "../../core/coreTypes.js";
 
 /**
  * Trump strategy function type for merge conflicts
@@ -95,7 +99,7 @@ export abstract class BaseComponentCore<
   private _interface: BaseComponentInterface<TConfig, TComponentProgress, any>;
 
   constructor(
-    config: Readonly<TConfig>, 
+    config: Readonly<TConfig>,
     progressManager: BaseComponentProgressManager<TComponentProgress>,
     timeline: TimelineContainer,
     readonly overallProgress: Readonly<OverallProgressData>,
@@ -119,7 +123,8 @@ export abstract class BaseComponentCore<
   ): BaseComponentInterface<TConfig, TComponentProgress, any>;
 
   /**
-   * Each component must implement completion check
+   * Each compo
+   nent must implement completion check
    */
   abstract isComplete(): boolean;
 
@@ -133,10 +138,10 @@ export abstract class BaseComponentCore<
     });
   }
 
-  protected updateOverallProgress(data: any): void {
+  protected updateOverallProgress(lessonId: number): void {
     this._overallProgressMessageQueue.push({
-      type: "overall_progress",
-      data,
+      method: "markLessonComplete",
+      args: [lessonId],
     });
   }
 

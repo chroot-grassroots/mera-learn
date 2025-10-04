@@ -1,19 +1,9 @@
-// coreSchemas.ts - Core application schemas and types
-// Just a stub. Does not accurately represent what the file needs to be.
+// overallProgressSchemas.ts
 
 import { z } from "zod";
 import { curriculumData } from "../registry/mera-registry.js";
-
-export type TrumpStrategy<T> =
-  | "NOR"
-  | "OR"
-  | "MAX"
-  | "UNION"
-  | "LATEST_TIMESTAMP"
-  | "PREFER_NON_EMPTY"
-  | "ASSERT_EQUAL";
-
-export const ImmutableId = z.number().int().min(1).max(999999999999);
+import { ImmutableId, TrumpStrategy } from "./coreTypes.js";
+import { CurriculumRegistry } from "../registry/mera-registry.js";
 
 /**
  * Overall progress data schema
@@ -32,7 +22,7 @@ export type OverallProgressData = z.infer<typeof OverallProgressDataSchema>;
 export class OverallProgressManager {
   constructor(
     private progress: OverallProgressData,
-    private curriculumData: curriculumData
+    private curriculumRegistry: CurriculumRegistry
   ) {}
 
   getProgress(): OverallProgressData {
@@ -86,7 +76,7 @@ export class OverallProgressManager {
   }
 
   markLessonComplete(lessonId: number): void {
-    if (!this.curriculumData.hasLesson(lessonId)) {
+    if (!this.curriculumRegistry.hasLesson(lessonId)) {
       throw new Error(`Invalid lesson ID: ${lessonId}`);
     }
 
@@ -99,7 +89,7 @@ export class OverallProgressManager {
   }
 
   markLessonIncomplete(lessonId: number): void {
-    if (!this.curriculumData.hasLesson(lessonId)) {
+    if (!this.curriculumRegistry.hasLesson(lessonId)) {
       throw new Error(`Invalid lesson ID: ${lessonId}`);
     }
 
@@ -114,8 +104,10 @@ export class OverallProgressManager {
     const weekStartDay = settingsManager.getWeekStartDay();
     const weekStartTime = settingsManager.getStartTime();
     this.progress.lessonsCompletedThisWeek = 0;
-    this.progress.weekStartTimestamp =
-      this.getLastWeekStart(weekStartDay, weekStartTime);
+    this.progress.weekStartTimestamp = this.getLastWeekStart(
+      weekStartDay,
+      weekStartTime
+    );
   }
 
   // Called by motivation tracker component when week has passed an goal not met.
@@ -130,8 +122,10 @@ export class OverallProgressManager {
 
   // Called by settings component when week start day setting is changed
   updateWeekStartTimestamp(weekStartDay: string, weekStartTime: string): void {
-    this.progress.weekStartTimestamp =
-      this.getLastWeekStart(weekStartDay, weekStartTime);
+    this.progress.weekStartTimestamp = this.getLastWeekStart(
+      weekStartDay,
+      weekStartTime
+    );
   }
   private incrementWeeklyLessons(): void {
     this.progress.lessonsCompletedThisWeek += 1;
@@ -177,6 +171,7 @@ export class OverallProgressManager {
     return Math.floor(weekStart.getTime() / 1000);
   }
 }
+
 export const OverallProgressMessageSchema = z.object({
   method: z.enum([
     "markLessonComplete",
@@ -196,7 +191,7 @@ export type OverallProgressMessage = z.infer<
 export class OverallProgressMessageManager {
   constructor(
     private progressManager: OverallProgressManager,
-    private curriculumRegistry: curriculumData
+    private curriculumRegistry: CurriculumRegistry
   ) {}
 
   validateMessage(message: OverallProgressMessage): void {
@@ -289,71 +284,11 @@ export class OverallProgressMessageManager {
         this.progressManager.resetStreak();
         break;
       case "updateWeekStartTimestamp":
-        this.progressManager.updateWeekStartTimestamp(message.args[0], message.args[1]);
+        this.progressManager.updateWeekStartTimestamp(
+          message.args[0],
+          message.args[1]
+        );
         break;
     }
   }
-}
-
-/**
- * Navigation state schema
- */
-export const NavigationStateSchema = z.object({
-  currentPage: z.number().min(0),
-  totalPages: z.number().min(1),
-  currentLesson: z.string(),
-  availableRoutes: z.array(z.string()),
-  history: z.array(z.string()),
-  // Add other navigation fields as needed
-});
-
-export type NavigationState = z.infer<typeof NavigationStateSchema>;
-
-/**
- * Settings data schema
- */
-export const SettingsDataSchema = z.object({
-  theme: z.enum(["light", "dark", "auto"]).default("auto"),
-  fontSize: z.enum(["small", "medium", "large"]).default("medium"),
-  reducedMotion: z.boolean().default(false),
-  highContrast: z.boolean().default(false),
-  // Add other settings as needed
-});
-
-export type SettingsData = z.infer<typeof SettingsDataSchema>;
-
-/**
- * Combined component progress schema - counterpart to lesson YAML
- * This gets stored in Solid Pod
- */
-export const CombinedComponentProgressSchema = z.object({
-  lessonId: z.string(),
-  lastUpdated: z.string().datetime(),
-  components: z.record(z.string(), z.any()), // componentId -> progress data
-  overallProgress: OverallProgressDataSchema,
-});
-
-export type CombinedComponentProgress = z.infer<
-  typeof CombinedComponentProgressSchema
->;
-
-/**
- * Message types for core communication
- */
-
-export interface ComponentProgressMessage {
-  type: "component_progress";
-  componentId: number;
-  method: string;
-  args: any[];
-}
-
-export interface NavigationMessage {
-  type: "navigation";
-  data: any;
-}
-
-export interface SettingMessage {
-  type: "setting";
-  data: any;
 }

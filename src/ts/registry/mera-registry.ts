@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2025-10-03T21:22:04.130792
+ * Generated on: 2025-10-05T21:18:34.739727
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -10,7 +10,7 @@
  */
 
 import { z } from 'zod';
-import type { BaseComponent } from '../components/baseComponent.js';
+import type { BaseComponentProgressManager } from '../components/cores/baseComponentCore.js';
 
 import { 
     BasicTaskProgressManager, 
@@ -19,7 +19,7 @@ import {
 } from '../components/cores/basicTaskCore.js';
 
 export interface ComponentRegistration {
-    componentClass: typeof BaseComponent;
+    componentClass: typeof BaseComponentProgressManager;
     configSchema: z.ZodType<any>;
     progressSchema: z.ZodType<any>;
     typeName: string;
@@ -49,7 +49,7 @@ export const componentRegistrations: ComponentRegistration[] = [
  * MAPPING 2: Component Type Map
  * Maps component type string to component class
  */
-export const componentTypeMap = new Map<string, typeof BaseComponent>([
+export const componentTypeMap = new Map<string, typeof BaseComponentProgressManager>([
     ["basic_task", BasicTaskProgressManager]
 ]);
 
@@ -70,20 +70,20 @@ export const progressSchemaMap = new Map<string, z.ZodType<any>>([
 ]);
 
 /**
- * MAPPING 5: All Lesson IDs
- * Set of all valid lesson IDs in the system
+ * MAPPING 5: All Entity IDs
+ * Set of all valid entity IDs in the system (lessons and menus)
  */
 export const allLessonIds = [12345];
 
 /**
  * MAPPING 6: All Component IDs
- * Set of all component IDs used across all lessons
+ * Set of all component IDs used across all entities
  */
 export const allComponentIds = [123456, 123457];
 
 /**
- * MAPPING 7: Lesson Metrics Map
- * Maps lesson ID to metrics (page count, component count, etc.)
+ * MAPPING 7: Entity Metrics Map
+ * Maps entity ID to metrics (page count, component count, etc.)
  */
 export const lessonMetrics = new Map<number, LessonMetrics>([
     [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }]
@@ -113,11 +113,29 @@ export class CurriculumRegistry {
         private domainMap: Map<number, number[]>
     ) {}
     
-    hasLesson(lessonId: number): boolean {
-        return this.lessonIds.has(lessonId);
+    hasEntity(entityId: number): boolean {
+        return this.lessonIds.has(entityId);
     }
-    
-    // Add other methods as needed
+
+    hasLesson(lessonId: number): boolean {
+        const metadata = lessonMetadata.find(l => l.id === lessonId);
+        return metadata?.entityType === "lesson" || false;
+    }
+
+    hasMenu(menuId: number): boolean {
+        const metadata = lessonMetadata.find(l => l.id === menuId);
+        return metadata?.entityType === "menu" || false;
+    }
+
+    getEntityPageCount(entityId: number): number {
+        const metrics = lessonMetrics.get(entityId);
+        if (!metrics) {
+            throw new Error(
+                `Entity ${entityId} not found in registry. Cannot determine page count.`
+            );
+        }
+        return metrics.pageCount;
+    }
 }
 
 export const curriculumData = new CurriculumRegistry(
@@ -133,31 +151,26 @@ export const curriculumData = new CurriculumRegistry(
 export const domainData = [];
 
 /**
- * MAPPING 11: Menu Data
- * Array of all menu definitions
- */
-export const menuData = [];
-
-/**
- * Lesson metadata for quick access
+ * MAPPING 11: Entity Metadata
+ * Complete metadata for all entities (lessons and menus)
  */
 export const lessonMetadata = [
   {
     "id": 12345,
     "path": "static/yaml/lessons/phishing-basics.yaml",
     "title": "Phishing Recognition Basics",
-    "domainId": 1001,
+    "entityType": "lesson",
     "pageCount": 2,
     "componentCount": 2,
     "difficulty": "beginner",
     "estimatedMinutes": 8,
-    "required": true
+    "required": true,
+    "domainId": 1001
   }
 ];
 
 console.log(`Mera Registry loaded with all 11 mappings:`);
 console.log(`  - ${componentRegistrations.length} component types`);
-console.log(`  - ${allLessonIds.length} lessons`);
+console.log(`  - ${allLessonIds.length} entities (lessons + menus)`);
 console.log(`  - ${allComponentIds.length} component IDs`);
 console.log(`  - ${domainLessonMap.size} domains`);
-console.log(`  - ${menuData.length} menus`);

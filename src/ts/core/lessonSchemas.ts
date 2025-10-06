@@ -7,12 +7,13 @@ import { BasicTaskComponentConfigSchema } from '../components/cores/basicTaskCor
 // Lesson metadata schema
 export const LessonMetadataSchema = z.object({
   id: ImmutableId,
+  entityType: z.enum(["learning", "menu"]),  // allows both types
   title: z.string().min(1).max(200),
   description: z.string().min(1).max(1000),
-  domainId: ImmutableId,
+  domainId: ImmutableId.optional(),  // only required for learning lessons
   estimatedMinutes: z.number().int().min(1).max(60),
   difficulty: z.enum(["beginner", "intermediate", "advanced"]),
-  version: z.string().regex(/^\d+\.\d+\.\d+$/), // "1.0.0"
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
 });
 
 // Page schema

@@ -84,7 +84,7 @@ export class OverallProgressManager {
     if (!this.progress.lessonCompletions[lessonKey]) {
       this.progress.lessonCompletions[lessonKey] = true;
       this.incrementWeeklyLessons();
-      this.updateDomainProgress(lessonId);
+      // TO DO: Add logic to check for domain completion
     }
   }
 

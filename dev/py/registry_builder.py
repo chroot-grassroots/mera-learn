@@ -46,7 +46,6 @@ def scan_component_file(filepath: Path) -> Optional[Dict[str, str]]:
 
     component_info = {}
 
-    # Extract component information using regex patterns
     for pattern_name, pattern in COMPONENT_PATTERNS.items():
         match = re.search(pattern, content)
         if match:
@@ -59,7 +58,6 @@ def scan_component_file(filepath: Path) -> Optional[Dict[str, str]]:
             elif pattern_name == "progress_schema":
                 component_info["progressSchema"] = match.group(1)
 
-    # Only return if we found all essential parts
     required_fields = ["componentClass", "configSchema", "progressSchema", "typeName"]
     if all(field in component_info for field in required_fields):
         component_info["file"] = filepath.stem
@@ -133,68 +131,109 @@ def scan_all_yaml_files() -> Dict[str, List[Dict[str, str]]]:
     return yaml_files
 
 
-def parse_yaml_lessons() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List[int]]]:
-    """Parse lesson YAML files and extract metadata for mappings."""
-    lessons_path = Path(LESSONS_DIR)
-    if not lessons_path.exists():
-        print(f"Warning: Lessons directory {LESSONS_DIR} not found")
-        return [], set(), set(), {}
+def parse_entity_yaml(yaml_file: Path, entity_type: str) -> Optional[Dict]:
+    """Parse a single entity (lesson or menu) YAML file."""
+    try:
+        with open(yaml_file, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
 
-    lessons = []
-    lesson_ids = set()
+        metadata = data.get("metadata", {})
+        entity_id = metadata.get("id")
+
+        if not entity_id:
+            return None
+
+        pages = data.get("pages", [])
+        total_components = sum(len(page.get("components", [])) for page in pages)
+
+        entity_info = {
+            "id": entity_id,
+            "path": str(yaml_file.relative_to(".")).replace("\\", "/"),
+            "title": metadata.get("title", ""),
+            "entityType": entity_type,
+            "pageCount": len(pages),
+            "componentCount": total_components,
+            "difficulty": metadata.get("difficulty", "beginner"),
+            "estimatedMinutes": metadata.get("estimatedMinutes", 0),
+            "required": metadata.get("required", True),
+        }
+
+        # Only add domainId for lesson type
+        if entity_type == "lesson":
+            entity_info["domainId"] = metadata.get("domainId")
+
+        return entity_info
+
+    except Exception as e:
+        print(f"  ❌ Error parsing {yaml_file.name}: {e}")
+        return None
+
+
+def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List[int]]]:
+    """Parse all entity YAML files (lessons and menus)."""
+    all_entities = []
+    entity_ids = set()
     component_ids = set()
     domain_lesson_map = {}
 
-    for yaml_file in lessons_path.glob("*.yaml"):
-        try:
+    # Parse lesson entities
+    lessons_path = Path(LESSONS_DIR)
+    if lessons_path.exists():
+        for yaml_file in lessons_path.glob("*.yaml"):
+            entity_info = parse_entity_yaml(yaml_file, "lesson")
+            if not entity_info:
+                continue
+
+            entity_id = entity_info["id"]
+            if entity_id in entity_ids:
+                print(f"  ❌ Error: Duplicate entity ID {entity_id}")
+                continue
+
+            entity_ids.add(entity_id)
+            all_entities.append(entity_info)
+
+            # Collect component IDs
             with open(yaml_file, "r", encoding="utf-8") as f:
-                lesson_data = yaml.safe_load(f)
+                data = yaml.safe_load(f)
+                for page in data.get("pages", []):
+                    for component in page.get("components", []):
+                        comp_id = component.get("id")
+                        if comp_id:
+                            component_ids.add(comp_id)
 
-            metadata = lesson_data.get("metadata", {})
-            lesson_id = metadata.get("id")
-
-            if not lesson_id:
-                continue
-
-            if lesson_id in lesson_ids:
-                print(f"  ❌ Error: Duplicate lesson ID {lesson_id}")
-                continue
-
-            lesson_ids.add(lesson_id)
-
-            pages = lesson_data.get("pages", [])
-            total_components = sum(len(page.get("components", [])) for page in pages)
-
-            for page in pages:
-                for component in page.get("components", []):
-                    comp_id = component.get("id")
-                    if comp_id:
-                        component_ids.add(comp_id)
-
-            domain_id = metadata.get("domainId")
+            # Map domain to lessons (only for lesson type)
+            domain_id = entity_info.get("domainId")
             if domain_id:
                 if domain_id not in domain_lesson_map:
                     domain_lesson_map[domain_id] = []
-                domain_lesson_map[domain_id].append(lesson_id)
+                domain_lesson_map[domain_id].append(entity_id)
 
-            lesson_info = {
-                "id": lesson_id,
-                "path": str(yaml_file.relative_to(".")).replace("\\", "/"),
-                "title": metadata.get("title", ""),
-                "domainId": domain_id,
-                "pageCount": len(pages),
-                "componentCount": total_components,
-                "difficulty": metadata.get("difficulty", "beginner"),
-                "estimatedMinutes": metadata.get("estimatedMinutes", 0),
-                "required": metadata.get("required", True),
-            }
+    # Parse menu entities
+    menus_path = Path(MENUS_DIR)
+    if menus_path.exists():
+        for yaml_file in menus_path.glob("*.yaml"):
+            entity_info = parse_entity_yaml(yaml_file, "menu")
+            if not entity_info:
+                continue
 
-            lessons.append(lesson_info)
+            entity_id = entity_info["id"]
+            if entity_id in entity_ids:
+                print(f"  ❌ Error: Duplicate entity ID {entity_id}")
+                continue
 
-        except Exception as e:
-            print(f"  ❌ Error parsing {yaml_file.name}: {e}")
+            entity_ids.add(entity_id)
+            all_entities.append(entity_info)
 
-    return lessons, lesson_ids, component_ids, domain_lesson_map
+            # Collect component IDs from menus too
+            with open(yaml_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                for page in data.get("pages", []):
+                    for component in page.get("components", []):
+                        comp_id = component.get("id")
+                        if comp_id:
+                            component_ids.add(comp_id)
+
+    return all_entities, entity_ids, component_ids, domain_lesson_map
 
 
 def parse_curriculum() -> Optional[Dict]:
@@ -231,24 +270,6 @@ def parse_domains() -> List[Dict]:
             print(f"❌ Error parsing domain {yaml_file.name}: {e}")
 
     return domains
-
-
-def parse_menus() -> List[Dict]:
-    """Parse menu YAML files."""
-    menus_path = Path(MENUS_DIR)
-    if not menus_path.exists():
-        return []
-
-    menus = []
-    for yaml_file in menus_path.glob("*.yaml"):
-        try:
-            with open(yaml_file, "r", encoding="utf-8") as f:
-                menu_data = yaml.safe_load(f)
-                menus.append(menu_data)
-        except Exception as e:
-            print(f"❌ Error parsing menu {yaml_file.name}: {e}")
-
-    return menus
 
 
 def generate_yaml_registry(yaml_files: Dict[str, List[Dict[str, str]]]) -> str:
@@ -301,13 +322,12 @@ console.log(`YAML File Registry loaded: ${{allYamlFiles.length}} files to load`)
 
 def generate_component_registry(
     components: List[Dict],
-    lessons: List[Dict],
-    lesson_ids: Set,
+    entities: List[Dict],
+    entity_ids: Set,
     component_ids: Set,
     domain_lesson_map: Dict[int, List[int]],
     curriculum: Optional[Dict],
     domains: List[Dict],
-    menus: List[Dict],
 ) -> str:
     """Generate complete TypeScript registry with all 11 mappings."""
 
@@ -337,43 +357,33 @@ def generate_component_registry(
     for comp in components:
         entry = f'    ["{comp["typeName"]}", {comp["componentClass"]}]'
         component_type_entries.append(entry)
-    component_type_content = (
-        ",\n".join(component_type_entries) if component_type_entries else ""
-    )
+    component_type_content = ",\n".join(component_type_entries) if component_type_entries else ""
 
     config_schema_entries = []
     for comp in components:
         entry = f'    ["{comp["typeName"]}", {comp["configSchema"]}]'
         config_schema_entries.append(entry)
-    config_schema_content = (
-        ",\n".join(config_schema_entries) if config_schema_entries else ""
-    )
+    config_schema_content = ",\n".join(config_schema_entries) if config_schema_entries else ""
 
     progress_schema_entries = []
     for comp in components:
         entry = f'    ["{comp["typeName"]}", {comp["progressSchema"]}]'
         progress_schema_entries.append(entry)
-    progress_schema_content = (
-        ",\n".join(progress_schema_entries) if progress_schema_entries else ""
-    )
+    progress_schema_content = ",\n".join(progress_schema_entries) if progress_schema_entries else ""
 
-    lesson_metrics_entries = []
-    for lesson in lessons:
-        entry = f'    [{lesson["id"]}, {{ pageCount: {lesson["pageCount"]}, componentCount: {lesson["componentCount"]}, title: "{lesson["title"]}", difficulty: "{lesson["difficulty"]}" }}]'
-        lesson_metrics_entries.append(entry)
-    lesson_metrics_content = (
-        ",\n".join(lesson_metrics_entries) if lesson_metrics_entries else ""
-    )
+    entity_metrics_entries = []
+    for entity in entities:
+        entry = f'    [{entity["id"]}, {{ pageCount: {entity["pageCount"]}, componentCount: {entity["componentCount"]}, title: "{entity["title"]}", difficulty: "{entity.get("difficulty", "beginner")}" }}]'
+        entity_metrics_entries.append(entry)
+    entity_metrics_content = ",\n".join(entity_metrics_entries) if entity_metrics_entries else ""
 
     domain_lesson_entries = []
     for domain_id, lesson_list in domain_lesson_map.items():
         entry = f"    [{domain_id}, {json.dumps(lesson_list)}]"
         domain_lesson_entries.append(entry)
-    domain_lesson_content = (
-        ",\n".join(domain_lesson_entries) if domain_lesson_entries else ""
-    )
+    domain_lesson_content = ",\n".join(domain_lesson_entries) if domain_lesson_entries else ""
 
-    lesson_ids_array = json.dumps(sorted(list(lesson_ids)))
+    entity_ids_array = json.dumps(sorted(list(entity_ids)))
     component_ids_array = json.dumps(sorted(list(component_ids)))
 
     return f"""/*
@@ -439,23 +449,23 @@ export const progressSchemaMap = new Map<string, z.ZodType<any>>([
 ]);
 
 /**
- * MAPPING 5: All Lesson IDs
- * Set of all valid lesson IDs in the system
+ * MAPPING 5: All Entity IDs
+ * Set of all valid entity IDs in the system (lessons and menus)
  */
-export const allLessonIds = {lesson_ids_array};
+export const allLessonIds = {entity_ids_array};
 
 /**
  * MAPPING 6: All Component IDs
- * Set of all component IDs used across all lessons
+ * Set of all component IDs used across all entities
  */
 export const allComponentIds = {component_ids_array};
 
 /**
- * MAPPING 7: Lesson Metrics Map
- * Maps lesson ID to metrics (page count, component count, etc.)
+ * MAPPING 7: Entity Metrics Map
+ * Maps entity ID to metrics (page count, component count, etc.)
  */
 export const lessonMetrics = new Map<number, LessonMetrics>([
-{lesson_metrics_content}
+{entity_metrics_content}
 ]);
 
 /**
@@ -482,11 +492,29 @@ export class CurriculumRegistry {{
         private domainMap: Map<number, number[]>
     ) {{}}
     
-    hasLesson(lessonId: number): boolean {{
-        return this.lessonIds.has(lessonId);
+    hasEntity(entityId: number): boolean {{
+        return this.lessonIds.has(entityId);
     }}
-    
-    // Add other methods as needed
+
+    hasLesson(lessonId: number): boolean {{
+        const metadata = lessonMetadata.find(l => l.id === lessonId);
+        return metadata?.entityType === "lesson" || false;
+    }}
+
+    hasMenu(menuId: number): boolean {{
+        const metadata = lessonMetadata.find(l => l.id === menuId);
+        return metadata?.entityType === "menu" || false;
+    }}
+
+    getEntityPageCount(entityId: number): number {{
+        const metrics = lessonMetrics.get(entityId);
+        if (!metrics) {{
+            throw new Error(
+                `Entity ${{entityId}} not found in registry. Cannot determine page count.`
+            );
+        }}
+        return metrics.pageCount;
+    }}
 }}
 
 export const curriculumData = new CurriculumRegistry(
@@ -502,22 +530,16 @@ export const curriculumData = new CurriculumRegistry(
 export const domainData = {json.dumps(domains, indent=2)};
 
 /**
- * MAPPING 11: Menu Data
- * Array of all menu definitions
+ * MAPPING 11: Entity Metadata
+ * Complete metadata for all entities (lessons and menus)
  */
-export const menuData = {json.dumps(menus, indent=2)};
-
-/**
- * Lesson metadata for quick access
- */
-export const lessonMetadata = {json.dumps(lessons, indent=2)};
+export const lessonMetadata = {json.dumps(entities, indent=2)};
 
 console.log(`Mera Registry loaded with all 11 mappings:`);
 console.log(`  - ${{componentRegistrations.length}} component types`);
-console.log(`  - ${{allLessonIds.length}} lessons`);
+console.log(`  - ${{allLessonIds.length}} entities (lessons + menus)`);
 console.log(`  - ${{allComponentIds.length}} component IDs`);
 console.log(`  - ${{domainLessonMap.size}} domains`);
-console.log(`  - ${{menuData.length}} menus`);
 """
 
 
@@ -559,41 +581,40 @@ def main():
     yaml_files = scan_all_yaml_files()
 
     print("\n📚 Phase 3: YAML Content Parsing")
-    lessons, lesson_ids, component_ids, domain_lesson_map = parse_yaml_lessons()
+    entities, entity_ids, component_ids, domain_lesson_map = parse_all_entities()
     curriculum = parse_curriculum()
     domains = parse_domains()
-    menus = parse_menus()
 
     print("\n🏗️ Generating registry files...")
     yaml_registry = generate_yaml_registry(yaml_files)
     component_registry = generate_component_registry(
         components,
-        lessons,
-        lesson_ids,
+        entities,
+        entity_ids,
         component_ids,
         domain_lesson_map,
         curriculum,
         domains,
-        menus,
     )
 
     success = write_registry_files(yaml_registry, component_registry)
 
     if success:
+        lesson_count = sum(1 for e in entities if e.get("entityType") == "lesson")
+        menu_count = sum(1 for e in entities if e.get("entityType") == "menu")
+        
         print(f"\n✅ Registry generation complete!")
         print(f"📁 YAML File Registry: {YAML_REGISTRY_FILE}")
-        print(
-            f"   - {sum(len(files) for files in yaml_files.values())} YAML files for runtime loading"
-        )
+        print(f"   - {sum(len(files) for files in yaml_files.values())} YAML files for runtime loading")
         print(f"📁 Complete Registry: {COMPONENT_REGISTRY_FILE}")
         print(f"   - All 11 mappings included")
         print(f"📊 Content Summary:")
         print(f"  • {len(components)} component types")
-        print(f"  • {len(lessons)} lessons")
-        print(f"  • {len(lesson_ids)} lesson IDs")
+        print(f"  • {lesson_count} lessons")
+        print(f"  • {menu_count} menus")
+        print(f"  • {len(entity_ids)} total entities")
         print(f"  • {len(component_ids)} component IDs")
         print(f"  • {len(domain_lesson_map)} domains")
-        print(f"  • {len(menus)} menus")
     else:
         print("\n❌ Registry generation failed")
 

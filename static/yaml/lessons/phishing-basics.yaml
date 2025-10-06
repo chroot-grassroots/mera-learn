@@ -1,6 +1,7 @@
 # /static/yaml/lessons/phishing-basics.yaml
 metadata:
   id: 12345
+  entityType: "lesson"
   title: "Phishing Recognition Basics"
   description: "Learn to identify and avoid common phishing attacks through email and web links"
   domainId: 1001

@@ -14,7 +14,7 @@ export const ImmutableId = z.number().int().min(1).max(999999999999);
 
 export const CombinedComponentProgressSchema = z.object({
   lessonId: z.string(),
-  lastUpdated: z.string().datetime(),
+  lastUpdated: z.number().int().min(0), // Seconds in Unix time
   components: z.record(z.string(), z.any()), // componentId -> progress data
   overallProgress: OverallProgressDataSchema,
 });

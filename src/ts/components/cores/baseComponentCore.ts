@@ -14,7 +14,7 @@ import {
   NavigationMessage,
 } from "../../core/navigationSchema.js";
 
-import { SettingsData, SettingMessage } from "../../core/settingsSchema.js";
+import { SettingsData, SettingsMessage } from "../../core/settingsSchema.js";
 
 import { ComponentProgressMessage, ImmutableId } from "../../core/coreTypes.js";
 
@@ -95,7 +95,7 @@ export abstract class BaseComponentCore<
   private _componentProgressMessageQueue: ComponentProgressMessage[];
   private _overallProgressMessageQueue: OverallProgressMessage[];
   private _navigationMessageQueue: NavigationMessage[];
-  private _settingMessageQueue: SettingMessage[];
+  private _settingMessageQueue: SettingsMessage[];
   private _interface: BaseComponentInterface<TConfig, TComponentProgress, any>;
 
   constructor(
@@ -186,7 +186,7 @@ export abstract class BaseComponentCore<
   /**
    * Get setting messages for core polling
    */
-  getSettingMessages(): SettingMessage[] {
+  getSettingMessages(): SettingsMessage[] {
     // TODO: implement message queue
     return [];
   }

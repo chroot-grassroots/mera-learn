@@ -7,7 +7,7 @@ import { BasicTaskComponentConfigSchema } from '../components/cores/basicTaskCor
 // Lesson metadata schema
 export const LessonMetadataSchema = z.object({
   id: ImmutableId,
-  entityType: z.enum(["learning", "menu"]),  // allows both types
+  entityType: z.enum(["lesson", "menu"]),  // allows both types
   title: z.string().min(1).max(200),
   description: z.string().min(1).max(1000),
   domainId: ImmutableId.optional(),  // only required for learning lessons
@@ -22,6 +22,7 @@ export const PageSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
   order: z.number().int().min(0),
+  // To Do: Need to replace line below with discriminated union
   components: z.array(BasicTaskComponentConfigSchema).min(1).max(10)
 });
 

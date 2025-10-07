@@ -1,16 +1,16 @@
 // podStorageSchema.ts - Schema for data stored in Solid Pod
 
 import { z } from "zod";
-import { OverallProgressDataSchema } from "./overallProgressSchema.js";
-import { SettingsDataSchema } from "./settingsSchema.js";
-import { NavigationStateSchema } from "./navigationSchema.js";
-import { CombinedComponentProgressSchema } from "./coreTypes.js";
+import { OverallProgressDataSchema } from "../core/overallProgressSchema.js";
+import { SettingsDataSchema } from "../core/settingsSchema.js";
+import { NavigationStateSchema } from "../core/navigationSchema.js";
+import { CombinedComponentProgressSchema } from "../core/coreTypes.js";
 
 /**
  * Metadata added by saver during persistence
  */
 export const PodMetadataSchema = z.object({
-  webId: z.string().url(),
+  webId: z.string().regex(/^https?:\/\/.+/, "Must be a valid WebID URL"),
   lastSaved: z.number().int().min(0), // Unix timestamp
   schemaVersion: z.object({
     major: z.number().int().min(0),

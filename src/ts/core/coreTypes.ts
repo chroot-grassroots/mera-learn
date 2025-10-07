@@ -18,7 +18,8 @@ export type TrumpStrategy<T> =
   | "UNION"
   | "LATEST_TIMESTAMP"
   | "PREFER_NON_EMPTY"
-  | "ASSERT_EQUAL";
+  | "ASSERT_EQUAL"
+  | "ELEMENT_WISE_OR";
 
 /**
  * Combined component progress schema - counterpart to lesson YAML

@@ -7,15 +7,17 @@ import {
   BaseComponentProgress,
   BaseComponentProgressSchema,
   BaseComponentProgressManager,
-  TrumpStrategy,
 } from "./baseComponentCore.js";
 import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import { TimelineContainer } from "../../ui/timelineContainer.js";
+import { OverallProgressData } from "../../core/overallProgressSchema.js";
+import { NavigationState } from "../../core/navigationSchema.js";
+import { SettingsData } from "../../core/settingsSchema.js";
 import {
-  OverallProgressData,
-  NavigationState,
-  SettingsData,
-} from "../../core/coreSchemas.js";
+  ComponentProgressMessage,
+  TrumpStrategy,
+} from "../../core/coreTypes.js";
+import { CurriculumRegistry } from "../../registry/mera-registry.js";
 
 /**
  * Checkbox item schema
@@ -94,17 +96,52 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<Basic
     TrumpStrategy<any>
   > {
     return {
-      checkbox_checked: (a: boolean[], b: boolean[]): boolean[] => {
-        const maxLen = Math.max(a?.length || 0, b?.length || 0);
-        return Array(maxLen)
-          .fill(false)
-          .map((_, i) => a?.[i] || b?.[i] || false);
-      },
-    };
+      checkbox_checked: "ELEMENT_WISE_OR",
+    } as Record<keyof BasicTaskComponentProgress, TrumpStrategy<any>>;
   }
 }
 
 /**
+ * Message schema for BasicTask component
+ */
+export const BasicTaskMessageSchema = z.object({
+  method: z.enum(["setCheckboxState"]),
+  args: z.array(z.any()),
+});
+
+export type BasicTaskMessage = z.infer<typeof BasicTaskMessageSchema>;
+
+/**
+ * Message queue manager for BasicTask component
+ */
+export class BasicTaskMessageQueueManager {
+  private messageQueue: ComponentProgressMessage[] = [];
+
+  constructor(private componentId: number) {}
+
+  queueCheckboxState(index: number, checked: boolean): void {
+    if (typeof index !== "number" || index < 0) {
+      throw new Error("Checkbox index must be a non-negative number");
+    }
+    if (typeof checked !== "boolean") {
+      throw new Error("Checkbox checked must be a boolean");
+    }
+
+    this.messageQueue.push({
+      type: "component_progress",
+      componentId: this.componentId,
+      method: "setCheckboxState",
+      args: [index, checked],
+    });
+  }
+
+  getMessages(): ComponentProgressMessage[] {
+    const messages = [...this.messageQueue];
+    this.messageQueue = [];
+    return messages;
+  }
+}
+
 /**
  * Basic task core - data processing and state management
  */
@@ -112,13 +149,16 @@ export class BasicTaskCore extends BaseComponentCore<
   BasicTaskComponentConfig,
   BasicTaskComponentProgress
 > {
+  private _componentProgressQueueManager: BasicTaskMessageQueueManager;
+
   constructor(
     config: BasicTaskComponentConfig,
     progressManager: BasicTaskProgressManager,
     timeline: TimelineContainer,
     overallProgress: Readonly<OverallProgressData>,
     navigationState: Readonly<NavigationState>,
-    settings: Readonly<SettingsData>
+    settings: Readonly<SettingsData>,
+    curriculumRegistry: CurriculumRegistry
   ) {
     super(
       config,
@@ -126,7 +166,13 @@ export class BasicTaskCore extends BaseComponentCore<
       timeline,
       overallProgress,
       navigationState,
-      settings
+      settings,
+      curriculumRegistry
+    );
+
+    // Initialize component-specific queue manager
+    this._componentProgressQueueManager = new BasicTaskMessageQueueManager(
+      config.id
     );
   }
 
@@ -154,7 +200,7 @@ export class BasicTaskCore extends BaseComponentCore<
       checked
     );
 
-    this.updateComponentProgress("setCheckboxState", [index, checked]);
+    this._componentProgressQueueManager.queueCheckboxState(index, checked);
   }
 
   /**
@@ -175,5 +221,12 @@ export class BasicTaskCore extends BaseComponentCore<
       }
     }
     return true;
+  }
+
+  /**
+   * Get component progress messages for core polling
+   */
+  getComponentProgressMessages(): ComponentProgressMessage[] {
+    return this._componentProgressQueueManager.getMessages();
   }
 }

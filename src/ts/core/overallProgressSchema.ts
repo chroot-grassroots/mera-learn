@@ -1,20 +1,17 @@
-// overallProgressSchemas.ts
+// overallProgressSchema.ts
 
 import { z } from "zod";
-import { curriculumData } from "../registry/mera-registry.js";
 import { ImmutableId, TrumpStrategy } from "./coreTypes.js";
 import { CurriculumRegistry } from "../registry/mera-registry.js";
 
 /**
- * Overall progress data schema
+ * Overall progress data schema 
  */
-
 export const OverallProgressDataSchema = z.object({
-  lessonCompletions: z.record(z.string(), z.boolean()), // Lesson Immutable ID, Boolean
+  lessonCompletions: z.record(z.string(), z.number()), // lessonId -> Unix timestamp
   domainsCompleted: z.array(ImmutableId), // Domain Immutable IDs
-  lessonsCompletedThisWeek: z.number().min(0).max(1000), // Max for overflow prevention
-  currentStreak: z.number().min(0).max(1000), // Weeks meeting personal goal
-  weekStartTimestamp: z.number().int().min(0), // Unix timestamp in seconds
+  currentStreak: z.number().min(0).max(1000), // Completed weeks (not including current)
+  lastStreakCheck: z.number().int().min(0), // Unix timestamp of last validation
 });
 
 export type OverallProgressData = z.infer<typeof OverallProgressDataSchema>;
@@ -29,49 +26,30 @@ export class OverallProgressManager {
     return this.progress;
   }
 
-  setDefaultIfBlank(settingsManager: SettingsManager): void {
-    const weekStartDay = settingsManager.getWeekStartDay();
-    const weekStartTime = settingsManager.getStartTime();
-
-    // Lesson completions - leave existing, set empty object for missing
+  setDefaultsIfBlank(): void {
     if (!this.progress.lessonCompletions) {
       this.progress.lessonCompletions = {};
     }
 
-    // Domain completions - empty array if missing
     if (!this.progress.domainsCompleted) {
       this.progress.domainsCompleted = [];
     }
 
-    // Weekly lessons - 0 if missing
-    if (this.progress.lessonsCompletedThisWeek === undefined) {
-      this.progress.lessonsCompletedThisWeek = 0;
-    }
-
-    // Current streak - 0 if missing
     if (this.progress.currentStreak === undefined) {
       this.progress.currentStreak = 0;
     }
 
-    // Week start - based on user's preference
-    if (!this.progress.weekStartTimestamp) {
-      this.progress.weekStartTimestamp = this.getLastWeekStart(
-        weekStartDay,
-        weekStartTime
-      );
+    if (!this.progress.lastStreakCheck) {
+      this.progress.lastStreakCheck = Math.floor(Date.now() / 1000);
     }
   }
 
-  getAllTrumpStrategies(): Record<
-    keyof OverallProgressData,
-    TrumpStrategy<any>
-  > {
+  getAllTrumpStrategies(): Record<keyof OverallProgressData, TrumpStrategy<any>> {
     return {
-      lessonCompletions: "OR",
+      lessonCompletions: "MAX", // Most recent completion timestamp wins
       domainsCompleted: "UNION",
-      lessonsCompletedThisWeek: "MAX",
-      currentStreak: "LATEST_TIMESTAMP",
-      weekStartTimestamp: "LATEST_TIMESTAMP",
+      currentStreak: "LATEST_TIMESTAMP", // Use lastStreakCheck to determine freshness
+      lastStreakCheck: "MAX",
     };
   }
 
@@ -81,11 +59,12 @@ export class OverallProgressManager {
     }
 
     const lessonKey = lessonId.toString();
-    if (!this.progress.lessonCompletions[lessonKey]) {
-      this.progress.lessonCompletions[lessonKey] = true;
-      this.incrementWeeklyLessons();
-      // TO DO: Add logic to check for domain completion
-    }
+    const timestamp = Math.floor(Date.now() / 1000);
+    
+    // Always update to current timestamp (even if already completed)
+    this.progress.lessonCompletions[lessonKey] = timestamp;
+    
+    // TODO: Check for domain completion
   }
 
   markLessonIncomplete(lessonId: number): void {
@@ -94,81 +73,25 @@ export class OverallProgressManager {
     }
 
     const lessonKey = lessonId.toString();
-    if (this.progress.lessonCompletions[lessonKey]) {
-      this.progress.lessonCompletions[lessonKey] = false;
-    }
+    delete this.progress.lessonCompletions[lessonKey];
   }
 
-  // Time based update called by motivation tracker component
-  resetWeek(settingsManager: SettingsManager): void {
-    const weekStartDay = settingsManager.getWeekStartDay();
-    const weekStartTime = settingsManager.getStartTime();
-    this.progress.lessonsCompletedThisWeek = 0;
-    this.progress.weekStartTimestamp = this.getLastWeekStart(
-      weekStartDay,
-      weekStartTime
-    );
+  // Called by motivation component after validating previous week
+  updateStreak(newStreak: number): void {
+    this.progress.currentStreak = newStreak;
+    this.progress.lastStreakCheck = Math.floor(Date.now() / 1000);
   }
 
-  // Called by motivation tracker component when week has passed an goal not met.
+  // Reset streak (called when goal not met)
   resetStreak(): void {
     this.progress.currentStreak = 0;
+    this.progress.lastStreakCheck = Math.floor(Date.now() / 1000);
   }
 
-  // Called by motivation tracker component when goal is met.
+  // Increment streak (called when previous week goal met)
   incrementStreak(): void {
     this.progress.currentStreak += 1;
-  }
-
-  // Called by settings component when week start day setting is changed
-  updateWeekStartTimestamp(weekStartDay: string, weekStartTime: string): void {
-    this.progress.weekStartTimestamp = this.getLastWeekStart(
-      weekStartDay,
-      weekStartTime
-    );
-  }
-  private incrementWeeklyLessons(): void {
-    this.progress.lessonsCompletedThisWeek += 1;
-  }
-
-  private getLastWeekStart(
-    weekStartDay: string,
-    weekStartTime: string
-  ): number {
-    const now = new Date();
-    const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-
-    const dayMap: Record<string, number> = {
-      sunday: 0,
-      monday: 1,
-      tuesday: 2,
-      wednesday: 3,
-      thursday: 4,
-      friday: 5,
-      saturday: 6,
-    };
-
-    const targetDay = dayMap[weekStartDay.toLowerCase()] ?? 0;
-
-    let daysBack = currentDay - targetDay;
-    if (daysBack < 0) {
-      daysBack += 7;
-    }
-
-    const weekStart = new Date(now);
-    weekStart.setUTCDate(now.getUTCDate() - daysBack);
-
-    // Parse and set the time (weekStartTime format: "HH:MM")
-    const [hours, minutes] = weekStartTime.split(":").map(Number);
-    weekStart.setUTCHours(hours, minutes, 0, 0);
-
-    // If the calculated time is in the future, go back one more week
-    if (weekStart > now) {
-      weekStart.setUTCDate(weekStart.getUTCDate() - 7);
-    }
-
-    // Return Unix timestamp
-    return Math.floor(weekStart.getTime() / 1000);
+    this.progress.lastStreakCheck = Math.floor(Date.now() / 1000);
   }
 }
 
@@ -176,119 +99,98 @@ export const OverallProgressMessageSchema = z.object({
   method: z.enum([
     "markLessonComplete",
     "markLessonIncomplete",
-    "resetWeek",
+    "updateStreak",
     "resetStreak",
     "incrementStreak",
-    "updateWeekStartTimestamp",
   ]),
-  args: z.array(z.any()), // We'll validate these per method
+  args: z.array(z.any()),
 });
 
-export type OverallProgressMessage = z.infer<
-  typeof OverallProgressMessageSchema
->;
+export type OverallProgressMessage = z.infer<typeof OverallProgressMessageSchema>;
 
-export class OverallProgressMessageManager {
-  constructor(
-    private progressManager: OverallProgressManager,
-    private curriculumRegistry: CurriculumRegistry
-  ) {}
+export class OverallProgressMessageQueueManager {
+  private messageQueue: OverallProgressMessage[] = [];
 
-  validateMessage(message: OverallProgressMessage): void {
-    // Schema validation happens at parse time, now validate arguments
-    switch (message.method) {
-      case "markLessonComplete":
-      case "markLessonIncomplete":
-        // Check there is a single argument
-        if (message.args.length !== 1) {
-          throw new Error(
-            `${message.method} requires exactly 1 argument (lessonId)`
-          );
-        }
-        // Checks the argument is an integer in the range of immutable IDs
-        const parseResult = ImmutableId.safeParse(message.args[0]);
-        if (!parseResult.success) {
-          throw new Error(
-            `${message.method} lessonId must be a valid immutable ID, got: ${message.args[0]}`
-          );
-        }
+  constructor(private curriculumRegistry: CurriculumRegistry) {}
 
-        // Checks that this lesson actually exist.
-        const lessonId = message.args[0];
-        if (!this.curriculumRegistry.hasLesson(lessonId)) {
-          throw new Error(
-            `Invalid lesson ID: ${lessonId} does not exist in curriculum`
-          );
-        }
-        break;
-
-      case "resetWeek":
-      case "resetStreak":
-      case "incrementStreak":
-        if (message.args.length !== 0) {
-          throw new Error(`${message.method} requires no arguments`);
-        }
-        break;
-
-      // Makes sure start date is a valid date
-      case "updateWeekStartTimestamp":
-        if (message.args.length !== 2) {
-          throw new Error(
-            `${message.method} requires exactly 1 argument (weekStartDate)`
-          );
-        }
-        const dateString = message.args[0];
-        if (typeof dateString !== "string") {
-          throw new Error(
-            `${
-              message.method
-            } weekStartDate must be a string, got: ${typeof dateString}`
-          );
-        }
-        // Validate ISO datetime format
-        if (
-          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/.test(dateString)
-        ) {
-          throw new Error(
-            `${message.method} weekStartDate must be valid ISO datetime format, got: "${dateString}"`
-          );
-        }
-        // Validate it's actually a valid date
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) {
-          throw new Error(
-            `${message.method} weekStartDate must be a valid date, got: "${dateString}"`
-          );
-        }
-        break;
-      default:
-        throw new Error(`Unknown method: ${message.method}`);
+  queueLessonComplete(lessonId: number): void {
+    const message: OverallProgressMessage = { 
+      method: "markLessonComplete", 
+      args: [lessonId] 
+    };
+    
+    if (message.args.length !== 1) {
+      throw new Error("markLessonComplete requires exactly 1 argument");
     }
+    
+    const parseResult = ImmutableId.safeParse(lessonId);
+    if (!parseResult.success) {
+      throw new Error(`lessonId must be a valid immutable ID, got: ${lessonId}`);
+    }
+
+    // Validate lesson exists in curriculum
+    if (!this.curriculumRegistry.hasLesson(lessonId)) {
+      throw new Error(`Invalid lesson ID: ${lessonId} does not exist in curriculum`);
+    }
+    
+    this.messageQueue.push(message);
   }
 
-  handleMessage(message: OverallProgressMessage): void {
-    this.validateMessage(message);
-
-    // Route to progress manager
-    switch (message.method) {
-      case "markLessonComplete":
-        this.progressManager.markLessonComplete(message.args[0]);
-        break;
-      case "markLessonIncomplete":
-        this.progressManager.markLessonIncomplete(message.args[0]);
-        break;
-      case "resetWeek":
-        this.progressManager.resetWeek(message.args[0]);
-        break;
-      case "resetStreak":
-        this.progressManager.resetStreak();
-        break;
-      case "updateWeekStartTimestamp":
-        this.progressManager.updateWeekStartTimestamp(
-          message.args[0],
-          message.args[1]
-        );
-        break;
+  queueLessonIncomplete(lessonId: number): void {
+    const message: OverallProgressMessage = { 
+      method: "markLessonIncomplete", 
+      args: [lessonId] 
+    };
+    
+    if (message.args.length !== 1) {
+      throw new Error("markLessonIncomplete requires exactly 1 argument");
     }
+    
+    const parseResult = ImmutableId.safeParse(lessonId);
+    if (!parseResult.success) {
+      throw new Error(`lessonId must be a valid immutable ID, got: ${lessonId}`);
+    }
+
+    // Validate lesson exists in curriculum
+    if (!this.curriculumRegistry.hasLesson(lessonId)) {
+      throw new Error(`Invalid lesson ID: ${lessonId} does not exist in curriculum`);
+    }
+    
+    this.messageQueue.push(message);
+  }
+
+  queueUpdateStreak(newStreak: number): void {
+    const message: OverallProgressMessage = { 
+      method: "updateStreak", 
+      args: [newStreak] 
+    };
+    
+    if (typeof newStreak !== "number" || newStreak < 0) {
+      throw new Error("newStreak must be a non-negative number");
+    }
+    
+    this.messageQueue.push(message);
+  }
+
+  queueResetStreak(): void {
+    const message: OverallProgressMessage = { 
+      method: "resetStreak", 
+      args: [] 
+    };
+    this.messageQueue.push(message);
+  }
+
+  queueIncrementStreak(): void {
+    const message: OverallProgressMessage = { 
+      method: "incrementStreak", 
+      args: [] 
+    };
+    this.messageQueue.push(message);
+  }
+
+  getMessages(): OverallProgressMessage[] {
+    const messages = [...this.messageQueue];
+    this.messageQueue = [];
+    return messages;
   }
 }

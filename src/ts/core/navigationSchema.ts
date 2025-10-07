@@ -138,30 +138,31 @@ export class NavigationMessageManager {
 
 // Instantiated by component for validation and queueing of navigation messages
 export class NavigationMessageQueueManager {
+  private messageQueue: NavigationMessage[] = [];
+
   constructor(
-    private messageQueue: NavigationMessage[],
     private curriculumRegistry: CurriculumRegistry
   ) {}
-  
+
   queueNavigationMessage(entityId: number, page: number): void {
     const message: NavigationMessage = {
       method: "setCurrentView",
-      args: [entityId, page]
+      args: [entityId, page],
     };
-    
+
     // Validate before queuing
     if (!this.curriculumRegistry.hasEntity(entityId)) {
       throw new Error(`Invalid entity ID: ${entityId}`);
     }
-    
+
     const pageCount = this.curriculumRegistry.getEntityPageCount(entityId);
     if (page >= pageCount) {
       throw new Error(`Invalid page ${page} for entity ${entityId}`);
     }
-    
+
     this.messageQueue.push(message);
   }
-  
+
   // Core drains queue by copying and clearing
   getNavigationMessages(): NavigationMessage[] {
     const messages = [...this.messageQueue];

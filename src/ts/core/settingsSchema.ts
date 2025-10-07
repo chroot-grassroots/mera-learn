@@ -356,71 +356,127 @@ export class SettingsMessageManager {
 export class SettingsMessageQueueManager {
   private messageQueue: SettingsMessage[] = [];
 
-  constructor(private settingsMessageManager: SettingsMessageManager) {}
+  constructor() {}
 
   queueWeekStartDay(day: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"): void {
     const message: SettingsMessage = { method: "setWeekStartDay", args: [day] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    // Validate before queueing - duplicate validation for component boundary
+    if (message.args.length !== 1) {
+      throw new Error("setWeekStartDay requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.weekStartDay.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueWeekStartTimeUTC(time: string): void {
     const message: SettingsMessage = { method: "setWeekStartTimeUTC", args: [time] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setWeekStartTimeUTC requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.weekStartTimeUTC.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueTheme(theme: "light" | "dark" | "auto"): void {
     const message: SettingsMessage = { method: "setTheme", args: [theme] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setTheme requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.theme.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueLearningPace(pace: "accelerated" | "standard" | "flexible"): void {
     const message: SettingsMessage = { method: "setLearningPace", args: [pace] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setLearningPace requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.learningPace.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueOptOutDailyPing(optOut: boolean): void {
     const message: SettingsMessage = { method: "setOptOutDailyPing", args: [optOut] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setOptOutDailyPing requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.optOutDailyPing.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueOptOutErrorPing(optOut: boolean): void {
     const message: SettingsMessage = { method: "setOptOutErrorPing", args: [optOut] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setOptOutErrorPing requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.optOutErrorPing.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueFontSize(size: "small" | "medium" | "large"): void {
     const message: SettingsMessage = { method: "setFontSize", args: [size] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setFontSize requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.fontSize.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueHighContrast(enabled: boolean): void {
     const message: SettingsMessage = { method: "setHighContrast", args: [enabled] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setHighContrast requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.highContrast.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueReducedMotion(enabled: boolean): void {
     const message: SettingsMessage = { method: "setReducedMotion", args: [enabled] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setReducedMotion requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.reducedMotion.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueFocusIndicatorStyle(style: "default" | "enhanced"): void {
     const message: SettingsMessage = { method: "setFocusIndicatorStyle", args: [style] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setFocusIndicatorStyle requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.focusIndicatorStyle.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 
   queueAudioEnabled(enabled: boolean): void {
     const message: SettingsMessage = { method: "setAudioEnabled", args: [enabled] };
-    this.settingsMessageManager.validateMessage(message);
+    
+    if (message.args.length !== 1) {
+      throw new Error("setAudioEnabled requires exactly 1 argument");
+    }
+    SettingsDataSchema.shape.audioEnabled.parse(message.args[0]);
+    
     this.messageQueue.push(message);
   }
 

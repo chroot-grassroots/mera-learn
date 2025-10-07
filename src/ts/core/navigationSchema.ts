@@ -164,7 +164,7 @@ export class NavigationMessageQueueManager {
   }
 
   // Core drains queue by copying and clearing
-  getNavigationMessages(): NavigationMessage[] {
+  getMessages(): NavigationMessage[] {
     const messages = [...this.messageQueue];
     this.messageQueue = []; // Clear queue
     return messages;

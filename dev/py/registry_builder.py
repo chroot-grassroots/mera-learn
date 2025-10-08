@@ -403,7 +403,7 @@ import type {{ BaseComponentProgressManager }} from '../components/cores/baseCom
 {imports_code}
 
 export interface ComponentRegistration {{
-    componentClass: typeof BaseComponentProgressManager;
+    componentClass: any;
     configSchema: z.ZodType<any>;
     progressSchema: z.ZodType<any>;
     typeName: string;
@@ -428,7 +428,7 @@ export const componentRegistrations: ComponentRegistration[] = [
  * MAPPING 2: Component Type Map
  * Maps component type string to component class
  */
-export const componentTypeMap = new Map<string, typeof BaseComponentProgressManager>([
+export const componentTypeMap = new Map<string, any>([
 {component_type_content}
 ]);
 
@@ -585,7 +585,7 @@ def main():
     curriculum = parse_curriculum()
     domains = parse_domains()
 
-    print("\n🏗️ Generating registry files...")
+    print("\n🗃️ Generating registry files...")
     yaml_registry = generate_yaml_registry(yaml_files)
     component_registry = generate_component_registry(
         components,

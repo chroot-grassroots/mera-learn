@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2025-10-05T21:18:34.739727
+ * Generated on: 2025-10-08T06:27:12.457094
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -19,7 +19,7 @@ import {
 } from '../components/cores/basicTaskCore.js';
 
 export interface ComponentRegistration {
-    componentClass: typeof BaseComponentProgressManager;
+    componentClass: any;
     configSchema: z.ZodType<any>;
     progressSchema: z.ZodType<any>;
     typeName: string;
@@ -49,7 +49,7 @@ export const componentRegistrations: ComponentRegistration[] = [
  * MAPPING 2: Component Type Map
  * Maps component type string to component class
  */
-export const componentTypeMap = new Map<string, typeof BaseComponentProgressManager>([
+export const componentTypeMap = new Map<string, any>([
     ["basic_task", BasicTaskProgressManager]
 ]);
 

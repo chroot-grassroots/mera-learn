@@ -1,4 +1,11 @@
-// navigationSchema.ts
+/**
+ * @fileoverview Navigation state schemas and management
+ * @module core/navigationSchema
+ *
+ * Tracks current lesson/page position with session-based persistence.
+ * Restores user's location within 30 minutes of leaving, enabling smooth
+ * UX on page refresh or brief navigation away.
+ */
 
 import { z } from "zod";
 import { ImmutableId, TrumpStrategy } from "./coreTypes";
@@ -6,6 +13,9 @@ import { CurriculumRegistry } from "../registry/mera-registry";
 
 /**
  * Navigation state schema
+ *
+ * Stores lesson/menu (entity) immutable ID, current page number,
+ * and when it was last updated.
  */
 export const NavigationStateSchema = z.object({
   currentEntityId: ImmutableId, // 0 = main menu by convention
@@ -15,14 +25,19 @@ export const NavigationStateSchema = z.object({
 
 export type NavigationState = z.infer<typeof NavigationStateSchema>;
 
-// Controls all access to the schema
+/**
+ * Manages navigation state with validated mutations.
+ *
+ * All mutations validate against CurriculumRegistry to prevent
+ * corruption by ensuring lesson/menu and page exist.
+ */
 export class NavigationStateManager {
   constructor(
     private state: NavigationState,
     private curriculumRegistry: CurriculumRegistry
   ) {}
 
-  // Returns complete state for core to pass to saver. Validates to ensure corrupted state halts core.
+  // Returns state for persistence. Validates before returning.
   getState(): NavigationState {
     this.validateCurrentView();
     return this.state;
@@ -97,7 +112,13 @@ export class NavigationStateManager {
   }
 }
 
-// Schema for the navigation message.
+/**
+ * Schema for messages updating navigation state from components to core.
+ *
+ * Format: single setCurrentView method as first argument followed by menu/lesson
+ * immutable ID and page number.
+ */
+
 export const NavigationMessageSchema = z.object({
   method: z.literal("setCurrentView"),
   args: z.tuple([ImmutableId, z.number().min(0)]),
@@ -105,7 +126,14 @@ export const NavigationMessageSchema = z.object({
 
 export type NavigationMessage = z.infer<typeof NavigationMessageSchema>;
 
-// Manager that controls access to navigation message in core
+/**
+ * Processes navigation messages with validation.
+ *
+ * Validates messages against CurriculumRegistry before forwarding
+ * to NavigationStateManager. Used by Main Core to handle queued
+ * component navigation requests.
+ */
+
 export class NavigationMessageManager {
   constructor(
     private navigationManager: NavigationStateManager,
@@ -136,13 +164,17 @@ export class NavigationMessageManager {
   }
 }
 
-// Instantiated by component for validation and queueing of navigation messages
+/**
+ * Validates and queues navigation messages for Main Core processing.
+ *
+ * Components use this to queue navigation updates. Main Core polls via
+ * getMessages() to apply validated changes to navigation state.
+ */
+
 export class NavigationMessageQueueManager {
   private messageQueue: NavigationMessage[] = [];
 
-  constructor(
-    private curriculumRegistry: CurriculumRegistry
-  ) {}
+  constructor(private curriculumRegistry: CurriculumRegistry) {}
 
   queueNavigationMessage(entityId: number, page: number): void {
     const message: NavigationMessage = {

@@ -14,5 +14,11 @@
     "typeRoots": ["./src/ts/types", "./node_modules/@types"]
   },
   "include": ["src/ts/**/*"],
-  "exclude": ["node_modules", "static/js", "static/ts-build", "src/ts/web/**/*"]
+  "exclude": [
+    "node_modules",
+    "static/js",
+    "static/ts-build",
+    "src/ts/web/**/*",
+    "**/*.test.ts"
+  ]
 }

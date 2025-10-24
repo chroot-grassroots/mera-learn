@@ -1,10 +1,32 @@
 /**
- * Settings data schema
+ * @fileoverview User settings schemas and management
+ * @module core/settingsSchema
+ *
+ * Manages user preferences for learning pace, accessibility, privacy, and appearance
+ * with Solid Pod persistence. Provides two manager classes for validated mutations:
+ *
+ * - SettingsDataManager: Direct settings mutations (used by Main Core)
+ * - SettingsMessageQueueManager: Message queue for component isolation
+ *
+ * Components cannot mutate settings directly. They queue validated messages
+ * that Main Core processes, preventing invalid state from buggy components.
  */
 
 import { z } from "zod";
 import { TrumpStrategy } from "./coreTypes";
 
+/**
+ * Settings data schema
+ *
+ * Stores user preferences across four categories:
+ * - Learning: Week start timing and pace preferences for streak tracking
+ * - Appearance: Theme selection for visual comfort
+ * - Privacy: Opt-out flags for telemetry
+ * - Accessibility: Visual, motor, and audio accommodations
+ *
+ * Validated on load (from Solid Pod) and on mutation (from messages)
+ * by SettingsDataManager.
+ */
 export const SettingsDataSchema = z.object({
   // Week timing for streaks
   weekStartDay: z
@@ -45,107 +67,131 @@ export const SettingsDataSchema = z.object({
 
 export type SettingsData = z.infer<typeof SettingsDataSchema>;
 
+/**
+ * Manages settings data with validated mutations.
+ *
+ * All mutations validate against schema to prevent corruption.
+ * Provides readonly access via getter methods.
+ * Used directly by Main Core for settings updates.
+ */
 export class SettingsDataManager {
   constructor(private settings: SettingsData) {}
 
-getWeekStartDay(): "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" {
-  return this.settings.weekStartDay;
-}
+  // Readonly getters for all settings
+  getWeekStartDay(): "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" {
+    return this.settings.weekStartDay;
+  }
 
-getWeekStartTimeUTC(): string {
-  return this.settings.weekStartTimeUTC;
-}
+  getWeekStartTimeUTC(): string {
+    return this.settings.weekStartTimeUTC;
+  }
 
-getTheme(): "light" | "dark" | "auto" {
-  return this.settings.theme;
-}
+  getTheme(): "light" | "dark" | "auto" {
+    return this.settings.theme;
+  }
 
-getLearningPace(): "accelerated" | "standard" | "flexible" {
-  return this.settings.learningPace;
-}
+  getLearningPace(): "accelerated" | "standard" | "flexible" {
+    return this.settings.learningPace;
+  }
 
-getOptOutDailyPing(): boolean {
-  return this.settings.optOutDailyPing;
-}
+  getOptOutDailyPing(): boolean {
+    return this.settings.optOutDailyPing;
+  }
 
-getOptOutErrorPing(): boolean {
-  return this.settings.optOutErrorPing;
-}
+  getOptOutErrorPing(): boolean {
+    return this.settings.optOutErrorPing;
+  }
 
-getFontSize(): "small" | "medium" | "large" {
-  return this.settings.fontSize;
-}
+  getFontSize(): "small" | "medium" | "large" {
+    return this.settings.fontSize;
+  }
 
-getHighContrast(): boolean {
-  return this.settings.highContrast;
-}
+  getHighContrast(): boolean {
+    return this.settings.highContrast;
+  }
 
-getReducedMotion(): boolean {
-  return this.settings.reducedMotion;
-}
+  getReducedMotion(): boolean {
+    return this.settings.reducedMotion;
+  }
 
-getFocusIndicatorStyle(): "default" | "enhanced" {
-  return this.settings.focusIndicatorStyle;
-}
+  getFocusIndicatorStyle(): "default" | "enhanced" {
+    return this.settings.focusIndicatorStyle;
+  }
 
-getAudioEnabled(): boolean {
-  return this.settings.audioEnabled;
-}
+  getAudioEnabled(): boolean {
+    return this.settings.audioEnabled;
+  }
 
-getSettings(): SettingsData {
-  return this.settings;
-}
+  // Returns all settings for saver
+  getSettings(): SettingsData {
+    return this.settings;
+  }
 
-setWeekStartDay(day: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"): void {
-  this.settings.weekStartDay = SettingsDataSchema.shape.weekStartDay.parse(day);
-}
+  // Validated setters for all settings
+  setWeekStartDay(day: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"): void {
+    this.settings.weekStartDay = SettingsDataSchema.shape.weekStartDay.parse(day);
+  }
 
-setWeekStartTimeUTC(time: string): void {
-  this.settings.weekStartTimeUTC = SettingsDataSchema.shape.weekStartTimeUTC.parse(time);
-}
+  setWeekStartTimeUTC(time: string): void {
+    this.settings.weekStartTimeUTC = SettingsDataSchema.shape.weekStartTimeUTC.parse(time);
+  }
 
-setTheme(theme: "light" | "dark" | "auto"): void {
-  this.settings.theme = SettingsDataSchema.shape.theme.parse(theme);
-}
+  setTheme(theme: "light" | "dark" | "auto"): void {
+    this.settings.theme = SettingsDataSchema.shape.theme.parse(theme);
+  }
 
-setLearningPace(pace: "accelerated" | "standard" | "flexible"): void {
-  this.settings.learningPace = SettingsDataSchema.shape.learningPace.parse(pace);
-}
+  setLearningPace(pace: "accelerated" | "standard" | "flexible"): void {
+    this.settings.learningPace = SettingsDataSchema.shape.learningPace.parse(pace);
+  }
 
-setOptOutDailyPing(optOut: boolean): void {
-  this.settings.optOutDailyPing = SettingsDataSchema.shape.optOutDailyPing.parse(optOut);
-}
+  setOptOutDailyPing(optOut: boolean): void {
+    this.settings.optOutDailyPing = SettingsDataSchema.shape.optOutDailyPing.parse(optOut);
+  }
 
-setOptOutErrorPing(optOut: boolean): void {
-  this.settings.optOutErrorPing = SettingsDataSchema.shape.optOutErrorPing.parse(optOut);
-}
+  setOptOutErrorPing(optOut: boolean): void {
+    this.settings.optOutErrorPing = SettingsDataSchema.shape.optOutErrorPing.parse(optOut);
+  }
 
-setFontSize(size: "small" | "medium" | "large"): void {
-  this.settings.fontSize = SettingsDataSchema.shape.fontSize.parse(size);
-}
+  setFontSize(size: "small" | "medium" | "large"): void {
+    this.settings.fontSize = SettingsDataSchema.shape.fontSize.parse(size);
+  }
 
-setHighContrast(enabled: boolean): void {
-  this.settings.highContrast = SettingsDataSchema.shape.highContrast.parse(enabled);
-}
+  setHighContrast(enabled: boolean): void {
+    this.settings.highContrast = SettingsDataSchema.shape.highContrast.parse(enabled);
+  }
 
-setReducedMotion(enabled: boolean): void {
-  this.settings.reducedMotion = SettingsDataSchema.shape.reducedMotion.parse(enabled);
-}
+  setReducedMotion(enabled: boolean): void {
+    this.settings.reducedMotion = SettingsDataSchema.shape.reducedMotion.parse(enabled);
+  }
 
-setFocusIndicatorStyle(style: "default" | "enhanced"): void {
-  this.settings.focusIndicatorStyle = SettingsDataSchema.shape.focusIndicatorStyle.parse(style);
-}
+  setFocusIndicatorStyle(style: "default" | "enhanced"): void {
+    this.settings.focusIndicatorStyle = SettingsDataSchema.shape.focusIndicatorStyle.parse(style);
+  }
 
-setAudioEnabled(enabled: boolean): void {
-  this.settings.audioEnabled = SettingsDataSchema.shape.audioEnabled.parse(enabled);
-}
+  setAudioEnabled(enabled: boolean): void {
+    this.settings.audioEnabled = SettingsDataSchema.shape.audioEnabled.parse(enabled);
+  }
 
-// Utility
-setDefaultsIfBlank(): void {
-  // Parse the entire settings object through the schema to fill in defaults
-  this.settings = SettingsDataSchema.parse(this.settings);
-}
+  /**
+   * Fill in missing settings fields with defaults.
+   *
+   * Used for:
+   * - New users: Initialize all settings on first use
+   * - Schema migration: Add new settings fields for existing users
+   *
+   * Does NOT overwrite existing values - preserves user preferences.
+   */
+  setDefaultsIfBlank(): void {
+    // Parse the entire settings object through the schema to fill in defaults
+    this.settings = SettingsDataSchema.parse(this.settings);
+  }
 
+  /**
+   * Calculate Unix timestamp of last week start based on user's week preferences.
+   *
+   * Used by streak tracking to determine if user completed learning goals.
+   * Accounts for custom week start day and time in UTC.
+   */
   getLastWeekStart(): number {
     const now = new Date();
     const currentDay = now.getUTCDay(); // Get UTC day of week (0-6)
@@ -185,25 +231,35 @@ setDefaultsIfBlank(): void {
     return Math.floor(weekStart.getTime() / 1000);
   }
 
+  /**
+   * Return trump strategies for conflict resolution during offline sync.
+   *
+   * All settings use LATEST_TIMESTAMP since user preferences are atomic
+   * and most recent change should always win.
+   */
   getAllTrumpStrategies(): Record<keyof SettingsData, TrumpStrategy<any>> {
-  // All fields use LATEST_TIMESTAMP since settings are atomic user preferences
-  return {
-    weekStartDay: "LATEST_TIMESTAMP",
-    weekStartTimeUTC: "LATEST_TIMESTAMP",
-    theme: "LATEST_TIMESTAMP",
-    learningPace: "LATEST_TIMESTAMP",
-    optOutDailyPing: "LATEST_TIMESTAMP",
-    optOutErrorPing: "LATEST_TIMESTAMP",
-    fontSize: "LATEST_TIMESTAMP",
-    highContrast: "LATEST_TIMESTAMP",
-    reducedMotion: "LATEST_TIMESTAMP",
-    focusIndicatorStyle: "LATEST_TIMESTAMP",
-    audioEnabled: "LATEST_TIMESTAMP",
-  };
+    // All fields use LATEST_TIMESTAMP since settings are atomic user preferences
+    return {
+      weekStartDay: "LATEST_TIMESTAMP",
+      weekStartTimeUTC: "LATEST_TIMESTAMP",
+      theme: "LATEST_TIMESTAMP",
+      learningPace: "LATEST_TIMESTAMP",
+      optOutDailyPing: "LATEST_TIMESTAMP",
+      optOutErrorPing: "LATEST_TIMESTAMP",
+      fontSize: "LATEST_TIMESTAMP",
+      highContrast: "LATEST_TIMESTAMP",
+      reducedMotion: "LATEST_TIMESTAMP",
+      focusIndicatorStyle: "LATEST_TIMESTAMP",
+      audioEnabled: "LATEST_TIMESTAMP",
+    };
+  }
 }
 
-}
-
+/**
+ * Schema for messages updating settings from components to core.
+ *
+ * Follows format of manager method name followed by argument(s).
+ */
 export const SettingsMessageSchema = z.object({
   method: z.enum([
     "setWeekStartDay",
@@ -223,9 +279,21 @@ export const SettingsMessageSchema = z.object({
 
 export type SettingsMessage = z.infer<typeof SettingsMessageSchema>;
 
+/**
+ * Validates and handles settings messages from components.
+ *
+ * Used by Main Core to process queued settings changes.
+ * Validates each message type before forwarding to SettingsDataManager.
+ */
 export class SettingsMessageManager {
   constructor(private settingsManager: SettingsDataManager) {}
 
+  /**
+   * Validate message arguments against appropriate schema.
+   *
+   * Each method has specific validation requirements matching
+   * the corresponding SettingsDataManager setter.
+   */
   validateMessage(message: SettingsMessage): void {
     // Per-method argument validation
     switch (message.method) {
@@ -311,6 +379,11 @@ export class SettingsMessageManager {
     }
   }
 
+  /**
+   * Validate and apply settings message to manager.
+   *
+   * Routes validated message to appropriate SettingsDataManager method.
+   */
   handleMessage(message: SettingsMessage): void {
     this.validateMessage(message);
     
@@ -353,6 +426,15 @@ export class SettingsMessageManager {
   }
 }
 
+/**
+ * Validates and queues settings messages for Main Core processing.
+ *
+ * Components use this to queue settings updates. Main Core polls via
+ * getMessages() to apply validated changes to actual settings data.
+ *
+ * All queue methods validate before queueing to catch errors at component
+ * boundary rather than during Main Core processing.
+ */
 export class SettingsMessageQueueManager {
   private messageQueue: SettingsMessage[] = [];
 
@@ -481,7 +563,10 @@ export class SettingsMessageQueueManager {
   }
 
   /**
-   * Core polling interface - get and clear queued messages
+   * Core polling interface - get and clear queued messages.
+   *
+   * Returns copy of all queued messages and clears the queue.
+   * Called by Main Core during polling cycle.
    */
   getMessages(): SettingsMessage[] {
     const messages = [...this.messageQueue];

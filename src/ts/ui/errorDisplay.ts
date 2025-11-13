@@ -13,6 +13,14 @@ interface ErrorInfo {
     context: string;
 }
 
+export interface CriticalErrorOptions {
+  title: string;
+  message: string;
+  technicalDetails?: string;
+  errorCode?: string;
+}
+
+
 /**
  * Manages error display UI that appears in the timeline container's error slot
  */
@@ -382,3 +390,18 @@ declare global {
 
 window.ErrorDisplay = ErrorDisplay;
 window.SolidConnectionErrorDisplay = SolidConnectionErrorDisplay;
+
+export function showCriticalError(options: CriticalErrorOptions): void {
+  console.error(`🚨 ${options.title}:`, options.message);
+  if (options.technicalDetails) {
+    console.error('Technical details:', options.technicalDetails);
+  }
+  
+  const shouldReload = confirm(
+    `${options.title}\n\n${options.message}\n\nReload page now?`
+  );
+  
+  if (shouldReload) {
+    window.location.reload();
+  }
+}

@@ -9,14 +9,16 @@
   "scripts": {
     "generate-registry": "python dev/py/registry_builder.py",
     "build-solid": "esbuild src/solid-bundle-source.js --bundle --outfile=static/js/solid-bundle.js --format=iife --global-name=SolidClient --define:process.env.NODE_ENV='\"production\"' --define:global=globalThis --platform=browser --target=es2020",
+    "build-solid-ts": "esbuild src/ts/solid/solidAuth.ts --outfile=static/js/solid-auth.js --format=iife --platform=browser --target=es2020 --bundle",
     "build-ts": "tsc",
     "build-ts-bundle": "esbuild src/ts/initialization/bootstrap.ts --bundle --outfile=static/js/mera-app.js --format=iife --platform=browser",
     "build-web": "esbuild src/ts/web/siteMenu.ts src/ts/web/updateHomeJourney.ts --outdir=static/web --format=iife --platform=browser",
-    "build": "npm run generate-registry && npm run build-ts && npm run build-web && npm run build-solid && npm run build-ts-bundle",
+    "build": "npm run generate-registry && npm run build-ts && npm run build-web && npm run build-solid && npm run build-solid-ts && npm run build-ts-bundle",
     "dev-server": "python manage.py runserver",
     "watch-solid": "npm run build-solid -- --watch",
+    "watch-solid-ts": "npm run build-solid-ts -- --watch",
     "watch-ts": "tsc --watch",
-    "dev": "concurrently \"npm run watch-ts\" \"npm run watch-solid\"",
+    "dev": "concurrently \"npm run watch-ts\" \"npm run watch-solid\" \"npm run watch-solid-ts\"",
     "test": "vitest"
   },
   "repository": {
@@ -37,7 +39,7 @@
   },
   "homepage": "https://github.com/chroot-grassroots/mera-learn#readme",
   "dependencies": {
-    "@inrupt/solid-client": "^2.1.2",
+    "@inrupt/solid-client": "^3.0.0",
     "@inrupt/solid-client-authn-browser": "^3.1.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
@@ -48,7 +50,7 @@
   "devDependencies": {
     "@types/node": "^24.5.1",
     "concurrently": "^9.2.1",
-    "esbuild": "^0.25.9",
+    "esbuild": "^0.27.0",
     "typescript": "^5.9.2",
     "vitest": "^4.0.2"
   }

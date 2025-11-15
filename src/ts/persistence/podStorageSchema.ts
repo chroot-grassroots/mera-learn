@@ -11,11 +11,6 @@ import { CombinedComponentProgressSchema } from "../core/coreTypes.js";
  */
 export const PodMetadataSchema = z.object({
   webId: z.string().regex(/^https?:\/\/.+/, "Must be a valid WebID URL"),
-  schemaVersion: z.object({
-    major: z.number().int().min(0),
-    minor: z.number().int().min(0),
-    patch: z.number().int().min(0),
-  }),
 });
 
 /**

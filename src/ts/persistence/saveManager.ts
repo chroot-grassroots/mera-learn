@@ -9,12 +9,6 @@ enum SaveResult {
   OnlySolidSucceeded,
 }
 
-interface SaveStatus {
-  inProgress: boolean;
-  lastResult: SaveResult;
-  lastSaveTime: number;
-}
-
 class SaveManager {
   private static instance: SaveManager;
   private saveInProgress: boolean = false;
@@ -46,22 +40,25 @@ class SaveManager {
     if (
       !this.saveInProgress &&
       (this.saveHasChanged ||
-        this.lastSaveResult == SaveResult.BothFailed ||
-        this.lastSaveResult == SaveResult.OnlyLocalSucceeded)
+        this.lastSaveResult === SaveResult.BothFailed ||
+        this.lastSaveResult === SaveResult.OnlyLocalSucceeded)
     ) {
       // Then mark a save in progress
       this.saveInProgress = true;
       // Mark the save has changed false so it doesn't endlessly repeat
       this.saveHasChanged = false;
+      // Clone the save bundle
+      const bundleSnapshot = structuredClone(this.queuedSave);
+      // Save the time stamp
+      const timestamp = Date.now();
       // Start a save process
-      orchestrateSave(this.queuedSave)
+      orchestrateSave(bundleSnapshot, timestamp)
         .then((result: SaveResult) => {
           // Save the result
           this.lastSaveResult = result;
           // Mark save in progress false
           this.saveInProgress = false;
-
-          // Log localStorage failures (rare edge case)
+          // Log local storage failures (rare edge case)
           if (result === SaveResult.OnlySolidSucceeded) {
             console.error(
               "⚠️ localStorage save failed - offline mode unavailable"
@@ -89,8 +86,8 @@ class SaveManager {
 
   getOnlineStatus(): boolean {
     if (
-      this.lastSaveResult == SaveResult.BothSucceeded ||
-      this.lastSaveResult == SaveResult.OnlySolidSucceeded
+      this.lastSaveResult === SaveResult.BothSucceeded ||
+      this.lastSaveResult === SaveResult.OnlySolidSucceeded
     ) {
       return true;
     } else {
@@ -99,4 +96,4 @@ class SaveManager {
   }
 }
 
-export { SaveManager, SaveResult, SaveStatus };
+export { SaveManager, SaveResult };

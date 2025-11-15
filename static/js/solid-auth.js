@@ -97,7 +97,7 @@ async function startOAuthFlow(session) {
     // Start OAuth login
     await session.login({
       oidcIssuer: providerUrl,
-      redirectUrl: window.location.href,
+      redirectUrl: "http://127.0.0.1:8000/learn", 
       clientName: "Mera Digital Security Education",
       scope: "openid webid", 
     });

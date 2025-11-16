@@ -103,28 +103,8 @@ export class MeraBridge {
       // Get default session from Solid client
       this.session = getDefaultSession();
 
-      // Try to restore session if not active
-      if (!this.session.info.isLoggedIn) {
-        const restored = await this._tryRestoreSession();
-        if (restored) {
-          // Use stored session data
-          const stored = localStorage.getItem('mera_solid_session');
-          if (stored) {
-            const sessionData: SessionData = JSON.parse(stored);
-            console.log('✅ Using restored session data');
-            console.log('✅ WebID from storage:', sessionData.webId);
-            this.podUrl = this._extractPodUrl(sessionData.webId);
-            this.initialized = true;
-            
-            // Ensure mera-learn container exists
-            await this._ensureContainer();
-            return true;
-          }
-        }
-        
-        console.log('❌ Authentication required');
-        return false;
-      }
+      // Let session handle incoming redirect first
+      await this.session.handleIncomingRedirect(window.location.href);
 
       // Active session - extract Pod URL
       if (!this.session.info.webId) {
@@ -144,78 +124,6 @@ export class MeraBridge {
     } catch (error) {
       console.error('❌ Bridge initialization error:', error);
       return false;
-    }
-  }
-
-  /**
-   * Attempt to restore session from localStorage or incoming redirect
-   */
-  private async _tryRestoreSession(): Promise<boolean> {
-    try {
-      console.log('🔄 Attempting session restoration...');
-
-      // First, let Solid handle incoming OAuth redirect
-      await this.session!.handleIncomingRedirect(window.location.href);
-
-      // If that worked, update localStorage and we're done
-      if (this.session!.info.isLoggedIn) {
-        console.log('✅ Session restored via handleIncomingRedirect');
-        this._updateLocalStorage();
-        return true;
-      }
-
-      // Check for valid localStorage session data
-      const stored = localStorage.getItem('mera_solid_session');
-      if (!stored) {
-        console.log('🔭 No stored session data found');
-        return false;
-      }
-
-      const sessionData: SessionData = JSON.parse(stored);
-      console.log('📋 Found stored session data');
-
-      // Check if session is recent (within 24 hours)
-      const sessionAge = Date.now() - sessionData.timestamp;
-      if (sessionAge > 24 * 60 * 60 * 1000) {
-        localStorage.removeItem('mera_solid_session');
-        console.log('⏰ Stored session expired, removed');
-        return false;
-      }
-
-      // Accept stored session if it looks valid
-      if (sessionData.isLoggedIn && sessionData.webId) {
-        console.log('✅ Accepting stored session data');
-        return true;
-      }
-
-      return false;
-
-    } catch (error) {
-      console.warn('❌ Session restoration failed:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Update localStorage with current session info
-   */
-  private _updateLocalStorage(): void {
-    try {
-      if (!this.session?.info?.webId || !this.session?.info?.sessionId) {
-        console.warn('⚠️ Cannot update localStorage - missing session data');
-        return;
-      }
-
-      const sessionData: SessionData = {
-        isLoggedIn: this.session.info.isLoggedIn,
-        webId: this.session.info.webId,
-        sessionId: this.session.info.sessionId,
-        timestamp: Date.now(),
-      };
-      localStorage.setItem('mera_solid_session', JSON.stringify(sessionData));
-      console.log('💾 Updated localStorage with current session');
-    } catch (error) {
-      console.warn('⚠️ Failed to update localStorage:', error);
     }
   }
 

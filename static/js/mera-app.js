@@ -33186,23 +33186,7 @@ var MeraBridge = class _MeraBridge {
     console.log("\u{1F309} Mera Bridge initializing...");
     try {
       this.session = getDefaultSession();
-      if (!this.session.info.isLoggedIn) {
-        const restored = await this._tryRestoreSession();
-        if (restored) {
-          const stored = localStorage.getItem("mera_solid_session");
-          if (stored) {
-            const sessionData = JSON.parse(stored);
-            console.log("\u2705 Using restored session data");
-            console.log("\u2705 WebID from storage:", sessionData.webId);
-            this.podUrl = this._extractPodUrl(sessionData.webId);
-            this.initialized = true;
-            await this._ensureContainer();
-            return true;
-          }
-        }
-        console.log("\u274C Authentication required");
-        return false;
-      }
+      await this.session.handleIncomingRedirect(window.location.href);
       if (!this.session.info.webId) {
         console.error("\u274C Session is logged in but has no webId");
         return false;
@@ -33216,62 +33200,6 @@ var MeraBridge = class _MeraBridge {
     } catch (error) {
       console.error("\u274C Bridge initialization error:", error);
       return false;
-    }
-  }
-  /**
-   * Attempt to restore session from localStorage or incoming redirect
-   */
-  async _tryRestoreSession() {
-    try {
-      console.log("\u{1F504} Attempting session restoration...");
-      await this.session.handleIncomingRedirect(window.location.href);
-      if (this.session.info.isLoggedIn) {
-        console.log("\u2705 Session restored via handleIncomingRedirect");
-        this._updateLocalStorage();
-        return true;
-      }
-      const stored = localStorage.getItem("mera_solid_session");
-      if (!stored) {
-        console.log("\u{1F52D} No stored session data found");
-        return false;
-      }
-      const sessionData = JSON.parse(stored);
-      console.log("\u{1F4CB} Found stored session data");
-      const sessionAge = Date.now() - sessionData.timestamp;
-      if (sessionAge > 24 * 60 * 60 * 1e3) {
-        localStorage.removeItem("mera_solid_session");
-        console.log("\u23F0 Stored session expired, removed");
-        return false;
-      }
-      if (sessionData.isLoggedIn && sessionData.webId) {
-        console.log("\u2705 Accepting stored session data");
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.warn("\u274C Session restoration failed:", error);
-      return false;
-    }
-  }
-  /**
-   * Update localStorage with current session info
-   */
-  _updateLocalStorage() {
-    try {
-      if (!this.session?.info?.webId || !this.session?.info?.sessionId) {
-        console.warn("\u26A0\uFE0F Cannot update localStorage - missing session data");
-        return;
-      }
-      const sessionData = {
-        isLoggedIn: this.session.info.isLoggedIn,
-        webId: this.session.info.webId,
-        sessionId: this.session.info.sessionId,
-        timestamp: Date.now()
-      };
-      localStorage.setItem("mera_solid_session", JSON.stringify(sessionData));
-      console.log("\u{1F4BE} Updated localStorage with current session");
-    } catch (error) {
-      console.warn("\u26A0\uFE0F Failed to update localStorage:", error);
     }
   }
   /**

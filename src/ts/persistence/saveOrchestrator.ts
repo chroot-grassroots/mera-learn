@@ -4,13 +4,7 @@ import {
 } from "./podStorageSchema.js";
 import { SaveResult } from "./saveManager.js";
 import { CURRENT_SCHEMA_VERSION } from "./schemaVersion.js";
-
-declare global {
-  // To Do: Add Proper Typing
-  interface Window {
-    meraBridge: any;
-  }
-}
+import { MeraBridge } from "../solid/meraBridge.js";
 
 interface SaveFilenames {
   localOfflinePrimary: string;
@@ -25,14 +19,14 @@ export async function orchestrateSave(
   bundle: PodStorageBundle,
   timestamp: number
 ): Promise<SaveResult> {
-  const files = generateFilenames(timestamp);
+  const fileNames = generateFilenames(timestamp);
 
   // Stage 1: Try local offline (best effort)
   let localOfflineSucceeded = false;
   try {
     await Promise.all([
-      saveLoadCheckCleanLocal(files.localOfflinePrimary, bundle),
-      saveLoadCheckCleanLocal(files.localOfflineDup, bundle),
+      saveLoadCheckCleanLocal(fileNames.localOfflinePrimary, bundle),
+      saveLoadCheckCleanLocal(fileNames.localOfflineDup, bundle),
     ]);
     localOfflineSucceeded = true;
   } catch (localOfflineError) {
@@ -44,8 +38,8 @@ export async function orchestrateSave(
   let podSucceeded = false;
   try {
     await Promise.all([
-      saveLoadCheckCleanSolid(files.solidPrimary, bundle),
-      saveLoadCheckCleanSolid(files.solidDup, bundle),
+      saveLoadCheckCleanSolid(fileNames.solidPrimary, bundle),
+      saveLoadCheckCleanSolid(fileNames.solidDup, bundle),
     ]);
     podSucceeded = true;
   } catch (podError) {
@@ -54,28 +48,30 @@ export async function orchestrateSave(
 
   // If Pod failed, stop here
   if (!podSucceeded) {
-    return localOfflineSucceeded 
-      ? SaveResult.OnlyLocalSucceeded 
+    return localOfflineSucceeded
+      ? SaveResult.OnlyLocalSucceeded
       : SaveResult.BothFailed;
   }
 
   // Stage 3: Pod succeeded, update local (best effort)
   try {
     await Promise.all([
-      saveLoadCheckCleanLocal(files.localOnlinePrimary, bundle),
-      saveLoadCheckCleanLocal(files.localOnlineDup, bundle),
+      saveLoadCheckCleanLocal(fileNames.localOnlinePrimary, bundle),
+      saveLoadCheckCleanLocal(fileNames.localOnlineDup, bundle),
     ]);
-    
+
     // Stage 4: Cleanup offline files (best effort)
+    const bridge = MeraBridge.getInstance();
     try {
-      localStorage.removeItem(`mera_${files.localOfflinePrimary}`);
-      localStorage.removeItem(`mera_${files.localOfflineDup}`);
+      await Promise.all([
+        bridge.localDelete(fileNames.localOfflinePrimary),
+        bridge.localDelete(fileNames.localOfflineDup),
+      ]);
     } catch (cleanupError) {
       console.warn("Cleanup failed:", cleanupError);
     }
-    
+
     return SaveResult.BothSucceeded;
-    
   } catch (localOnlineError) {
     console.error("Local online save failed:", localOnlineError);
     return SaveResult.OnlySolidSucceeded;
@@ -86,26 +82,38 @@ async function saveLoadCheckCleanLocal(
   filename: string,
   bundle: PodStorageBundle
 ): Promise<void> {
+  const bridge = MeraBridge.getInstance();
+  
   try {
     // Save
-    const saveResult = await window.meraBridge.localSave(filename, bundle);
-    if (!saveResult.success) throw new Error(saveResult.error);
+    const saveResult = await bridge.localSave(filename, bundle);
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || 'Local save failed');
+    }
 
     // Load
-    const loadResult = await window.meraBridge.localLoad(filename);
-    if (!loadResult.success) throw new Error(loadResult.error);
+    const loadResult = await bridge.localLoad(filename);
+    if (!loadResult.success) {
+      throw new Error(loadResult.error || 'Local load failed');
+    }
 
     // Check (Zod validation)
     PodStorageBundleSchema.parse(loadResult.data);
 
     // Check (deep equality)
     if (!deepEqual(bundle, loadResult.data)) {
+      // Clean up corrupted file BEFORE throwing
+      await bridge.localDelete(filename);
       throw new Error(`Data mismatch in ${filename}`);
     }
+    // Success - file is verified and intact
   } catch (error) {
-    // Clean up corrupted file
-    const key = `mera_${filename}`;
-    localStorage.removeItem(key);
+    // If error occurred before we could delete, clean up now
+    try {
+      await bridge.localDelete(filename);
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup after error:', cleanupError);
+    }
     throw error;
   }
 }
@@ -114,26 +122,39 @@ async function saveLoadCheckCleanSolid(
   filename: string,
   bundle: PodStorageBundle
 ): Promise<void> {
+  const bridge = MeraBridge.getInstance();
+  
   try {
     // Save
-    const saveResult = await window.meraBridge.solidSave(filename, bundle);
-    if (!saveResult.success) throw new Error(saveResult.error);
+    const saveResult = await bridge.solidSave(filename, bundle);
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || 'Solid save failed');
+    }
 
     // Load
-    const loadResult = await window.meraBridge.solidLoad(filename);
-    if (!loadResult.success) throw new Error(loadResult.error);
+    const loadResult = await bridge.solidLoad(filename);
+    if (!loadResult.success) {
+      throw new Error(loadResult.error || 'Solid load failed');
+    }
 
     // Check (Zod validation)
     PodStorageBundleSchema.parse(loadResult.data);
 
     // Check (deep equality)
     if (!deepEqual(bundle, loadResult.data)) {
+      // Clean up corrupted file BEFORE throwing
+      await bridge.solidDelete(filename);
       throw new Error(`Data mismatch in ${filename}`);
     }
+    
+    // Success - file is verified and intact
   } catch (error) {
-    // Clean up corrupted file
-    // TODO: Add solidDelete to bridge
-    console.error(`Failed to clean up corrupted Pod file: ${filename}`);
+    // If error occurred before we could delete, clean up now
+    try {
+      await bridge.solidDelete(filename);
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup corrupted Pod file:', cleanupError);
+    }
     throw error;
   }
 }

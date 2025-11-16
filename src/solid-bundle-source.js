@@ -2,12 +2,14 @@
 import * as solidClient from '@inrupt/solid-client';
 import * as solidClientAuth from '@inrupt/solid-client-authn-browser';
 
-// Make libraries available globally for PyScript
-window.solidClient = solidClient;
-window.solidClientAuthentication = solidClientAuth;
+// Make libraries available globally
+globalThis.solidClient = solidClient;
+globalThis.solidClientAuthentication = solidClientAuth;
+globalThis.window.solidClient = solidClient;
+globalThis.window.solidClientAuthentication = solidClientAuth;
 
 // Create a convenient combined API
-window.SolidAPI = {
+globalThis.SolidAPI = {
     client: solidClient,
     auth: solidClientAuth,
     

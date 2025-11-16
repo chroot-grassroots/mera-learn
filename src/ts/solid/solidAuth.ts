@@ -8,22 +8,6 @@ import { getDefaultSession } from '@inrupt/solid-client-authn-browser';
 import type { Session } from '@inrupt/solid-client-authn-browser';
 
 /**
- * Wait for Solid client libraries to load with timeout
- * @param timeoutMs Maximum time to wait in milliseconds
- * @throws Error if libraries don't load within timeout
- */
-async function waitForSolidLibraries(timeoutMs: number = 5000): Promise<void> {
-  const startTime = Date.now();
-  
-  while (!(window as any).solidClientAuthentication) {
-    if (Date.now() - startTime > timeoutMs) {
-      throw new Error('Solid libraries failed to load within timeout');
-    }
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-}
-
-/**
  * Start OAuth flow - redirect user to Solid provider for authentication
  */
 async function startOAuthFlow(): Promise<void> {
@@ -58,7 +42,7 @@ async function startOAuthFlow(): Promise<void> {
  */
 async function initAuth(): Promise<void> {
   try {
-    await waitForSolidLibraries();
+    // ESM imports ensure libraries are already loaded
     await startOAuthFlow();
   } catch (error) {
     console.error('❌ Authentication initialization failed:', error);

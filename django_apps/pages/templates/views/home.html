@@ -1,4 +1,10 @@
 {% extends "views/base.html" %}
+{% load static %}
+
+{% block extra_head %}
+<!-- Solid Pod Client Libraries -->
+<script src="{% static 'js/solid-bundle.js' %}"></script>
+{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-16">
@@ -76,6 +82,6 @@
 
 <!-- PyScript for dynamic button behavior -->
 
-<script src="/static/web/updateHomeJourney.js"></script>
+<script type="module" src="{% static 'web/update-home-journey.js' %}"></script>
 
 {% endblock %}

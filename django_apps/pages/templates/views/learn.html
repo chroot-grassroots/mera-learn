@@ -11,8 +11,8 @@
 <!-- Solid Pod Client Libraries -->
 <script src="{% static 'js/solid-bundle.js' %}"></script>
 
-<!-- Mera Bridge (loads before TypeScript) -->
-<script src="{% static 'js/mera-bridge.js' %}"></script>
+<!-- Mera Bridge (loads before main app) -->
+<script type="module" src="{% static 'js/mera-bridge.js' %}"></script>
 {% endblock %}
 
 {% block content %}
@@ -95,6 +95,6 @@
 
 
 <!-- Start Mera App -->
-<script src="{% static 'js/mera-app.js' %}"></script>
+<script type="module" src="{% static 'js/mera-app.js' %}"></script>
 
 {% endblock %}

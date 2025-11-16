@@ -3,6 +3,7 @@
 import { TimelineContainer } from "../ui/timelineContainer.js";
 import { SolidConnectionErrorDisplay } from "../ui/errorDisplay.js";
 import { orchestrateProgressLoading } from "./progressLoading.js";
+import { MeraBridge } from "../solid/meraBridge.js";
 
 // Configuration constants
 const MAX_ATTEMPTS = 50;
@@ -36,7 +37,6 @@ function initializeWhenReady() {
 /**
  * Initialize UI components and prepare the learning environment
  */
-
 function setupUI(): void {
   console.log("🎨 Setting up UI components...");
 
@@ -97,13 +97,14 @@ function showBootstrapError(error: Error | unknown): void {
 async function startBootstrap(): Promise<void> {
   console.log("🚀 BOOTSTRAP: start_bootstrap() function called!");
 
+  const bridge = MeraBridge.getInstance();
   let solidSessionReady = false;
 
   // Poll for bridge readiness
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      // Check if bridge exists and is ready
-      if (window.meraBridge && (await window.meraBridge.check())) {
+      // Check if bridge is ready
+      if (await bridge.check()) {
         solidSessionReady = true;
         console.log(`✅ Bridge ready on attempt ${attempt + 1}`);
         break;
@@ -136,14 +137,9 @@ async function startBootstrap(): Promise<void> {
 function continueToNextModule(): void {
   console.log("🔗 Solid Pod connected - initializing learning platform");
 
-  // TODO: Start background progress loading from Solid Pod
-  // Fire-and-forget network request since we know Solid is connected
-  // This can load in parallel with component discovery + YAML loading
-
   try {
     orchestrateProgressLoading();
     console.log("✅ Initialization sequence started successfully");
-    // Bootstrap's job is done - no need to track further
   } catch (error) {
     console.error("❌ Failed to start initialization sequence:", error);
     if (errorDisplay) {
@@ -175,7 +171,6 @@ class BootstrapManager {
   async retrySolidConnection(): Promise<void> {
     console.log("🔄 Retrying Solid Pod connection...");
     if (errorDisplay) {
-      // Uses global directly
       errorDisplay.clearError("solid-connection");
     }
     return startBootstrap();
@@ -189,7 +184,6 @@ const bootstrapInstance = new BootstrapManager();
 declare global {
   interface Window {
     bootstrapInstance: BootstrapManager;
-    meraBridge: any; // Will be properly typed later
   }
 }
 

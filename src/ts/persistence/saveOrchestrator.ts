@@ -1,3 +1,22 @@
+/**
+ * @fileoverview Four-stage save orchestration with verification and cleanup
+ * @module persistence/saveOrchestrator
+ *
+ * Implements defense-in-depth save strategy: save → load → validate → verify.
+ * Creates duplicate files at each stage for redundancy.
+ * 
+ * Four-stage process:
+ * 1. Local save tagged "offline" (best effort, allows offline mode)
+ * 2. Pod save (critical - determines overall success)
+ * 3. Local save tagged "online" (replaces offline files after Pod success)
+ * 4. Cleanup offline files (removes temporary offline copies)
+ * 
+ * Purpose of offline/online is for merge logic for offline progress in initialization logic.
+ * 
+ * All saves are verified via load-back and deep equality check to catch
+ * corruption immediately rather than discovering it later during recovery.
+ */
+
 import {
   PodStorageBundle,
   PodStorageBundleSchema,
@@ -6,6 +25,14 @@ import { SaveResult } from "./saveManager.js";
 import { CURRENT_SCHEMA_VERSION } from "./schemaVersion.js";
 import { MeraBridge } from "../solid/meraBridge.js";
 
+/**
+ * Filenames for six files created during save process.
+ * 
+ * Naming convention: mera.{major}.{minor}.{patch}.{type}.{timestamp}.json
+ * - lofp/lofd: Local Offline Primary/Duplicate (temporary, pre-Pod-sync)
+ * - sp/sd: Solid Primary/Duplicate (Pod backup files)
+ * - lonp/lond: Local Online Primary/Duplicate (final localStorage copies)
+ */
 interface SaveFilenames {
   localOfflinePrimary: string;
   localOfflineDup: string;
@@ -15,13 +42,31 @@ interface SaveFilenames {
   localOnlineDup: string;
 }
 
+/**
+ * Orchestrates four-stage verified save process.
+ * 
+ * Strategy:
+ * - Local offline files enable offline mode if Pod unreachable
+ * - Pod save is the critical operation determining success/failure
+ * - Local online files provide additional redundancy
+ * - Duplicates at each stage provide redundancy if primary corrupts
+ * 
+ * Verification: Every save is immediately loaded back and validated
+ * (Zod schema + deep equality). Corrupted writes are deleted and reported
+ * as failures rather than silently persisting bad data.
+ * 
+ * @param bundle - Complete progress bundle to persist
+ * @param timestamp - Unix timestamp for backup filename generation
+ * @returns SaveResult enum indicating which operations succeeded
+ */
 export async function orchestrateSave(
   bundle: PodStorageBundle,
   timestamp: number
 ): Promise<SaveResult> {
   const fileNames = generateFilenames(timestamp);
 
-  // Stage 1: Try local offline (best effort)
+  // Stage 1: Local offline save (best effort)
+  // Creates temporary offline copies that work without Pod access
   let localOfflineSucceeded = false;
   try {
     await Promise.all([
@@ -34,7 +79,8 @@ export async function orchestrateSave(
     // Continue anyway - Pod is what really matters
   }
 
-  // Stage 2: Try Pod save
+  // Stage 2: Pod save (critical operation)
+  // Pod sync determines overall success. If this fails, entire save fails.
   let podSucceeded = false;
   try {
     await Promise.all([
@@ -46,14 +92,15 @@ export async function orchestrateSave(
     console.error("Pod save failed:", podError);
   }
 
-  // If Pod failed, stop here
+  // If Pod failed, stop here - no point updating local files
   if (!podSucceeded) {
     return localOfflineSucceeded
       ? SaveResult.OnlyLocalSucceeded
       : SaveResult.BothFailed;
   }
 
-  // Stage 3: Pod succeeded, update local (best effort)
+  // Stage 3: Local online save (best effort)
+  // Pod succeeded, now create final localStorage copies
   try {
     await Promise.all([
       saveLoadCheckCleanLocal(fileNames.localOnlinePrimary, bundle),
@@ -61,6 +108,7 @@ export async function orchestrateSave(
     ]);
 
     // Stage 4: Cleanup offline files (best effort)
+    // Remove temporary offline copies now that online copies exist
     const bridge = MeraBridge.getInstance();
     try {
       await Promise.all([
@@ -69,15 +117,30 @@ export async function orchestrateSave(
       ]);
     } catch (cleanupError) {
       console.warn("Cleanup failed:", cleanupError);
+      // Not critical - orphaned files will be handled by recovery logic
     }
 
     return SaveResult.BothSucceeded;
   } catch (localOnlineError) {
     console.error("Local online save failed:", localOnlineError);
+    // Pod succeeded but local failed - rare edge case
     return SaveResult.OnlySolidSucceeded;
   }
 }
 
+/**
+ * Saves to localStorage with immediate verification and cleanup on failure.
+ * 
+ * Process: save → load → Zod validate → deep equality check
+ * 
+ * If any step fails, deletes the corrupted file before throwing.
+ * This prevents accumulation of invalid backup files that could
+ * interfere with recovery logic.
+ * 
+ * @param filename - localStorage key for this backup
+ * @param bundle - Progress bundle to save
+ * @throws Error if save, load, validation, or equality check fails
+ */
 async function saveLoadCheckCleanLocal(
   filename: string,
   bundle: PodStorageBundle
@@ -85,27 +148,28 @@ async function saveLoadCheckCleanLocal(
   const bridge = MeraBridge.getInstance();
   
   try {
-    // Save
+    // Save to localStorage
     const saveResult = await bridge.localSave(filename, bundle);
     if (!saveResult.success) {
       throw new Error(saveResult.error || 'Local save failed');
     }
 
-    // Load
+    // Load back immediately for verification
     const loadResult = await bridge.localLoad(filename);
     if (!loadResult.success) {
       throw new Error(loadResult.error || 'Local load failed');
     }
 
-    // Check (Zod validation)
+    // Validate structure with Zod schema
     PodStorageBundleSchema.parse(loadResult.data);
 
-    // Check (deep equality)
+    // Verify deep equality (catches subtle corruption)
     if (!deepEqual(bundle, loadResult.data)) {
       // Clean up corrupted file BEFORE throwing
       await bridge.localDelete(filename);
       throw new Error(`Data mismatch in ${filename}`);
     }
+    
     // Success - file is verified and intact
   } catch (error) {
     // If error occurred before we could delete, clean up now
@@ -118,6 +182,19 @@ async function saveLoadCheckCleanLocal(
   }
 }
 
+/**
+ * Saves to Solid Pod with immediate verification and cleanup on failure.
+ * 
+ * Process: save → load → Zod validate → deep equality check
+ * 
+ * If any step fails, deletes the corrupted Pod file before throwing.
+ * This prevents accumulation of invalid backup files that could
+ * interfere with recovery logic.
+ * 
+ * @param filename - Pod file path for this backup
+ * @param bundle - Progress bundle to save
+ * @throws Error if save, load, validation, or equality check fails
+ */
 async function saveLoadCheckCleanSolid(
   filename: string,
   bundle: PodStorageBundle
@@ -125,22 +202,22 @@ async function saveLoadCheckCleanSolid(
   const bridge = MeraBridge.getInstance();
   
   try {
-    // Save
+    // Save to Solid Pod
     const saveResult = await bridge.solidSave(filename, bundle);
     if (!saveResult.success) {
       throw new Error(saveResult.error || 'Solid save failed');
     }
 
-    // Load
+    // Load back immediately for verification
     const loadResult = await bridge.solidLoad(filename);
     if (!loadResult.success) {
       throw new Error(loadResult.error || 'Solid load failed');
     }
 
-    // Check (Zod validation)
+    // Validate structure with Zod schema
     PodStorageBundleSchema.parse(loadResult.data);
 
-    // Check (deep equality)
+    // Verify deep equality (catches subtle corruption)
     if (!deepEqual(bundle, loadResult.data)) {
       // Clean up corrupted file BEFORE throwing
       await bridge.solidDelete(filename);
@@ -159,20 +236,48 @@ async function saveLoadCheckCleanSolid(
   }
 }
 
-function generateFilenames(timestamp: number) {
+/**
+ * Generates six filenames for the four-stage save process.
+ * 
+ * Naming convention: mera.{version}.{type}.{timestamp}.json
+ * 
+ * Version enables future migration logic to identify old formats.
+ * Type distinguishes offline vs online and primary vs duplicate.
+ * Timestamp enables time-bracketed backup retention by saveCleaner.
+ * 
+ * @param timestamp - Unix timestamp in milliseconds
+ * @returns Object with six filename strings
+ */
+function generateFilenames(timestamp: number): SaveFilenames {
   const v = CURRENT_SCHEMA_VERSION;
   const prefix = `mera.${v.major}.${v.minor}.${v.patch}`;
 
   return {
-    localOfflinePrimary: `${prefix}.lofo.${timestamp}.json`,
+    localOfflinePrimary: `${prefix}.lofp.${timestamp}.json`,
     localOfflineDup: `${prefix}.lofd.${timestamp}.json`,
-    solidPrimary: `${prefix}.so.${timestamp}.json`,
+    solidPrimary: `${prefix}.sp.${timestamp}.json`,
     solidDup: `${prefix}.sd.${timestamp}.json`,
-    localOnlinePrimary: `${prefix}.lono.${timestamp}.json`,
+    localOnlinePrimary: `${prefix}.lonp.${timestamp}.json`,
     localOnlineDup: `${prefix}.lond.${timestamp}.json`,
   };
 }
 
+/**
+ * Performs deep equality comparison via JSON serialization.
+ * 
+ * Catches subtle corruption that schema validation might miss, such as:
+ * - Incorrect numeric precision
+ * - Extra/missing properties
+ * - Type coercion issues
+ * 
+ * Note: This is not robust for objects with complex prototypes, functions,
+ * or circular references, but works perfectly for plain JSON-serializable
+ * data structures like PodStorageBundle.
+ * 
+ * @param obj1 - First object to compare
+ * @param obj2 - Second object to compare
+ * @returns True if JSON representations are identical
+ */
 function deepEqual(obj1: any, obj2: any): boolean {
   return JSON.stringify(obj1) === JSON.stringify(obj2);
 }

@@ -1,4 +1,4 @@
-// Tells the program what version it is on.
+// Tells the app what version of Mera it is on
 
 export const CURRENT_SCHEMA_VERSION = {
   major: 1,

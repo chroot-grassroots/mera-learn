@@ -4,7 +4,7 @@ import { z } from "zod";
 import { OverallProgressDataSchema } from "../core/overallProgressSchema.js";
 import { SettingsDataSchema } from "../core/settingsSchema.js";
 import { NavigationStateSchema } from "../core/navigationSchema.js";
-import { CombinedComponentProgressSchema } from "../core/coreTypes.js";
+import { CombinedComponentProgressSchema } from "../core/combinedComponentProgressSchema.js";
 
 /**
  * Metadata added by saver during persistence

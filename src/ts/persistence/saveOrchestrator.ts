@@ -165,8 +165,6 @@ async function saveLoadCheckCleanLocal(
 
     // Verify deep equality (catches subtle corruption)
     if (!deepEqual(bundle, loadResult.data)) {
-      // Clean up corrupted file BEFORE throwing
-      await bridge.localDelete(filename);
       throw new Error(`Data mismatch in ${filename}`);
     }
     
@@ -219,8 +217,6 @@ async function saveLoadCheckCleanSolid(
 
     // Verify deep equality (catches subtle corruption)
     if (!deepEqual(bundle, loadResult.data)) {
-      // Clean up corrupted file BEFORE throwing
-      await bridge.solidDelete(filename);
       throw new Error(`Data mismatch in ${filename}`);
     }
     
@@ -279,5 +275,16 @@ function generateFilenames(timestamp: number): SaveFilenames {
  * @returns True if JSON representations are identical
  */
 function deepEqual(obj1: any, obj2: any): boolean {
-  return JSON.stringify(obj1) === JSON.stringify(obj2);
+  const str1 = JSON.stringify(obj1);
+  const str2 = JSON.stringify(obj2);
+  const result = str1 === str2;
+  
+  if (!result) {
+    console.log('DEEP EQUAL FAILED');
+    console.log('Length:', str1.length, 'vs', str2.length);
+    console.log('First 200 chars of obj1:', str1.substring(0, 200));
+    console.log('First 200 chars of obj2:', str2.substring(0, 200));
+  }
+  
+  return result;
 }

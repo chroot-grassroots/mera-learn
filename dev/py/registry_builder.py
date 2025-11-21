@@ -103,8 +103,10 @@ def scan_yaml_files_in_directory(
 
     files = []
     for yaml_file in dir_path.glob("*.yaml"):
+        # Create absolute path from domain root by adding leading slash
+        relative_path = yaml_file.relative_to(".").as_posix()
         file_info = {
-            "path": str(yaml_file.relative_to(".")).replace("\\", "/"),
+            "path": f"/{relative_path}",  # Add leading slash for absolute path
             "filename": yaml_file.name,
             "type": file_type,
         }
@@ -330,7 +332,7 @@ def generate_component_registry(
     domains: List[Dict],
 ) -> str:
     """Generate complete TypeScript registry with all 11 mappings."""
-
+    
     imports = []
     registrations = []
 

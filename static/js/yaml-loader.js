@@ -5,7 +5,7 @@
  * Uses registry from yaml-registry.js (data-only, no TypeScript imports)
  */
 
-import { lessonRegistry } from './yaml-registry.js';
+import { lessonFiles, allYamlFiles } from './yaml-registry.js';
 
 console.log('🚀 YAML Loader initializing...');
 
@@ -16,49 +16,50 @@ window.yamlLoadingErrors = [];
 // Track loading completion
 window.initializationStatus = {
     yamlsLoaded: 0,
-    yamlsTotal: lessonRegistry.length,
+    yamlsTotal: allYamlFiles.length,
     yamlsComplete: false
 };
 
 /**
- * Load all lessons from the registry
+ * Load all YAML files from the registry
  */
-async function loadLessons() {
-    console.log(`📚 Loading ${lessonRegistry.length} lesson files from registry...`);
+async function loadYAMLs() {
+    console.log(`📚 Loading ${allYamlFiles.length} YAML files from registry...`);
     
-    const promises = lessonRegistry.map(async (lesson) => {
+    const promises = allYamlFiles.map(async (file) => {
         try {
-            const response = await fetch(lesson.path);
+            const response = await fetch(file.path);
             
             if (!response.ok) {
                 window.yamlLoadingErrors.push({
-                    lesson_id: lesson.id,
+                    filename: file.filename,
                     error: `HTTP ${response.status}: ${response.statusText}`,
                     phase: 'fetch',
-                    path: lesson.path
+                    path: file.path
                 });
-                console.warn(`⚠️ Failed to fetch ${lesson.id}: HTTP ${response.status}`);
+                console.warn(`⚠️ Failed to fetch ${file.filename}: HTTP ${response.status}`);
                 return;
             }
             
             const yamlText = await response.text();
-            window.lessonRegistry[lesson.id] = yamlText;
+            // Store by filename for now - will be properly indexed by ID during parsing
+            window.lessonRegistry[file.filename] = yamlText;
             window.initializationStatus.yamlsLoaded++;
             
-            console.log(`✅ Loaded lesson: ${lesson.id} (${lesson.title || 'Untitled'})`);
+            console.log(`✅ Loaded: ${file.filename}`);
             
         } catch (error) {
             window.yamlLoadingErrors.push({
-                lesson_id: lesson.id,
+                filename: file.filename,
                 error: error.message,
                 phase: 'network',
-                path: lesson.path
+                path: file.path
             });
-            console.error(`❌ Network error loading ${lesson.id}:`, error);
+            console.error(`❌ Network error loading ${file.filename}:`, error);
         }
     });
     
-    // Wait for all lesson loading attempts to complete
+    // Wait for all YAML loading attempts to complete
     await Promise.allSettled(promises);
     window.initializationStatus.yamlsComplete = true;
     
@@ -81,21 +82,21 @@ window.getInitializationStatus = function() {
 };
 
 /**
- * Get lesson metadata from registry (without loading content)
+ * Get lesson file metadata from registry (without loading content)
  */
-window.getLessonMetadata = function(lessonId) {
-    return lessonRegistry.find(lesson => lesson.id === lessonId);
+window.getLessonFiles = function() {
+    return lessonFiles;
 };
 
 /**
- * Get all lesson metadata from registry
+ * Get all YAML file metadata from registry
  */
-window.getAllLessonMetadata = function() {
-    return lessonRegistry;
+window.getAllYAMLFiles = function() {
+    return allYamlFiles;
 };
 
 // Start loading immediately
-console.log('📥 Starting YAML lesson loading...');
-loadLessons();
+console.log('📥 Starting YAML file loading...');
+loadYAMLs();
 
 console.log('⏱️ YAML loading started - ready for TypeScript');

@@ -33150,6 +33150,7 @@ function getDefaultSession() {
 }
 
 // src/ts/solid/meraBridge.ts
+var AUTH_TIMESTAMP_KEY = "mera_last_auth";
 var MeraBridge = class _MeraBridge {
   constructor() {
     this.session = null;
@@ -33186,62 +33187,91 @@ var MeraBridge = class _MeraBridge {
     console.log("\u{1F309} Mera Bridge initializing...");
     try {
       this.session = getDefaultSession();
+      console.log("\u{1F4CD} Step 1: Got initial session:", {
+        sessionId: this.session.info.sessionId,
+        isLoggedIn: this.session.info.isLoggedIn,
+        webId: this.session.info.webId
+      });
+      console.log("\u{1F4CD} Step 2: Calling handleIncomingRedirect with URL:", window.location.href);
       await this.session.handleIncomingRedirect(window.location.href);
-      if (!this.session.info.webId) {
-        console.error("\u274C Session is logged in but has no webId");
+      console.log("\u{1F4CD} Step 3: handleIncomingRedirect completed");
+      console.log("\u{1F4CD} Step 4: Session info BEFORE re-fetch:", {
+        sessionId: this.session.info.sessionId,
+        isLoggedIn: this.session.info.isLoggedIn,
+        webId: this.session.info.webId
+      });
+      console.log("\u{1F4CD} Step 4.5: Waiting 100ms for session restoration to complete...");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      this.session = getDefaultSession();
+      console.log("\u{1F4CD} Step 5: Session info AFTER re-fetch:", {
+        sessionId: this.session.info.sessionId,
+        isLoggedIn: this.session.info.isLoggedIn,
+        webId: this.session.info.webId
+      });
+      if (this.session.info.isLoggedIn) {
+        this._updateAuthTimestamp();
+        console.log("\u2705 Auth timestamp updated");
+        await this._extractPodUrl();
+        this.initialized = true;
+        console.log("\u{1F309} Mera Bridge initialized successfully");
+        return true;
+      } else {
+        console.log("\u26A0\uFE0F Session not authenticated after all steps");
+        this.initialized = false;
         return false;
       }
-      this.podUrl = this._extractPodUrl(this.session.info.webId);
-      this.initialized = true;
-      console.log("\u2705 Bridge initialized - Pod:", this.podUrl);
-      console.log("\u2705 WebID:", this.session.info.webId);
-      await this._ensureContainer();
-      return true;
     } catch (error) {
-      console.error("\u274C Bridge initialization error:", error);
+      console.error("\u274C Bridge initialization failed:", error);
+      this.initialized = false;
       return false;
     }
   }
   /**
-   * Extract Pod URL from WebID
-   * Example: https://user.solidcommunity.net/profile/card#me → https://user.solidcommunity.net/
+   * Extract Pod URL from authenticated session
    */
-  _extractPodUrl(webId) {
-    try {
-      const url = new URL(webId);
-      return `${url.protocol}//${url.host}`;
-    } catch (error) {
-      console.error("Failed to extract Pod URL from WebID:", webId, error);
-      throw new Error("Invalid WebID format");
+  async _extractPodUrl() {
+    if (!this.session?.info.isLoggedIn) {
+      throw new Error("Cannot extract Pod URL: not authenticated");
     }
+    const webId = this.session.info.webId;
+    if (!webId) {
+      throw new Error("WebID not available in session");
+    }
+    const webIdUrl = new URL(webId);
+    this.podUrl = `${webIdUrl.protocol}//${webIdUrl.host}`;
+    console.log("\u{1F4E6} Pod URL extracted:", this.podUrl);
   }
   /**
-   * Ensure /mera-learn/ container exists in Pod
-   */
-  async _ensureContainer() {
-    if (!this.initialized || !this.podUrl || !this.session) {
-      return;
-    }
-    try {
-      const containerUrl = `${this.podUrl}/mera-learn/`;
-      try {
-        await getSolidDataset(containerUrl, { fetch: this.session.fetch });
-        console.log("\u2705 Container exists:", containerUrl);
-      } catch (error) {
-        console.log("\u{1F4C1} Creating container:", containerUrl);
-        await createContainerAt(containerUrl, { fetch: this.session.fetch });
-        console.log("\u2705 Container created");
-      }
-    } catch (error) {
-      console.warn("\u26A0\uFE0F Failed to ensure container exists:", error);
-    }
-  }
-  /**
-   * Check if bridge is ready for operations
+   * Check if user is authenticated
    */
   async check() {
-    await this.initialize();
-    return this.initialized && this.podUrl !== null;
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.session?.info.isLoggedIn || false;
+  }
+  /**
+   * Logout user and clear auth timestamp
+   */
+  async logout() {
+    if (this.session) {
+      await this.session.logout();
+      this._clearAuthTimestamp();
+      this.initialized = false;
+      console.log("\u{1F6AA} Logged out and cleared auth timestamp");
+    }
+  }
+  /**
+   * Update auth timestamp after successful login or session restoration
+   */
+  _updateAuthTimestamp() {
+    localStorage.setItem(AUTH_TIMESTAMP_KEY, Date.now().toString());
+  }
+  /**
+   * Clear auth timestamp on logout
+   */
+  _clearAuthTimestamp() {
+    localStorage.setItem(AUTH_TIMESTAMP_KEY, "0");
   }
   // ==========================================================================
   // Solid Pod Operations
@@ -33250,27 +33280,44 @@ var MeraBridge = class _MeraBridge {
    * Save data to Solid Pod
    */
   async solidSave(filename, data) {
-    await this.initialize();
-    if (!this.initialized || !this.podUrl || !this.session) {
-      return {
-        success: false,
-        error: "Bridge not initialized - authentication required",
-        errorType: "authentication" /* Authentication */
-      };
-    }
     try {
-      const url = `${this.podUrl}/mera-learn/${filename}`;
-      console.log("\u{1F4BE} Saving to Solid Pod:", url);
+      if (!this.initialized) {
+        await this.initialize();
+      }
+      if (!this.session?.info.isLoggedIn) {
+        return {
+          success: false,
+          error: "Not authenticated",
+          errorType: "authentication" /* Authentication */
+        };
+      }
+      if (!this.podUrl) {
+        return {
+          success: false,
+          error: "Pod URL not available",
+          errorType: "authentication" /* Authentication */
+        };
+      }
+      const containerUrl = `${this.podUrl}/mera-learn/`;
+      try {
+        await createContainerAt(containerUrl, { fetch: this.session.fetch });
+      } catch {
+      }
+      const fileUrl = `${containerUrl}${filename}`;
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
-      await overwriteFile(url, blob, { fetch: this.session.fetch });
-      console.log("\u2705 Solid save successful:", filename);
+      await overwriteFile(fileUrl, blob, {
+        contentType: "application/json",
+        fetch: this.session.fetch
+      });
+      console.log("\u{1F4BE} Saved to Pod:", filename);
       return { success: true, error: null };
     } catch (error) {
-      console.error("\u274C Solid save failed:", filename, error);
+      const errorType = this._classifyError(error);
+      console.error("\u274C Pod save failed:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
-        errorType: this._classifyError(error)
+        errorType
       };
     }
   }
@@ -33278,39 +33325,37 @@ var MeraBridge = class _MeraBridge {
    * Load data from Solid Pod
    */
   async solidLoad(filename) {
-    await this.initialize();
-    if (!this.initialized || !this.podUrl || !this.session) {
-      return {
-        success: false,
-        data: null,
-        error: "Bridge not initialized - authentication required",
-        errorType: "authentication" /* Authentication */
-      };
-    }
     try {
-      const url = `${this.podUrl}/mera-learn/${filename}`;
-      console.log("\u{1F4E5} Loading from Solid Pod:", url);
-      const file = await getFile(url, { fetch: this.session.fetch });
-      const text = await file.text();
-      const data = JSON.parse(text);
-      console.log("\u2705 Solid load successful:", filename);
-      return { success: true, data, error: null };
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("404")) {
-        console.log("\u{1F4C4} File not found in Solid Pod:", filename);
+      if (!this.initialized) {
+        await this.initialize();
+      }
+      if (!this.session?.info.isLoggedIn) {
         return {
           success: false,
-          data: null,
-          error: "File not found",
-          errorType: "not_found" /* NotFound */
+          error: "Not authenticated",
+          errorType: "authentication" /* Authentication */
         };
       }
-      console.error("\u274C Solid load failed:", filename, error);
+      if (!this.podUrl) {
+        return {
+          success: false,
+          error: "Pod URL not available",
+          errorType: "authentication" /* Authentication */
+        };
+      }
+      const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
+      const file = await getFile(fileUrl, { fetch: this.session.fetch });
+      const text = await file.text();
+      const data = JSON.parse(text);
+      console.log("\u{1F4E5} Loaded from Pod:", filename);
+      return { success: true, data, error: null };
+    } catch (error) {
+      const errorType = this._classifyError(error);
+      console.error("\u274C Pod load failed:", error);
       return {
         success: false,
-        data: null,
         error: error instanceof Error ? error.message : "Unknown error",
-        errorType: this._classifyError(error)
+        errorType
       };
     }
   }
@@ -33318,67 +33363,82 @@ var MeraBridge = class _MeraBridge {
    * Delete file from Solid Pod
    */
   async solidDelete(filename) {
-    await this.initialize();
-    if (!this.initialized || !this.podUrl || !this.session) {
-      return {
-        success: false,
-        error: "Bridge not initialized - authentication required",
-        errorType: "authentication" /* Authentication */
-      };
-    }
     try {
-      const url = `${this.podUrl}/mera-learn/${filename}`;
-      console.log("\u{1F5D1}\uFE0F Deleting from Solid Pod:", url);
-      await deleteFile(url, { fetch: this.session.fetch });
-      console.log("\u2705 Solid delete successful:", filename);
+      if (!this.initialized) {
+        await this.initialize();
+      }
+      if (!this.session?.info.isLoggedIn) {
+        return {
+          success: false,
+          error: "Not authenticated",
+          errorType: "authentication" /* Authentication */
+        };
+      }
+      if (!this.podUrl) {
+        return {
+          success: false,
+          error: "Pod URL not available",
+          errorType: "authentication" /* Authentication */
+        };
+      }
+      const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
+      await deleteFile(fileUrl, { fetch: this.session.fetch });
+      console.log("\u{1F5D1}\uFE0F Deleted from Pod:", filename);
       return { success: true, error: null };
     } catch (error) {
-      if (error instanceof Error && error.message.includes("404")) {
-        console.log("\u{1F4C4} File already deleted (404):", filename);
-        return { success: true, error: null };
-      }
-      console.error("\u274C Solid delete failed:", filename, error);
+      const errorType = this._classifyError(error);
+      console.error("\u274C Pod delete failed:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
-        errorType: this._classifyError(error)
+        errorType
       };
     }
   }
   /**
-   * List files in Solid Pod /mera-learn/ container
+   * List files in Solid Pod mera-learn container
+   * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.sp.*.json")
    */
   async solidList(pattern) {
-    await this.initialize();
-    if (!this.initialized || !this.podUrl || !this.session) {
-      return {
-        success: false,
-        data: [],
-        error: "Bridge not initialized - authentication required",
-        errorType: "authentication" /* Authentication */
-      };
-    }
     try {
+      if (!this.initialized) {
+        await this.initialize();
+      }
+      if (!this.session?.info.isLoggedIn) {
+        return {
+          success: false,
+          error: "Not authenticated",
+          errorType: "authentication" /* Authentication */
+        };
+      }
+      if (!this.podUrl) {
+        return {
+          success: false,
+          error: "Pod URL not available",
+          errorType: "authentication" /* Authentication */
+        };
+      }
       const containerUrl = `${this.podUrl}/mera-learn/`;
-      console.log("\u{1F4CB} Listing Solid Pod files:", containerUrl);
-      const dataset = await getSolidDataset(containerUrl, {
-        fetch: this.session.fetch
-      });
-      const urls = getContainedResourceUrlAll(dataset);
-      const filenames = urls.map((url) => {
+      const dataset = await getSolidDataset(containerUrl, { fetch: this.session.fetch });
+      const fileUrls = getContainedResourceUrlAll(dataset);
+      const filenames = fileUrls.map((url) => {
         const parts = url.split("/");
         return parts[parts.length - 1];
+      }).filter((filename) => {
+        if (pattern) {
+          return this._matchesPattern(filename, pattern);
+        }
+        return true;
       });
-      const filtered = pattern ? filenames.filter((name) => name.includes(pattern)) : filenames;
-      console.log(`\u2705 Found ${filtered.length} files in Solid Pod`);
-      return { success: true, data: filtered, error: null };
+      console.log("\u{1F4CB} Listed Pod files:", filenames.length);
+      return { success: true, data: filenames, error: null };
     } catch (error) {
-      console.error("\u274C Solid list failed:", error);
+      const errorType = this._classifyError(error);
+      console.error("\u274C Pod list failed:", error);
       return {
         success: false,
-        data: [],
         error: error instanceof Error ? error.message : "Unknown error",
-        errorType: this._classifyError(error)
+        errorType
       };
     }
   }
@@ -33392,10 +33452,10 @@ var MeraBridge = class _MeraBridge {
     try {
       const key = `mera_${filename}`;
       localStorage.setItem(key, JSON.stringify(data));
-      console.log("\u{1F4BE} Local save successful:", filename);
+      console.log("\u{1F4BE} Saved to localStorage:", filename);
       return { success: true, error: null };
     } catch (error) {
-      console.error("\u274C Local save failed:", filename, error);
+      console.error("\u274C localStorage save failed:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -33409,25 +33469,21 @@ var MeraBridge = class _MeraBridge {
   async localLoad(filename) {
     try {
       const key = `mera_${filename}`;
-      const data = localStorage.getItem(key);
-      if (data) {
-        const parsed = JSON.parse(data);
-        console.log("\u{1F4E5} Local load successful:", filename);
-        return { success: true, data: parsed, error: null };
-      } else {
-        console.log("\u{1F4C4} File not found in local storage:", filename);
+      const item = localStorage.getItem(key);
+      if (!item) {
         return {
           success: false,
-          data: null,
           error: "File not found",
           errorType: "not_found" /* NotFound */
         };
       }
+      const data = JSON.parse(item);
+      console.log("\u{1F4E5} Loaded from localStorage:", filename);
+      return { success: true, data, error: null };
     } catch (error) {
-      console.error("\u274C Local load failed:", filename, error);
+      console.error("\u274C localStorage load failed:", error);
       return {
         success: false,
-        data: null,
         error: error instanceof Error ? error.message : "Unknown error",
         errorType: "storage" /* Storage */
       };
@@ -33440,10 +33496,10 @@ var MeraBridge = class _MeraBridge {
     try {
       const key = `mera_${filename}`;
       localStorage.removeItem(key);
-      console.log("\u{1F5D1}\uFE0F Local delete successful:", filename);
+      console.log("\u{1F5D1}\uFE0F Deleted from localStorage:", filename);
       return { success: true, error: null };
     } catch (error) {
-      console.error("\u274C Local delete failed:", filename, error);
+      console.error("\u274C localStorage delete failed:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -33452,29 +33508,62 @@ var MeraBridge = class _MeraBridge {
     }
   }
   /**
-   * List files in localStorage matching mera_ prefix
+   * List files in localStorage with mera_ prefix
+   * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.lofp.*.json")
    */
   async localList(pattern) {
     try {
-      const allKeys = Object.keys(localStorage);
-      const meraKeys = allKeys.filter((key) => key.startsWith("mera_"));
-      const filenames = meraKeys.map((key) => key.replace("mera_", ""));
-      const filtered = pattern ? filenames.filter((name) => name.includes(pattern)) : filenames;
-      console.log(`\u2705 Found ${filtered.length} files in localStorage`);
-      return { success: true, data: filtered, error: null };
+      const filenames = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("mera_") && key !== AUTH_TIMESTAMP_KEY) {
+          const filename = key.substring(5);
+          if (pattern) {
+            if (this._matchesPattern(filename, pattern)) {
+              filenames.push(filename);
+            }
+          } else {
+            filenames.push(filename);
+          }
+        }
+      }
+      console.log("\u{1F4CB} Listed localStorage files:", filenames.length);
+      return { success: true, data: filenames, error: null };
     } catch (error) {
-      console.error("\u274C Local list failed:", error);
+      console.error("\u274C localStorage list failed:", error);
       return {
         success: false,
-        data: [],
         error: error instanceof Error ? error.message : "Unknown error",
         errorType: "storage" /* Storage */
       };
     }
   }
+  /**
+   * Clear all Mera data from localStorage (except auth timestamp)
+   */
+  clearLocalData() {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith("mera_") && key !== AUTH_TIMESTAMP_KEY) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+    console.log("\u{1F9F9} Cleared local data:", keysToRemove.length, "files");
+  }
   // ==========================================================================
   // Utility Methods
   // ==========================================================================
+  /**
+   * Simple glob pattern matcher
+   * Supports * for any characters
+   */
+  _matchesPattern(filename, pattern) {
+    const regexPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+    const regex = new RegExp(`^${regexPattern}$`);
+    return regex.test(filename);
+  }
   /**
    * Classify error into BridgeErrorType
    */
@@ -33508,19 +33597,23 @@ var MeraBridge = class _MeraBridge {
     };
   }
   /**
-   * Get age of stored session in seconds
+   * Get age of stored auth timestamp in seconds
    */
   _getSessionAge() {
     try {
-      const stored = localStorage.getItem("mera_solid_session");
-      if (!stored) return null;
-      const sessionData = JSON.parse(stored);
-      return Math.floor((Date.now() - sessionData.timestamp) / 1e3);
+      const timestamp = localStorage.getItem(AUTH_TIMESTAMP_KEY);
+      if (!timestamp || timestamp === "0") {
+        return null;
+      }
+      return Math.floor((Date.now() - parseInt(timestamp)) / 1e3);
     } catch {
       return null;
     }
   }
 };
+var bridgeInstance = MeraBridge.getInstance();
+window.meraBridge = bridgeInstance;
+window.MeraBridge = MeraBridge;
 
 // src/ts/initialization/bootstrap.ts
 var MAX_ATTEMPTS = 50;

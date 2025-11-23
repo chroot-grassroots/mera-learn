@@ -38,26 +38,21 @@ class NavigationController {
     }
   }
 
-  async setupLearningLinks(): Promise<void> {
-    try {
-      // Check authentication (includes session restoration)
-      const isAuthenticated = await checkAuthentication();
-      
-      const text = isAuthenticated ? 'Back to Learning' : 'Start Learning';
-      const href = isAuthenticated ? '/learn/' : '/hello/';
+  setupLearningLinks(): void {
+    const isAuthenticated = checkAuthentication();
+    
+    const text = isAuthenticated ? 'Back to Learning' : 'Start Learning';
+    const href = isAuthenticated ? '/learn/' : '/hello/';
 
-      // Update all learning links
-      const linkSelectors = ['a[href*="learn"]', '#mobile-learning-link'];
-      linkSelectors.forEach((selector) => {
-        const link = document.querySelector(selector);
-        if (link) {
-          link.textContent = text;
-          (link as HTMLAnchorElement).href = href;
-        }
-      });
-    } catch (error) {
-      console.log('Learning links setup failed:', error);
-    }
+    // Update all learning links
+    const linkSelectors = ['#desktop-learning-link', '#mobile-learning-link'];
+    linkSelectors.forEach((selector) => {
+      const link = document.querySelector(selector);
+      if (link) {
+        link.textContent = text;
+        (link as HTMLAnchorElement).href = href;
+      }
+    });
   }
 }
 

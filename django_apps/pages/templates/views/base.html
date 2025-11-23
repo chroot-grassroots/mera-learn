@@ -1,19 +1,41 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Mera - Digital Security Education{% endblock %}</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      {% block title %}Mera - Digital Security Education{% endblock %}
+    </title>
 
     <!-- Favicon Implementation -->
-    <link rel="icon" href="{% static 'images/favicon/mera_favicon.svg' %}" type="image/svg+xml">
-    <link rel="icon" href="{% static 'images/favicon/mera_favicon_32.png' %}" type="image/png" sizes="32x32">
-    <link rel="icon" href="{% static 'images/favicon/mera_favicon_16.png' %}" type="image/png" sizes="16x16">
-    <link rel="apple-touch-icon" href="{% static 'images/favicon/mera_favicon_180.png' %}" sizes="180x180">
-    <link rel="manifest" href="{% static 'images/favicon/site.webmanifest' %}">
-    <meta name="theme-color" content="#0f1a0e">
+    <link
+      rel="icon"
+      href="{% static 'images/favicon/mera_favicon.svg' %}"
+      type="image/svg+xml"
+    />
+    <link
+      rel="icon"
+      href="{% static 'images/favicon/mera_favicon_32.png' %}"
+      type="image/png"
+      sizes="32x32"
+    />
+    <link
+      rel="icon"
+      href="{% static 'images/favicon/mera_favicon_16.png' %}"
+      type="image/png"
+      sizes="16x16"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="{% static 'images/favicon/mera_favicon_180.png' %}"
+      sizes="180x180"
+    />
+    <link
+      rel="manifest"
+      href="{% static 'images/favicon/site.webmanifest' %}"
+    />
+    <meta name="theme-color" content="#0f1a0e" />
 
     <!-- TODO: Add Subresource Integrity hash for security for all external libraries -->
 
@@ -22,176 +44,233 @@
 
     <!-- Custom Color -->
     <script>
-        tailwind.config = {
-            darkMode: 'media',
-            theme: {
-                extend: {
-                    colors: {
-                        'mera-light': '#84e67b',
-                        'mera-dark': '#0f1a0e'
-                    }
-                }
-            }
-        }
+      tailwind.config = {
+        darkMode: "media",
+        theme: {
+          extend: {
+            colors: {
+              "mera-light": "#84e67b",
+              "mera-dark": "#0f1a0e",
+            },
+          },
+        },
+      };
     </script>
 
     {% block extra_head %}{% endblock %}
 
     <!-- Unsplash Protest Photo for Top Bar -->
     <style>
+      .hero-background {
+        background-color: black;
+      }
+
+      @media (min-width: 768px) {
         .hero-background {
-            background-color: black;
+          background-image: url("https://images.unsplash.com/photo-1591625991934-ce6df113294d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&h=200&q=80&crop=entropy");
+          background-size: cover;
+          background-position: center;
         }
+      }
 
-        @media (min-width: 768px) {
-            .hero-background {
-                background-image: url('https://images.unsplash.com/photo-1591625991934-ce6df113294d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&h=200&q=80&crop=entropy');
-                background-size: cover;
-                background-position: center;
-            }
-        }
-
-        .white-emoji {
-            filter: grayscale(1) brightness(.2) invert(1);
-        }
+      .white-emoji {
+        filter: grayscale(1) brightness(0.2) invert(1);
+      }
     </style>
-</head>
+  </head>
 
-<body class="bg-mera-light dark:bg-mera-dark min-h-screen">
-
+  <body class="bg-mera-light dark:bg-mera-dark min-h-screen">
     <!-- Hero Section -->
     <div class="hero-background text-gray-300 p-4 relative">
-        <div class="hidden md:block absolute inset-0 bg-gradient-to-r from-black/30 to-black/70"></div>
+      <div
+        class="hidden md:block absolute inset-0 bg-gradient-to-r from-black/30 to-black/70"
+      ></div>
 
-        <div class="container mx-auto relative z-10">
-            <div class="flex items-center justify-between">
-                <!-- Logo (always visible) -->
-                <h1 class="text-xl md:text-2xl font-bold drop-shadow-lg">
-                    [<span class="white-emoji">&#x1F331;</span>]: Mera
-                </h1>
+      <div class="container mx-auto relative z-10">
+        <div class="flex items-center justify-between">
+          <!-- Logo (always visible) -->
+          <h1 class="text-xl md:text-2xl font-bold drop-shadow-lg">
+            [<span class="white-emoji">&#x1F331;</span>]: Mera
+          </h1>
 
-                <!-- Mobile: CTA + Hamburger -->
-                <div class="md:hidden flex items-center space-x-4">
-
-                    <button id="mobile-menu-toggle" class="text-gray-300">
-                        <svg id="hamburger-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 6h16M4 12h16M4 18h16"></path>
-                        </svg>
-                        <svg id="close-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Desktop: Keep tagline -->
-            <p class="hidden md:block text-gray-300 font-bold drop-shadow-lg mt-3">Digital security education for
-                activists</p>
+          <!-- Mobile: CTA + Hamburger -->
+          <div class="md:hidden flex items-center space-x-4">
+            <button id="mobile-menu-toggle" class="text-gray-300">
+              <svg
+                id="hamburger-icon"
+                class="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                ></path>
+              </svg>
+              <svg
+                id="close-icon"
+                class="w-6 h-6 hidden"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                ></path>
+              </svg>
+            </button>
+          </div>
         </div>
+
+        <!-- Desktop: Keep tagline -->
+        <p class="hidden md:block text-gray-300 font-bold drop-shadow-lg mt-3">
+          Digital security education for activists
+        </p>
+      </div>
     </div>
 
-    <div id="mobile-menu" class="hidden md:hidden bg-black border-t border-white">
-        <div class="container mx-auto px-4 py-6">
-            <div class="flex flex-col">
-                <a href="{% url 'pages:home' %}"
-                    class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
-                    Home
-                </a>
-                <a href="{% url 'pages:about' %}"
-                    class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
-                    About
-                </a>
-                <a href="{% url 'pages:privacy' %}"
-                    class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
-                    Privacy
-                </a>
-                <a href="{% url 'pages:resources' %}"
-                    class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
-                    Resources
-                </a>
-                <a href="{% url 'pages:contribute' %}"
-                    class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
-                    Contribute
-                </a>
-                <a href="{% url 'pages:contact' %}"
-                    class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600">
-                    Contact
-                </a>
-                <a href="{% url 'pages:learn' %}" id="mobile-learning-link"
-                    class="text-red-400 hover:text-red-300 font-bold py-3">
-                    Start Learning
-                </a>
-            </div>
+    <div
+      id="mobile-menu"
+      class="hidden md:hidden bg-black border-t border-white"
+    >
+      <div class="container mx-auto px-4 py-6">
+        <div class="flex flex-col">
+          <a
+            href="{% url 'pages:home' %}"
+            class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600"
+          >
+            Home
+          </a>
+          <a
+            href="{% url 'pages:about' %}"
+            class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600"
+          >
+            About
+          </a>
+          <a
+            href="{% url 'pages:privacy' %}"
+            class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600"
+          >
+            Privacy
+          </a>
+          <a
+            href="{% url 'pages:resources' %}"
+            class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600"
+          >
+            Resources
+          </a>
+          <a
+            href="{% url 'pages:contribute' %}"
+            class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600"
+          >
+            Contribute
+          </a>
+          <a
+            href="{% url 'pages:contact' %}"
+            class="text-white hover:text-gray-300 font-bold py-3 border-b border-gray-600"
+          >
+            Contact
+          </a>
+          <a
+            href="{% url 'pages:learn' %}"
+            id="mobile-learning-link"
+            class="text-red-400 hover:text-red-300 font-bold py-3"
+          >
+            Start Learning
+          </a>
         </div>
+      </div>
     </div>
 
     <div class="bg-mera-light dark:bg-mera-dark">
-        <div class="container mx-auto px-4">
-
-            {% if page_mode == 'information' %}
-            <!-- Information Mode: Full navigation menu -->
-            <div class="hidden md:flex items-center justify-between py-1">
-                <div class="flex space-x-8 py-3">
-                    <a href="{% url 'pages:home' %}"
-                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Home</a>
-                    <a href="{% url 'pages:about' %}"
-                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">About</a>
-                    <a href="{% url 'pages:privacy' %}"
-                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Privacy</a>
-                    <a href="{% url 'pages:resources' %}"
-                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Resources</a>
-                    <a href="{% url 'pages:contribute' %}"
-                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Contribute</a>
-                    <a href="{% url 'pages:contact' %}"
-                        class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold">Contact</a>
-                    <a href="{% url 'pages:learn' %}"
-                        class="text-red-800 dark:text-red-300 hover:text-red-900 dark:hover:text-red-200 font-bold">Start
-                        Learning</a>
-
-
-                </div>
-            </div>
-
-            {% elif page_mode == 'auth' %}
-            <!-- Auth Mode: Minimal navigation -->
-            <div class="py-4 text-center">
-                <p class="text-gray-800 dark:text-gray-300">Setting up your secure learning environment...</p>
-            </div>
-
-            {% elif page_mode == 'learning' %}
-            <!-- Learning Mode: Just exit button -->
-            <div class="py-4 flex justify-end">
-                <a href="{% url 'pages:home' %}"
-                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
-                    ← Back to Main Site
-                </a>
-            </div>
-
-            {% else %}
-            <!-- Default fallback -->
-            <div class="py-4 flex justify-center">
-                <a href="{% url 'pages:home' %}" class="text-green-600 hover:text-green-700 font-medium">
-                    Return to Home
-                </a>
-            </div>
-            {% endif %}
-
+      <div class="container mx-auto px-4">
+        {% if page_mode == 'information' %}
+        <!-- Information Mode: Full navigation menu -->
+        <div class="hidden md:flex items-center justify-between py-1">
+          <div class="flex space-x-8 py-3">
+            <a
+              href="{% url 'pages:home' %}"
+              class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold"
+              >Home</a
+            >
+            <a
+              href="{% url 'pages:about' %}"
+              class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold"
+              >About</a
+            >
+            <a
+              href="{% url 'pages:privacy' %}"
+              class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold"
+              >Privacy</a
+            >
+            <a
+              href="{% url 'pages:resources' %}"
+              class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold"
+              >Resources</a
+            >
+            <a
+              href="{% url 'pages:contribute' %}"
+              class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold"
+              >Contribute</a
+            >
+            <a
+              href="{% url 'pages:contact' %}"
+              class="text-gray-800 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold"
+              >Contact</a
+            >
+            <a
+              href="{% url 'pages:learn' %}"
+              id="desktop-learning-link"
+              class="text-red-800 dark:text-red-300 hover:text-red-900 dark:hover:text-red-200 font-bold"
+              >Start Learning</a
+            >
+          </div>
         </div>
+
+        {% elif page_mode == 'auth' %}
+        <!-- Auth Mode: Minimal navigation -->
+        <div class="py-4 text-center">
+          <p class="text-gray-800 dark:text-gray-300">
+            Setting up your secure learning environment...
+          </p>
+        </div>
+
+        {% elif page_mode == 'learning' %}
+        <!-- Learning Mode: Just exit button -->
+        <div class="py-4 flex justify-end">
+          <a
+            href="{% url 'pages:home' %}"
+            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center"
+          >
+            ← Back to Main Site
+          </a>
+        </div>
+
+        {% else %}
+        <!-- Default fallback -->
+        <div class="py-4 flex justify-center">
+          <a
+            href="{% url 'pages:home' %}"
+            class="text-green-600 hover:text-green-700 font-medium"
+          >
+            Return to Home
+          </a>
+        </div>
+        {% endif %}
+      </div>
     </div>
 
     <!-- Flexible placeholder for child templates-->
-    <main class="py-8">
-        {% block content %}
-        {% endblock %}
-    </main>
+    <main class="py-8">{% block content %} {% endblock %}</main>
 
     <!-- Load navigation module -->
 
     <script type="module" src="{% static 'web/site-menu.js' %}"></script>
-    
-</body>
-
+  </body>
 </html>

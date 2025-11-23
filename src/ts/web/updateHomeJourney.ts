@@ -1,32 +1,33 @@
 /**
- * updateHomeJourney.ts - Dynamic journey button behavior
- * Shows appropriate buttons based on authentication state
+ * updateHomeJourney.ts - Dynamic homepage journey buttons
+ * Updates CTA buttons based on authentication state
  */
 
 import { checkAuthentication } from './shared-auth.js';
 
-async function updateJourneyButtons(): Promise<void> {
-  const unauthenticatedButtons = document.querySelector('#unauthenticated-buttons');
-  const authenticatedButtons = document.querySelector('#authenticated-buttons');
-
-  if (!unauthenticatedButtons || !authenticatedButtons) {
-    console.log('Journey button elements not found');
-    return;
-  }
-
-  // Check authentication (includes session restoration)
-  const isAuthenticated = await checkAuthentication();
-
+function updateJourneyButtons(): void {
+  const isAuthenticated = checkAuthentication();
+  
+  const unauthenticatedButtons = document.getElementById('unauthenticated-buttons');
+  const authenticatedButtons = document.getElementById('authenticated-buttons');
+  
   if (isAuthenticated) {
-    unauthenticatedButtons.classList.add('hidden');
-    authenticatedButtons.classList.remove('hidden');
+    // Show authenticated "Continue Your Journey" button
+    if (unauthenticatedButtons) {
+      unauthenticatedButtons.classList.add('hidden');
+    }
+    if (authenticatedButtons) {
+      authenticatedButtons.classList.remove('hidden');
+    }
   } else {
-    unauthenticatedButtons.classList.remove('hidden');
-    authenticatedButtons.classList.add('hidden');
+    // Show unauthenticated "New Users / Returning Users" buttons
+    if (unauthenticatedButtons) {
+      unauthenticatedButtons.classList.remove('hidden');
+    }
+    if (authenticatedButtons) {
+      authenticatedButtons.classList.add('hidden');
+    }
   }
 }
 
-// Run when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  updateJourneyButtons();
-});
+document.addEventListener('DOMContentLoaded', updateJourneyButtons);

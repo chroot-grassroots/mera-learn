@@ -1,45 +1,34 @@
 // src/ts/web/shared-auth.ts
-async function waitForSolidLibraries(timeoutMs = 5e3) {
-  const startTime = Date.now();
-  while (!window.solidClientAuthentication) {
-    if (Date.now() - startTime > timeoutMs) {
-      throw new Error("Solid libraries failed to load");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}
-async function checkAuthentication() {
-  try {
-    await waitForSolidLibraries();
-    if (!window.solidClientAuthentication) {
-      return false;
-    }
-    const session = window.solidClientAuthentication.getDefaultSession();
-    await session.handleIncomingRedirect(window.location.href);
-    return session.info.isLoggedIn;
-  } catch (error) {
-    console.log("Auth check failed:", error);
+var AUTH_TIMESTAMP_KEY = "mera_last_auth";
+var SESSION_TTL_DAYS = 14;
+function checkAuthentication() {
+  const lastAuth = localStorage.getItem(AUTH_TIMESTAMP_KEY);
+  if (!lastAuth || lastAuth === "0") {
     return false;
   }
+  const daysSince = (Date.now() - parseInt(lastAuth)) / (1e3 * 60 * 60 * 24);
+  return daysSince < SESSION_TTL_DAYS;
 }
 
 // src/ts/web/updateHomeJourney.ts
-async function updateJourneyButtons() {
-  const unauthenticatedButtons = document.querySelector("#unauthenticated-buttons");
-  const authenticatedButtons = document.querySelector("#authenticated-buttons");
-  if (!unauthenticatedButtons || !authenticatedButtons) {
-    console.log("Journey button elements not found");
-    return;
-  }
-  const isAuthenticated = await checkAuthentication();
+function updateJourneyButtons() {
+  const isAuthenticated = checkAuthentication();
+  const unauthenticatedButtons = document.getElementById("unauthenticated-buttons");
+  const authenticatedButtons = document.getElementById("authenticated-buttons");
   if (isAuthenticated) {
-    unauthenticatedButtons.classList.add("hidden");
-    authenticatedButtons.classList.remove("hidden");
+    if (unauthenticatedButtons) {
+      unauthenticatedButtons.classList.add("hidden");
+    }
+    if (authenticatedButtons) {
+      authenticatedButtons.classList.remove("hidden");
+    }
   } else {
-    unauthenticatedButtons.classList.remove("hidden");
-    authenticatedButtons.classList.add("hidden");
+    if (unauthenticatedButtons) {
+      unauthenticatedButtons.classList.remove("hidden");
+    }
+    if (authenticatedButtons) {
+      authenticatedButtons.classList.add("hidden");
+    }
   }
 }
-document.addEventListener("DOMContentLoaded", () => {
-  updateJourneyButtons();
-});
+document.addEventListener("DOMContentLoaded", updateJourneyButtons);

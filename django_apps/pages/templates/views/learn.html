@@ -5,14 +5,27 @@
 
 {% block extra_head %}
 
+<!-- DEBUG: Check URL BEFORE anything loads -->
+<script>
+  console.log('🔍 IMMEDIATE URL CHECK:', window.location.href);
+  console.log('🔍 Has OAuth params:', window.location.search.includes('code='));
+</script>
+
 <!-- Fire YAML requests immediately - before anything else -->
 <script type="module" src="/static/js/yaml-loader.js"></script>
 
 <!-- Solid Pod Client Libraries -->
 <script src="{% static 'js/solid-bundle.js' %}"></script>
 
+<!-- DEBUG: Check after solid-bundle loads -->
+<script>
+  console.log('🔍 AFTER solid-bundle URL:', window.location.href);
+  console.log('🔍 Solid session:', window.solidClientAuthentication?.getDefaultSession()?.info);
+</script>
+
 <!-- Mera Bridge (loads before main app) -->
 <script type="module" src="{% static 'js/mera-bridge.js' %}"></script>
+
 {% endblock %}
 
 {% block content %}
@@ -92,7 +105,7 @@
             </div>
         </div>
     </div>
-
+</div>
 
 <!-- Start Mera App -->
 <script type="module" src="{% static 'js/mera-app.js' %}"></script>

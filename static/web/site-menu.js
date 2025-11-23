@@ -1,26 +1,13 @@
 // src/ts/web/shared-auth.ts
-async function waitForSolidLibraries(timeoutMs = 5e3) {
-  const startTime = Date.now();
-  while (!window.solidClientAuthentication) {
-    if (Date.now() - startTime > timeoutMs) {
-      throw new Error("Solid libraries failed to load");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}
-async function checkAuthentication() {
-  try {
-    await waitForSolidLibraries();
-    if (!window.solidClientAuthentication) {
-      return false;
-    }
-    const session = window.solidClientAuthentication.getDefaultSession();
-    await session.handleIncomingRedirect(window.location.href);
-    return session.info.isLoggedIn;
-  } catch (error) {
-    console.log("Auth check failed:", error);
+var AUTH_TIMESTAMP_KEY = "mera_last_auth";
+var SESSION_TTL_DAYS = 14;
+function checkAuthentication() {
+  const lastAuth = localStorage.getItem(AUTH_TIMESTAMP_KEY);
+  if (!lastAuth || lastAuth === "0") {
     return false;
   }
+  const daysSince = (Date.now() - parseInt(lastAuth)) / (1e3 * 60 * 60 * 24);
+  return daysSince < SESSION_TTL_DAYS;
 }
 
 // src/ts/web/siteMenu.ts
@@ -52,22 +39,18 @@ var NavigationController = class {
       }
     }
   }
-  async setupLearningLinks() {
-    try {
-      const isAuthenticated = await checkAuthentication();
-      const text = isAuthenticated ? "Back to Learning" : "Start Learning";
-      const href = isAuthenticated ? "/learn/" : "/hello/";
-      const linkSelectors = ['a[href*="learn"]', "#mobile-learning-link"];
-      linkSelectors.forEach((selector) => {
-        const link = document.querySelector(selector);
-        if (link) {
-          link.textContent = text;
-          link.href = href;
-        }
-      });
-    } catch (error) {
-      console.log("Learning links setup failed:", error);
-    }
+  setupLearningLinks() {
+    const isAuthenticated = checkAuthentication();
+    const text = isAuthenticated ? "Back to Learning" : "Start Learning";
+    const href = isAuthenticated ? "/learn/" : "/hello/";
+    const linkSelectors = ["#desktop-learning-link", "#mobile-learning-link"];
+    linkSelectors.forEach((selector) => {
+      const link = document.querySelector(selector);
+      if (link) {
+        link.textContent = text;
+        link.href = href;
+      }
+    });
   }
 };
 document.addEventListener("DOMContentLoaded", () => {

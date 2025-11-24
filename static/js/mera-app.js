@@ -33674,10 +33674,40 @@ async function startBootstrap() {
     }
   }
   if (solidSessionReady) {
+    await checkClockSkew();
     continueToNextModule();
   } else {
     console.log("\u274C Solid pod not connected. Authentication required.");
     noSolidConnection();
+  }
+}
+async function checkClockSkew() {
+  try {
+    const response = await fetch("/static/web/update-home-journey.js", {
+      method: "HEAD",
+      cache: "no-store"
+      // Ensure fresh response with current Date header
+    });
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status} - cannot verify clock`);
+    }
+    const serverDateHeader = response.headers.get("Date");
+    if (!serverDateHeader) {
+      throw new Error("No Date header in server response - cannot verify clock");
+    }
+    const serverTime = new Date(serverDateHeader).getTime();
+    const clientTime = Date.now();
+    const skewMs = Math.abs(serverTime - clientTime);
+    if (skewMs > 1e4) {
+      const skewSeconds = Math.round(skewMs / 1e3);
+      throw new Error(
+        `Clock skew detected: ${skewSeconds} seconds. Please check your device time settings.`
+      );
+    }
+    console.log(`\u2705 Clock check passed (skew: ${skewMs}ms)`);
+  } catch (error) {
+    const message2 = error instanceof Error ? error.message : "Unknown error during clock check";
+    throw new Error(`Clock verification failed: ${message2}`);
   }
 }
 function continueToNextModule() {

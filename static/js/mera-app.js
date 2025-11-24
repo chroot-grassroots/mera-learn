@@ -33150,7 +33150,6 @@ function getDefaultSession() {
 }
 
 // src/ts/solid/meraBridge.ts
-var AUTH_TIMESTAMP_KEY = "mera_last_auth";
 var MeraBridge = class _MeraBridge {
   constructor() {
     this.session = null;
@@ -33175,6 +33174,11 @@ var MeraBridge = class _MeraBridge {
   // ==========================================================================
   /**
    * Initialize bridge - ensures session is ready and Pod URL is extracted
+   * 
+   * Trusts Solid Client's built-in persistence:
+   * - getDefaultSession() auto-restores from localStorage
+   * - handleIncomingRedirect() handles both OAuth callbacks AND restoration
+   * - No manual timestamp tracking needed
    */
   async initialize() {
     if (this.initializationPromise) {
@@ -33187,36 +33191,31 @@ var MeraBridge = class _MeraBridge {
     console.log("\u{1F309} Mera Bridge initializing...");
     try {
       this.session = getDefaultSession();
-      console.log("\u{1F4CD} Step 1: Got initial session:", {
+      console.log("\u{1F4CD} Step 1: Initial session check:", {
         sessionId: this.session.info.sessionId,
         isLoggedIn: this.session.info.isLoggedIn,
         webId: this.session.info.webId
       });
-      console.log("\u{1F4CD} Step 2: Calling handleIncomingRedirect with URL:", window.location.href);
-      await this.session.handleIncomingRedirect(window.location.href);
+      console.log("\u{1F4CD} Step 2: Calling handleIncomingRedirect...");
+      await this.session.handleIncomingRedirect({
+        url: window.location.href,
+        restorePreviousSession: true
+        // CRITICAL: tells Solid to check localStorage
+      });
       console.log("\u{1F4CD} Step 3: handleIncomingRedirect completed");
-      console.log("\u{1F4CD} Step 4: Session info BEFORE re-fetch:", {
-        sessionId: this.session.info.sessionId,
-        isLoggedIn: this.session.info.isLoggedIn,
-        webId: this.session.info.webId
-      });
-      console.log("\u{1F4CD} Step 4.5: Waiting 100ms for session restoration to complete...");
-      await new Promise((resolve) => setTimeout(resolve, 100));
       this.session = getDefaultSession();
-      console.log("\u{1F4CD} Step 5: Session info AFTER re-fetch:", {
+      console.log("\u{1F4CD} Step 4: Session after handleIncomingRedirect:", {
         sessionId: this.session.info.sessionId,
         isLoggedIn: this.session.info.isLoggedIn,
         webId: this.session.info.webId
       });
       if (this.session.info.isLoggedIn) {
-        this._updateAuthTimestamp();
-        console.log("\u2705 Auth timestamp updated");
+        console.log("\u2705 User authenticated");
         await this._extractPodUrl();
         this.initialized = true;
-        console.log("\u{1F309} Mera Bridge initialized successfully");
         return true;
       } else {
-        console.log("\u26A0\uFE0F Session not authenticated after all steps");
+        console.log("\u26A0\uFE0F User not authenticated");
         this.initialized = false;
         return false;
       }
@@ -33243,6 +33242,7 @@ var MeraBridge = class _MeraBridge {
   }
   /**
    * Check if user is authenticated
+   * Trusts Solid Client's session state
    */
   async check() {
     if (!this.initialized) {
@@ -33251,27 +33251,126 @@ var MeraBridge = class _MeraBridge {
     return this.session?.info.isLoggedIn || false;
   }
   /**
-   * Logout user and clear auth timestamp
+   * Logout user
+   * Solid Client handles clearing its own localStorage
    */
   async logout() {
     if (this.session) {
       await this.session.logout();
-      this._clearAuthTimestamp();
       this.initialized = false;
-      console.log("\u{1F6AA} Logged out and cleared auth timestamp");
+      console.log("\u{1F6AA} Logged out");
+    }
+  }
+  // ==========================================================================
+  // Local Storage Operations
+  // ==========================================================================
+  /**
+   * Save data to localStorage
+   */
+  async localSave(filename, data) {
+    try {
+      const key = `mera_${filename}`;
+      localStorage.setItem(key, JSON.stringify(data));
+      console.log("\u{1F4BE} Saved to localStorage:", filename);
+      return { success: true, error: null };
+    } catch (error) {
+      console.error("\u274C localStorage save failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        errorType: "storage" /* Storage */
+      };
     }
   }
   /**
-   * Update auth timestamp after successful login or session restoration
+   * Load data from localStorage
    */
-  _updateAuthTimestamp() {
-    localStorage.setItem(AUTH_TIMESTAMP_KEY, Date.now().toString());
+  async localLoad(filename) {
+    try {
+      const key = `mera_${filename}`;
+      const item = localStorage.getItem(key);
+      if (!item) {
+        return {
+          success: false,
+          error: "File not found",
+          errorType: "not_found" /* NotFound */
+        };
+      }
+      const data = JSON.parse(item);
+      console.log("\u{1F4E5} Loaded from localStorage:", filename);
+      return { success: true, data, error: null };
+    } catch (error) {
+      console.error("\u274C localStorage load failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        errorType: "storage" /* Storage */
+      };
+    }
   }
   /**
-   * Clear auth timestamp on logout
+   * Delete file from localStorage
    */
-  _clearAuthTimestamp() {
-    localStorage.setItem(AUTH_TIMESTAMP_KEY, "0");
+  async localDelete(filename) {
+    try {
+      const key = `mera_${filename}`;
+      localStorage.removeItem(key);
+      console.log("\u{1F5D1}\uFE0F Deleted from localStorage:", filename);
+      return { success: true, error: null };
+    } catch (error) {
+      console.error("\u274C localStorage delete failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        errorType: "storage" /* Storage */
+      };
+    }
+  }
+  /**
+   * List files in localStorage with mera_ prefix
+   * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.lofp.*.json")
+   */
+  async localList(pattern) {
+    try {
+      const filenames = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("mera_")) {
+          const filename = key.substring(5);
+          if (pattern) {
+            if (this._matchesPattern(filename, pattern)) {
+              filenames.push(filename);
+            }
+          } else {
+            filenames.push(filename);
+          }
+        }
+      }
+      console.log("\u{1F4CB} Listed localStorage files:", filenames.length);
+      return { success: true, data: filenames, error: null };
+    } catch (error) {
+      console.error("\u274C localStorage list failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        errorType: "storage" /* Storage */
+      };
+    }
+  }
+  /**
+   * Clear all Mera data from localStorage
+   * Does NOT touch Solid Client's authentication data
+   */
+  clearLocalData() {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith("mera_")) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+    console.log("\u{1F9F9} Cleared local data:", keysToRemove.length, "files");
   }
   // ==========================================================================
   // Solid Pod Operations
@@ -33443,116 +33542,6 @@ var MeraBridge = class _MeraBridge {
     }
   }
   // ==========================================================================
-  // Local Storage Operations
-  // ==========================================================================
-  /**
-   * Save data to localStorage
-   */
-  async localSave(filename, data) {
-    try {
-      const key = `mera_${filename}`;
-      localStorage.setItem(key, JSON.stringify(data));
-      console.log("\u{1F4BE} Saved to localStorage:", filename);
-      return { success: true, error: null };
-    } catch (error) {
-      console.error("\u274C localStorage save failed:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        errorType: "storage" /* Storage */
-      };
-    }
-  }
-  /**
-   * Load data from localStorage
-   */
-  async localLoad(filename) {
-    try {
-      const key = `mera_${filename}`;
-      const item = localStorage.getItem(key);
-      if (!item) {
-        return {
-          success: false,
-          error: "File not found",
-          errorType: "not_found" /* NotFound */
-        };
-      }
-      const data = JSON.parse(item);
-      console.log("\u{1F4E5} Loaded from localStorage:", filename);
-      return { success: true, data, error: null };
-    } catch (error) {
-      console.error("\u274C localStorage load failed:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        errorType: "storage" /* Storage */
-      };
-    }
-  }
-  /**
-   * Delete file from localStorage
-   */
-  async localDelete(filename) {
-    try {
-      const key = `mera_${filename}`;
-      localStorage.removeItem(key);
-      console.log("\u{1F5D1}\uFE0F Deleted from localStorage:", filename);
-      return { success: true, error: null };
-    } catch (error) {
-      console.error("\u274C localStorage delete failed:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        errorType: "storage" /* Storage */
-      };
-    }
-  }
-  /**
-   * List files in localStorage with mera_ prefix
-   * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.lofp.*.json")
-   */
-  async localList(pattern) {
-    try {
-      const filenames = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith("mera_") && key !== AUTH_TIMESTAMP_KEY) {
-          const filename = key.substring(5);
-          if (pattern) {
-            if (this._matchesPattern(filename, pattern)) {
-              filenames.push(filename);
-            }
-          } else {
-            filenames.push(filename);
-          }
-        }
-      }
-      console.log("\u{1F4CB} Listed localStorage files:", filenames.length);
-      return { success: true, data: filenames, error: null };
-    } catch (error) {
-      console.error("\u274C localStorage list failed:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        errorType: "storage" /* Storage */
-      };
-    }
-  }
-  /**
-   * Clear all Mera data from localStorage (except auth timestamp)
-   */
-  clearLocalData() {
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith("mera_") && key !== AUTH_TIMESTAMP_KEY) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach((key) => localStorage.removeItem(key));
-    console.log("\u{1F9F9} Cleared local data:", keysToRemove.length, "files");
-  }
-  // ==========================================================================
   // Utility Methods
   // ==========================================================================
   /**
@@ -33592,23 +33581,8 @@ var MeraBridge = class _MeraBridge {
       isLoggedIn: this.session?.info?.isLoggedIn || false,
       webId: this.session?.info?.webId || null,
       sessionId: this.session?.info?.sessionId || null,
-      podUrl: this.podUrl,
-      sessionAge: this._getSessionAge()
+      podUrl: this.podUrl
     };
-  }
-  /**
-   * Get age of stored auth timestamp in seconds
-   */
-  _getSessionAge() {
-    try {
-      const timestamp = localStorage.getItem(AUTH_TIMESTAMP_KEY);
-      if (!timestamp || timestamp === "0") {
-        return null;
-      }
-      return Math.floor((Date.now() - parseInt(timestamp)) / 1e3);
-    } catch {
-      return null;
-    }
   }
 };
 var bridgeInstance = MeraBridge.getInstance();

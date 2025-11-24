@@ -1,4 +1,4 @@
-// src/ts/web/shared-auth.ts
+// src/ts/web/sharedAuth.ts
 function checkAuthentication() {
   try {
     const currentSessionId = localStorage.getItem("solidClientAuthn:currentSession");

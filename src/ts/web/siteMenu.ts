@@ -3,7 +3,7 @@
  * Handles mobile menu and dynamic learning links
  */
 
-import { checkAuthentication } from './shared-auth.js';
+import { checkAuthentication } from './sharedAuth.js';
 
 class NavigationController {
   constructor() {

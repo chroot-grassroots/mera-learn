@@ -3,7 +3,7 @@
  * Updates CTA buttons based on authentication state
  */
 
-import { checkAuthentication } from './shared-auth.js';
+import { checkAuthentication } from './sharedAuth.js';
 
 function updateJourneyButtons(): void {
   const isAuthenticated = checkAuthentication();

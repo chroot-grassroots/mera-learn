@@ -171,12 +171,21 @@ def parse_entity_yaml(yaml_file: Path, entity_type: str) -> Optional[Dict]:
         return None
 
 
-def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List[int]]]:
-    """Parse all entity YAML files (lessons and menus)."""
+def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List[int]], Dict[int, str]]:
+    """Parse all entity YAML files (lessons and menus).
+    
+    Returns:
+        - all_entities: List of entity metadata
+        - entity_ids: Set of all entity IDs
+        - component_ids: Set of all component IDs
+        - domain_lesson_map: Map of domain ID to lesson IDs
+        - component_id_to_type: Map of component ID to component type string (NEW!)
+    """
     all_entities = []
     entity_ids = set()
     component_ids = set()
     domain_lesson_map = {}
+    component_id_to_type = {}  # NEW: Track componentId -> type mapping
 
     # Parse lesson entities
     lessons_path = Path(LESSONS_DIR)
@@ -194,14 +203,25 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
             entity_ids.add(entity_id)
             all_entities.append(entity_info)
 
-            # Collect component IDs
+            # Collect component IDs AND types
             with open(yaml_file, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
                 for page in data.get("pages", []):
                     for component in page.get("components", []):
                         comp_id = component.get("id")
-                        if comp_id:
+                        comp_type = component.get("type")
+                        if comp_id and comp_type:
                             component_ids.add(comp_id)
+                            # NEW: Store the mapping - FAIL on conflict
+                            if comp_id in component_id_to_type and component_id_to_type[comp_id] != comp_type:
+                                raise ValueError(
+                                    f"FATAL: Component ID {comp_id} has conflicting types!\n"
+                                    f"  Previously seen as: '{component_id_to_type[comp_id]}'\n"
+                                    f"  Now found as: '{comp_type}'\n"
+                                    f"  in file: {yaml_file.name}\n"
+                                    f"Component IDs must be unique across all components."
+                                )
+                            component_id_to_type[comp_id] = comp_type
 
             # Map domain to lessons (only for lesson type)
             domain_id = entity_info.get("domainId")
@@ -226,16 +246,27 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
             entity_ids.add(entity_id)
             all_entities.append(entity_info)
 
-            # Collect component IDs from menus too
+            # Collect component IDs AND types from menus too
             with open(yaml_file, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
                 for page in data.get("pages", []):
                     for component in page.get("components", []):
                         comp_id = component.get("id")
-                        if comp_id:
+                        comp_type = component.get("type")
+                        if comp_id and comp_type:
                             component_ids.add(comp_id)
+                            # NEW: Store the mapping - FAIL on conflict
+                            if comp_id in component_id_to_type and component_id_to_type[comp_id] != comp_type:
+                                raise ValueError(
+                                    f"FATAL: Component ID {comp_id} has conflicting types!\n"
+                                    f"  Previously seen as: '{component_id_to_type[comp_id]}'\n"
+                                    f"  Now found as: '{comp_type}'\n"
+                                    f"  in file: {yaml_file.name}\n"
+                                    f"Component IDs must be unique across all components."
+                                )
+                            component_id_to_type[comp_id] = comp_type
 
-    return all_entities, entity_ids, component_ids, domain_lesson_map
+    return all_entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type
 
 
 def parse_curriculum() -> Optional[Dict]:
@@ -328,11 +359,11 @@ def generate_component_registry(
     entity_ids: Set,
     component_ids: Set,
     domain_lesson_map: Dict[int, List[int]],
+    component_id_to_type: Dict[int, str],  # NEW parameter!
     curriculum: Optional[Dict],
     domains: List[Dict],
 ) -> str:
     """Generate complete TypeScript registry with all 11 mappings."""
-    
     imports = []
     registrations = []
 
@@ -384,6 +415,13 @@ def generate_component_registry(
         entry = f"    [{domain_id}, {json.dumps(lesson_list)}]"
         domain_lesson_entries.append(entry)
     domain_lesson_content = ",\n".join(domain_lesson_entries) if domain_lesson_entries else ""
+
+    # NEW: Generate MAPPING 8 - Component ID to Type
+    component_id_to_type_entries = []
+    for comp_id, comp_type in sorted(component_id_to_type.items()):
+        entry = f'    [{comp_id}, "{comp_type}"]'
+        component_id_to_type_entries.append(entry)
+    component_id_to_type_content = ",\n".join(component_id_to_type_entries) if component_id_to_type_entries else ""
 
     entity_ids_array = json.dumps(sorted(list(entity_ids)))
     component_ids_array = json.dumps(sorted(list(component_ids)))
@@ -471,7 +509,16 @@ export const lessonMetrics = new Map<number, LessonMetrics>([
 ]);
 
 /**
- * MAPPING 8: Domain-Lesson Map
+ * MAPPING 8: Component ID to Type Map
+ * Maps component ID (number) to component type string
+ * Critical for progress migration - allows validation against correct schema
+ */
+export const componentIdToTypeMap = new Map<number, string>([
+{component_id_to_type_content}
+]);
+
+/**
+ * MAPPING 9: Domain-Lesson Map
  * Maps domain ID to array of lesson IDs in that domain
  */
 export const domainLessonMap = new Map<number, number[]>([
@@ -479,7 +526,7 @@ export const domainLessonMap = new Map<number, number[]>([
 ]);
 
 /**
- * MAPPING 9: Curriculum Data
+ * MAPPING 10: Curriculum Data
  * Complete parsed curriculum structure
  */
 const curriculumDataRaw = {json.dumps(curriculum, indent=2) if curriculum else 'null'};
@@ -491,7 +538,8 @@ export class CurriculumRegistry {{
     constructor(
         private curriculum: any,
         private lessonIds: Set<number>,
-        private domainMap: Map<number, number[]>
+        private domainMap: Map<number, number[]>,
+        private componentIdToType: Map<number, string>
     ) {{}}
     
     hasEntity(entityId: number): boolean {{
@@ -517,30 +565,40 @@ export class CurriculumRegistry {{
         }}
         return metrics.pageCount;
     }}
+
+    hasComponent(componentId: number): boolean {{
+        return this.componentIdToType.has(componentId);
+    }}
+
+    getComponentType(componentId: number): string | undefined {{
+        return this.componentIdToType.get(componentId);
+    }}
 }}
 
 export const curriculumData = new CurriculumRegistry(
     curriculumDataRaw,
     new Set(allLessonIds),
-    domainLessonMap
+    domainLessonMap,
+    componentIdToTypeMap
 );
 
 /**
- * MAPPING 10: Domain Data
+ * MAPPING 11: Domain Data
  * Array of all domain definitions
  */
 export const domainData = {json.dumps(domains, indent=2)};
 
 /**
- * MAPPING 11: Entity Metadata
+ * MAPPING 12: Entity Metadata
  * Complete metadata for all entities (lessons and menus)
  */
 export const lessonMetadata = {json.dumps(entities, indent=2)};
 
-console.log(`Mera Registry loaded with all 11 mappings:`);
+console.log(`Mera Registry loaded with all 12 mappings:`);
 console.log(`  - ${{componentRegistrations.length}} component types`);
 console.log(`  - ${{allLessonIds.length}} entities (lessons + menus)`);
 console.log(`  - ${{allComponentIds.length}} component IDs`);
+console.log(`  - ${{componentIdToTypeMap.size}} component ID->type mappings`);
 console.log(`  - ${{domainLessonMap.size}} domains`);
 """
 
@@ -583,7 +641,7 @@ def main():
     yaml_files = scan_all_yaml_files()
 
     print("\n📚 Phase 3: YAML Content Parsing")
-    entities, entity_ids, component_ids, domain_lesson_map = parse_all_entities()
+    entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type = parse_all_entities()
     curriculum = parse_curriculum()
     domains = parse_domains()
 
@@ -595,6 +653,7 @@ def main():
         entity_ids,
         component_ids,
         domain_lesson_map,
+        component_id_to_type,  # NEW: Pass the mapping!
         curriculum,
         domains,
     )
@@ -609,13 +668,14 @@ def main():
         print(f"📁 YAML File Registry: {YAML_REGISTRY_FILE}")
         print(f"   - {sum(len(files) for files in yaml_files.values())} YAML files for runtime loading")
         print(f"📁 Complete Registry: {COMPONENT_REGISTRY_FILE}")
-        print(f"   - All 11 mappings included")
+        print(f"   - All 12 mappings included (added MAPPING 8: componentIdToTypeMap)")
         print(f"📊 Content Summary:")
         print(f"  • {len(components)} component types")
         print(f"  • {lesson_count} lessons")
         print(f"  • {menu_count} menus")
         print(f"  • {len(entity_ids)} total entities")
         print(f"  • {len(component_ids)} component IDs")
+        print(f"  • {len(component_id_to_type)} component ID->type mappings")
         print(f"  • {len(domain_lesson_map)} domains")
     else:
         print("\n❌ Registry generation failed")

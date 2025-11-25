@@ -33592,6 +33592,7 @@ window.MeraBridge = MeraBridge;
 // src/ts/initialization/bootstrap.ts
 var MAX_ATTEMPTS = 50;
 var POLL_INTERVAL_MS = 100;
+var CLOCK_SKEW_THRESHOLD_MS = 6e4;
 var timeline = null;
 var errorDisplay = null;
 function initializeWhenReady() {
@@ -33599,7 +33600,7 @@ function initializeWhenReady() {
   window.bootstrapInstance = bootstrapInstance;
   try {
     setupUI();
-    console.log("Error UI setup successfully!");
+    console.log("\u2705 UI setup successfully!");
   } catch (uiError) {
     console.error("\u{1F4A5} UI setup failed:", uiError);
     console.error("Cannot continue - refresh the page");
@@ -33637,17 +33638,17 @@ function showBootstrapError(error) {
   const authStatus = document.getElementById("auth-status");
   if (authStatus) {
     authStatus.innerHTML = `
-            <div class="text-center py-12">
-                <div class="text-red-600 mb-4">
-                    <span class="font-semibold">Bootstrap Failed</span>
-                </div>
-                <p class="text-sm text-red-500 mb-4">${errorMessage}</p>
-                <button onclick="location.reload()" 
-                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
-                    Reload
-                </button>
-            </div>
-        `;
+      <div class="text-center py-12">
+        <div class="text-red-600 mb-4">
+          <span class="font-semibold">Bootstrap Failed</span>
+        </div>
+        <p class="text-sm text-red-500 mb-4">${errorMessage}</p>
+        <button onclick="location.reload()" 
+                class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">
+          Reload
+        </button>
+      </div>
+    `;
   }
 }
 async function startBootstrap() {
@@ -33698,7 +33699,7 @@ async function checkClockSkew() {
     const serverTime = new Date(serverDateHeader).getTime();
     const clientTime = Date.now();
     const skewMs = Math.abs(serverTime - clientTime);
-    if (skewMs > 1e4) {
+    if (skewMs > CLOCK_SKEW_THRESHOLD_MS) {
       const skewSeconds = Math.round(skewMs / 1e3);
       throw new Error(
         `Clock skew detected: ${skewSeconds} seconds. Please check your device time settings.`
@@ -33733,6 +33734,14 @@ function noSolidConnection() {
   }
 }
 var BootstrapManager = class {
+  /**
+   * Retry Solid Pod connection after error.
+   * 
+   * Called by "Retry" button in authentication error display.
+   * Clears error UI and restarts bootstrap sequence.
+   * 
+   * @returns Promise that resolves when bootstrap completes or rejects on failure
+   */
   async retrySolidConnection() {
     console.log("\u{1F504} Retrying Solid Pod connection...");
     if (errorDisplay) {

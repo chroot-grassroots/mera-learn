@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2025-11-23T21:11:51.615209
+ * Generated on: 2025-11-23T22:21:10.233297
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -90,7 +90,17 @@ export const lessonMetrics = new Map<number, LessonMetrics>([
 ]);
 
 /**
- * MAPPING 8: Domain-Lesson Map
+ * MAPPING 8: Component ID to Type Map
+ * Maps component ID (number) to component type string
+ * Critical for progress migration - allows validation against correct schema
+ */
+export const componentIdToTypeMap = new Map<number, string>([
+    [123456, "basic_task"],
+    [123457, "basic_task"]
+]);
+
+/**
+ * MAPPING 9: Domain-Lesson Map
  * Maps domain ID to array of lesson IDs in that domain
  */
 export const domainLessonMap = new Map<number, number[]>([
@@ -98,7 +108,7 @@ export const domainLessonMap = new Map<number, number[]>([
 ]);
 
 /**
- * MAPPING 9: Curriculum Data
+ * MAPPING 10: Curriculum Data
  * Complete parsed curriculum structure
  */
 const curriculumDataRaw = null;
@@ -110,7 +120,8 @@ export class CurriculumRegistry {
     constructor(
         private curriculum: any,
         private lessonIds: Set<number>,
-        private domainMap: Map<number, number[]>
+        private domainMap: Map<number, number[]>,
+        private componentIdToType: Map<number, string>
     ) {}
     
     hasEntity(entityId: number): boolean {
@@ -136,22 +147,31 @@ export class CurriculumRegistry {
         }
         return metrics.pageCount;
     }
+
+    hasComponent(componentId: number): boolean {
+        return this.componentIdToType.has(componentId);
+    }
+
+    getComponentType(componentId: number): string | undefined {
+        return this.componentIdToType.get(componentId);
+    }
 }
 
 export const curriculumData = new CurriculumRegistry(
     curriculumDataRaw,
     new Set(allLessonIds),
-    domainLessonMap
+    domainLessonMap,
+    componentIdToTypeMap
 );
 
 /**
- * MAPPING 10: Domain Data
+ * MAPPING 11: Domain Data
  * Array of all domain definitions
  */
 export const domainData = [];
 
 /**
- * MAPPING 11: Entity Metadata
+ * MAPPING 12: Entity Metadata
  * Complete metadata for all entities (lessons and menus)
  */
 export const lessonMetadata = [
@@ -169,8 +189,9 @@ export const lessonMetadata = [
   }
 ];
 
-console.log(`Mera Registry loaded with all 11 mappings:`);
+console.log(`Mera Registry loaded with all 12 mappings:`);
 console.log(`  - ${componentRegistrations.length} component types`);
 console.log(`  - ${allLessonIds.length} entities (lessons + menus)`);
 console.log(`  - ${allComponentIds.length} component IDs`);
+console.log(`  - ${componentIdToTypeMap.size} component ID->type mappings`);
 console.log(`  - ${domainLessonMap.size} domains`);

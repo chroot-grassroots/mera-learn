@@ -157,8 +157,8 @@ export function migrateOrRestoreToLatest(
         componentsDefaulted: componentProgressResult.componentsDefaulted,
       },
     },
-    criticalFailures: metadataResult.criticalFailure ? {
-      webIdMismatch: metadataResult.criticalFailure,
+    criticalFailures: metadataResult.webIDMismatch ? {
+      webIdMismatch: metadataResult.webIDMismatch,
     } : {},
   };
 }
@@ -180,7 +180,7 @@ function extractMetadata(
   parsed: any,
   expectedWebId: string
 ): ExtractionResult<PodMetadata> & { 
-  criticalFailure?: { expected: string; found: string | null } 
+  webIDMismatch?: { expected: string; found: string | null } 
 } {
   // Try Zod parse first (fast path)
   const zodResult = PodMetadataSchema.safeParse(parsed?.metadata);
@@ -189,8 +189,8 @@ function extractMetadata(
     if (zodResult.data.webId !== expectedWebId) {
       return {
         data: zodResult.data,
-        defaultedRatio: 0.0,
-        criticalFailure: {
+        defaultedRatio: 1.0, // webId is wrong, so 100% defaulted
+        webIDMismatch: {
           expected: expectedWebId,
           found: zodResult.data.webId,
         },
@@ -210,6 +210,8 @@ function extractMetadata(
 
   // Field 1: webId (required, must be valid URL and match expected)
   const webId = parsed?.metadata?.webId;
+  const foundWebId = typeof webId === 'string' ? webId : null;
+  
   if (typeof webId === 'string' && /^https?:\/\/.+/.test(webId)) {
     metadata.webId = webId;
     // Check if it matches expected
@@ -220,7 +222,7 @@ function extractMetadata(
     // Invalid or missing webId - use expected as fallback but mark as defaulted
     metadata.webId = expectedWebId;
     defaultedFields++;
-    criticalFailure = { expected: expectedWebId, found: null };
+    criticalFailure = { expected: expectedWebId, found: foundWebId };
   }
 
   // Future fields would be extracted here as schema grows
@@ -229,7 +231,7 @@ function extractMetadata(
   return {
     data: metadata as PodMetadata,
     defaultedRatio: defaultedFields / totalFields,
-    criticalFailure,
+    webIDMismatch: criticalFailure,
   };
 }
 
@@ -275,7 +277,7 @@ function extractOverallProgress(
   }
 
   // Extract currentStreak
-  if (typeof candidate.currentStreak === 'number' && candidate.currentStreak >= 0 && candidate.currentStreak <= 1000) {
+  if (typeof candidate.currentStreak === 'number' && candidate.currentStreak >= 0) {
     overallProgress.currentStreak = candidate.currentStreak;
   }
 
@@ -293,6 +295,11 @@ function extractOverallProgress(
  * 
  * Filters out deleted lessons/domains, keeping only those that exist in registry.
  * Calculates how much progress was retained vs lost.
+ * 
+ * TODO: Extract this validation logic into a shared utility (e.g., CurriculumRegistry method)
+ * to ensure consistency between recovery-time and mutation-time validation. Currently
+ * this logic duplicates the validation in OverallProgressManager.markLessonComplete().
+ * Any changes to validation rules must be synchronized between both locations.
  * 
  * @param progress - Progress data to reconcile
  * @returns Reconciled progress + retained ratios
@@ -340,8 +347,8 @@ function reconcileOverallProgress(
 /**
  * Extract settings with field-level defaulting.
  * 
- * Strategy: Settings are low-value (user can reconfigure). Try Zod parse,
- * fall back to field-by-field extraction with defaults.
+ * Strategy: Settings are user preferences - try to salvage each field independently.
+ * If a field is invalid, default it but keep the rest.
  * 
  * @param parsed - Raw parsed JSON
  * @returns Settings + ratio of fields defaulted
@@ -358,9 +365,8 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
 
   // Parse failed - extract field by field with defaults
   const candidate = parsed?.settings || {};
-  const settings: Partial<SettingsData> = {};
-  
-  let totalFields = 11; // Current settings field count
+  const settings: any = {};
+  let totalFields = 11; // Current number of settings fields
   let defaultedFields = 0;
 
   // Field 1: weekStartDay
@@ -580,7 +586,7 @@ function extractCombinedComponentProgress(
       components,
       overallProgress,
     },
-    defaultedRatio: totalComponents > 0 ? componentsDefaulted / totalComponents : 0.0,
+    defaultedRatio: totalComponents > 0 ? componentsDefaulted / totalComponents : 1.0, // FIXED: No components = fully defaulted
     componentsRetained,
     componentsDefaulted,
   };

@@ -100,18 +100,18 @@ export interface RecoveryResult {
  * NEVER THROWS - always returns valid bundle with honest metrics about
  * how much data was salvaged vs defaulted.
  * 
- * @param rawJson - Potentially corrupted, old version, or malformed data
+ * @param rawJson - JSON string (potentially corrupted, old version, or malformed)
  * @param expectedWebId - WebId that must match for this backup to be valid
  * @returns Valid bundle + granular recovery metrics + critical failures
  */
 export function migrateOrRestoreToLatest(
-  rawJson: unknown,
+  rawJson: string,
   expectedWebId: string
 ): RecoveryResult {
-  // Phase 1: Parse JSON
+  // Phase 1: Parse JSON string
   let parsed: any;
   try {
-    parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
+    parsed = JSON.parse(rawJson);
   } catch (e) {
     // Unparseable JSON - return fully defaulted bundle
     console.warn('⚠️ JSON parse failed, returning fully defaulted bundle');

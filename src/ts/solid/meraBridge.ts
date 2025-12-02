@@ -164,14 +164,11 @@ export class MeraBridge {
   }
 
   /**
-   * Check if user is authenticated
-   * Trusts Solid Client's session state
+   * Check if bridge is ready (lightweight check - doesn't trigger initialization)
+   * Use this for polling in bootstrap.ts
    */
-  public async check(): Promise<boolean> {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    return this.session?.info.isLoggedIn || false;
+  public check(): boolean {
+    return this.initialized && this.session?.info.isLoggedIn === true;
   }
 
   /**
@@ -191,12 +188,12 @@ export class MeraBridge {
   // ==========================================================================
 
   /**
-   * Save data to localStorage
+   * Save data to localStorage (expects pre-stringified JSON)
    */
-  public async localSave(filename: string, data: any): Promise<BridgeResult> {
+  public async localSave(filename: string, data: string): Promise<BridgeResult> {
     try {
       const key = `mera_${filename}`;
-      localStorage.setItem(key, JSON.stringify(data));
+      localStorage.setItem(key, data);  // Store string directly
       
       console.log('💾 Saved to localStorage:', filename);
       return { success: true, error: null };
@@ -213,9 +210,9 @@ export class MeraBridge {
   }
 
   /**
-   * Load data from localStorage
+   * Load data from localStorage (returns JSON string)
    */
-  public async localLoad(filename: string): Promise<BridgeResult> {
+  public async localLoad(filename: string): Promise<BridgeResult<string>> {
     try {
       const key = `mera_${filename}`;
       const item = localStorage.getItem(key);
@@ -228,10 +225,9 @@ export class MeraBridge {
         };
       }
 
-      const data = JSON.parse(item);
-      
+      // Return string directly - let caller parse if needed
       console.log('📥 Loaded from localStorage:', filename);
-      return { success: true, data, error: null };
+      return { success: true, data: item, error: null };
 
     } catch (error) {
       console.error('❌ localStorage load failed:', error);
@@ -330,9 +326,9 @@ export class MeraBridge {
   // ==========================================================================
 
   /**
-   * Save data to Solid Pod
+   * Save data to Solid Pod (expects pre-stringified JSON)
    */
-  public async solidSave(filename: string, data: any): Promise<BridgeResult> {
+  public async solidSave(filename: string, data: string): Promise<BridgeResult> {
     try {
       if (!this.initialized) {
         await this.initialize();
@@ -362,9 +358,9 @@ export class MeraBridge {
         // Container might already exist, that's fine
       }
 
-      // Save file
+      // Save file - data is already a JSON string
       const fileUrl = `${containerUrl}${filename}`;
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const blob = new Blob([data], { type: 'application/json' });
       
       await overwriteFile(fileUrl, blob, { 
         contentType: 'application/json',
@@ -387,9 +383,9 @@ export class MeraBridge {
   }
 
   /**
-   * Load data from Solid Pod
+   * Load data from Solid Pod (returns JSON string)
    */
-  public async solidLoad(filename: string): Promise<BridgeResult> {
+  public async solidLoad(filename: string): Promise<BridgeResult<string>> {
     try {
       if (!this.initialized) {
         await this.initialize();
@@ -414,10 +410,10 @@ export class MeraBridge {
       const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
       const file = await getFile(fileUrl, { fetch: this.session.fetch });
       const text = await file.text();
-      const data = JSON.parse(text);
+      // Return string directly - let caller parse if needed
 
       console.log('📥 Loaded from Pod:', filename);
-      return { success: true, data, error: null };
+      return { success: true, data: text, error: null };
 
     } catch (error) {
       const errorType = this._classifyError(error);

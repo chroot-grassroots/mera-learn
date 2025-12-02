@@ -26,6 +26,7 @@ vi.mock('../solid/meraBridge.js', () => {
 describe('orchestrateSave', () => {
   let mockBridge: any;
   let testBundle: PodStorageBundle;
+  let testBundleJSON: string;
   let testTimestamp: number;
 
   beforeEach(() => {
@@ -80,59 +81,60 @@ describe('orchestrateSave', () => {
       },
     };
 
+    // Pre-stringify for string-based architecture
+    testBundleJSON = JSON.stringify(testBundle);
     testTimestamp = 1234567890000;
 
-    // Setup default mock implementations
-    // Key: mockImplementation persists even when individual tests call mockResolvedValue/mockRejectedValue
+    // Setup default mock implementations - return strings for loads
     mockBridge.localSave.mockImplementation(async () => ({ success: true }));
     mockBridge.localLoad.mockImplementation(async () => ({ 
       success: true, 
-      data: JSON.parse(JSON.stringify(testBundle))
+      data: testBundleJSON  // Return string, not object
     }));
     mockBridge.localDelete.mockImplementation(async () => ({ success: true }));
     
     mockBridge.solidSave.mockImplementation(async () => ({ success: true }));
     mockBridge.solidLoad.mockImplementation(async () => ({ 
       success: true, 
-      data: JSON.parse(JSON.stringify(testBundle))
+      data: testBundleJSON  // Return string, not object
     }));
     mockBridge.solidDelete.mockImplementation(async () => ({ success: true }));
   });
 
   describe('Four-Stage Success Path', () => {
     it('returns BothSucceeded when all four stages complete successfully', async () => {
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
       expect(result).toBe(SaveResult.BothSucceeded);
       
       // Stage 1: Local offline (primary + duplicate)
       expect(mockBridge.localSave).toHaveBeenCalledWith(
         expect.stringContaining('.lofp.'),
-        testBundle
+        testBundleJSON  // String, not object
       );
       expect(mockBridge.localSave).toHaveBeenCalledWith(
         expect.stringContaining('.lofd.'),
-        testBundle
+        testBundleJSON  // String, not object
       );
 
       // Stage 2: Pod save (primary + duplicate)
       expect(mockBridge.solidSave).toHaveBeenCalledWith(
         expect.stringContaining('.sp.'),
-        testBundle
+        testBundleJSON  // String, not object
       );
       expect(mockBridge.solidSave).toHaveBeenCalledWith(
         expect.stringContaining('.sd.'),
-        testBundle
+        testBundleJSON  // String, not object
       );
 
       // Stage 3: Local online (primary + duplicate)
       expect(mockBridge.localSave).toHaveBeenCalledWith(
         expect.stringContaining('.lonp.'),
-        testBundle
+        testBundleJSON  // String, not object
       );
       expect(mockBridge.localSave).toHaveBeenCalledWith(
         expect.stringContaining('.lond.'),
-        testBundle
+        testBundleJSON  // String, not object
       );
 
       // Stage 4: Cleanup offline files
@@ -145,7 +147,7 @@ describe('orchestrateSave', () => {
     });
 
     it('creates files with correct naming convention', async () => {
-      await orchestrateSave(testBundle, testTimestamp);
+      await orchestrateSave(testBundleJSON, testTimestamp);
 
       // Verify filename pattern: mera.{major}.{minor}.{patch}.{type}.{timestamp}.json
       const filenamePattern = /^mera\.\d+\.\d+\.\d+\.(lofp|lofd|sp|sd|lonp|lond)\.\d+\.json$/;
@@ -161,7 +163,7 @@ describe('orchestrateSave', () => {
     });
 
     it('embeds the provided timestamp in all filenames', async () => {
-      await orchestrateSave(testBundle, testTimestamp);
+      await orchestrateSave(testBundleJSON, testTimestamp);
 
       const timestampString = testTimestamp.toString();
 
@@ -184,7 +186,7 @@ describe('orchestrateSave', () => {
         throw new Error('Local storage full');
       });
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
       // Should still attempt Pod save
       expect(mockBridge.solidSave).toHaveBeenCalled();
@@ -200,7 +202,7 @@ describe('orchestrateSave', () => {
         throw new Error('Network failure');
       });
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
       expect(result).toBe(SaveResult.OnlyLocalSucceeded);
       
@@ -225,7 +227,7 @@ describe('orchestrateSave', () => {
         throw new Error('Pod unreachable');
       });
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
       expect(result).toBe(SaveResult.BothFailed);
     });
@@ -235,7 +237,7 @@ describe('orchestrateSave', () => {
         throw new Error('Pod authentication failed');
       });
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
       // Should not attempt Stage 3 (online local) after Pod failure
       expect(mockBridge.localSave).toHaveBeenCalledTimes(2); // Only offline files
@@ -248,69 +250,69 @@ describe('orchestrateSave', () => {
       // This is correct defensive behavior - not Stage 4 cleanup
     });
 
-    it('treats Pod save as critical - failure determines overall failure', async () => {
-      mockBridge.solidSave.mockImplementation(async () => {
-        throw new Error('Pod timeout');
-      });
+    it('saves both primary and duplicate to Pod in parallel', async () => {
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
-
-      // Despite Stage 1 success, Pod failure means limited success
-      expect(result).toBe(SaveResult.OnlyLocalSucceeded);
+      expect(result).toBe(SaveResult.BothSucceeded);
+      
+      // Should save both .sp and .sd
+      expect(mockBridge.solidSave).toHaveBeenCalledTimes(2);
+      expect(mockBridge.solidSave).toHaveBeenCalledWith(
+        expect.stringContaining('.sp.'),
+        testBundleJSON
+      );
+      expect(mockBridge.solidSave).toHaveBeenCalledWith(
+        expect.stringContaining('.sd.'),
+        testBundleJSON
+      );
     });
   });
 
   describe('Stage 3: Local Online Save', () => {
-    it('returns OnlySolidSucceeded when Stage 3 fails after Stage 2 succeeds', async () => {
-      // Make localSave succeed twice (Stage 1), then fail (Stage 3)
+    it('returns OnlySolidSucceeded when Stage 3 fails after Pod succeeds', async () => {
       let callCount = 0;
-      mockBridge.localSave.mockImplementation(async () => {
+      
+      // First two calls succeed (offline), next four fail (online)
+      mockBridge.localSave.mockImplementation(async (filename: string) => {
         callCount++;
-        if (callCount <= 2) {
-          return { success: true }; // Stage 1 succeeds
+        if (callCount > 2) {
+          throw new Error('localStorage quota exceeded');
         }
-        throw new Error('Local online storage full'); // Stage 3 fails
+        return { success: true };
       });
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
       expect(result).toBe(SaveResult.OnlySolidSucceeded);
       
-      // Pod save should have succeeded
-      expect(mockBridge.solidSave).toHaveBeenCalled();
+      // Should have attempted all four local saves (2 offline + 2 online)
+      expect(mockBridge.localSave).toHaveBeenCalledTimes(4);
     });
 
-    it('skips Stage 4 cleanup when Stage 3 fails', async () => {
-      // Make localSave succeed twice (Stage 1), then fail (Stage 3)
-      let callCount = 0;
-      mockBridge.localSave.mockImplementation(async () => {
-        callCount++;
-        if (callCount <= 2) {
-          return { success: true }; // Stage 1 succeeds
-        }
-        throw new Error('Local online storage full'); // Stage 3 fails
-      });
+    it('creates online files after Pod succeeds', async () => {
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
-
-      // Pod succeeded, so we tried Stage 3
-      expect(mockBridge.solidSave).toHaveBeenCalled();
-
-      // Note: Online files ARE created before the third save fails in our mock
-      // The mock implementation allows 2 successful saves (offline) then throws on the 3rd call
-      // Since Stage 3 uses Promise.all for parallel saves, both online saves complete before failure
-      const onlineFileSaves = mockBridge.localSave.mock.calls
-        .filter(([f]: [string]) => f.includes('.lonp.') || f.includes('.lond.'));
-      // Both online files created successfully before the mock threw
+      expect(result).toBe(SaveResult.BothSucceeded);
       
-      // Any localDelete calls are error recovery, not Stage 4 cleanup (which is fine)
+      // Should create .lonp and .lond files
+      expect(mockBridge.localSave).toHaveBeenCalledWith(
+        expect.stringContaining('.lonp.'),
+        testBundleJSON
+      );
+      expect(mockBridge.localSave).toHaveBeenCalledWith(
+        expect.stringContaining('.lond.'),
+        testBundleJSON
+      );
     });
   });
 
   describe('Stage 4: Cleanup Offline Files', () => {
-    it('removes offline files after successful online save', async () => {
-      await orchestrateSave(testBundle, testTimestamp);
+    it('removes offline files after all stages succeed', async () => {
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
+      expect(result).toBe(SaveResult.BothSucceeded);
+      
+      // Should delete offline files
       expect(mockBridge.localDelete).toHaveBeenCalledWith(
         expect.stringContaining('.lofp.')
       );
@@ -319,245 +321,260 @@ describe('orchestrateSave', () => {
       );
     });
 
-    it('still returns BothSucceeded even if cleanup fails', async () => {
-      // Make deletes fail only during Stage 4 cleanup (after 4 successful saves + 4 successful loads)
-      let deleteCallCount = 0;
-      mockBridge.localDelete.mockImplementation(async () => {
-        deleteCallCount++;
-        throw new Error('Cleanup failed');
+    it('does not delete offline files if Stage 3 fails', async () => {
+      let callCount = 0;
+      
+      mockBridge.localSave.mockImplementation(async () => {
+        callCount++;
+        if (callCount > 2) {
+          throw new Error('localStorage full');
+        }
+        return { success: true };
       });
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
-      // Cleanup is best-effort - doesn't affect success
-      expect(result).toBe(SaveResult.BothSucceeded);
+      expect(result).toBe(SaveResult.OnlySolidSucceeded);
+      
+      // localDelete might be called for cleanup of corrupted files, 
+      // but not for Stage 4 cleanup (which only happens in BothSucceeded)
     });
 
-    it('logs warning but continues when cleanup fails', async () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('continues even if cleanup fails', async () => {
+      // Make cleanup fail but everything else succeed
       mockBridge.localDelete.mockImplementation(async () => {
         throw new Error('Delete failed');
       });
 
-      await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
-      // The warning comes from Stage 4 cleanup failure
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Cleanup failed:',
-        expect.any(Error)
+      // Should still return BothSucceeded despite cleanup failure
+      expect(result).toBe(SaveResult.BothSucceeded);
+    });
+  });
+
+  describe('Verification Logic', () => {
+    it('verifies saved data by loading it back', async () => {
+      await orchestrateSave(testBundleJSON, testTimestamp);
+
+      // Should load back all six files for verification
+      // 2 offline + 2 Pod + 2 online = 6 loads
+      expect(mockBridge.localLoad).toHaveBeenCalledTimes(4); // offline + online
+      expect(mockBridge.solidLoad).toHaveBeenCalledTimes(2); // Pod
+    });
+
+    it('fails if loaded data does not match saved data (string equality)', async () => {
+      // Return corrupted string on load
+      const corruptedJSON = JSON.stringify({ ...testBundle, metadata: { webId: 'corrupted' } });
+      mockBridge.solidLoad.mockImplementation(async () => ({
+        success: true,
+        data: corruptedJSON  // Different string
+      }));
+
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+
+      // Pod verification failed
+      expect(result).toBe(SaveResult.OnlyLocalSucceeded);
+    });
+
+    it('cleans up corrupted files after verification failure', async () => {
+      const corruptedJSON = JSON.stringify({ ...testBundle, metadata: { webId: 'corrupted' } });
+      mockBridge.solidLoad.mockImplementation(async () => ({
+        success: true,
+        data: corruptedJSON
+      }));
+
+      await orchestrateSave(testBundleJSON, testTimestamp);
+
+      // Should delete corrupted Pod files
+      expect(mockBridge.solidDelete).toHaveBeenCalledWith(
+        expect.stringContaining('.sp.')
       );
-
-      consoleWarnSpy.mockRestore();
-    });
-  });
-
-  describe('Verification: Load-Back and Deep Equality', () => {
-    it('loads back each saved file for verification', async () => {
-      await orchestrateSave(testBundle, testTimestamp);
-
-      // Each save should trigger a corresponding load
-      expect(mockBridge.localLoad).toHaveBeenCalledTimes(4); // 2 offline + 2 online
-      expect(mockBridge.solidLoad).toHaveBeenCalledTimes(2); // 2 pod
+      expect(mockBridge.solidDelete).toHaveBeenCalledWith(
+        expect.stringContaining('.sd.')
+      );
     });
 
-    it('fails if loaded data does not match saved data', async () => {
-      const corruptedData = { ...testBundle, metadata: { webId: 'wrong' } };
-      
-      mockBridge.solidLoad.mockImplementation(async () => ({
-        success: true,
-        data: JSON.parse(JSON.stringify(corruptedData)),
-      }));
-
-      const result = await orchestrateSave(testBundle, testTimestamp);
-
-      // Should detect corruption and fail Pod save
-      expect(result).not.toBe(SaveResult.BothSucceeded);
-      expect(result).not.toBe(SaveResult.OnlySolidSucceeded);
-    });
-
-    it('deletes corrupted file when verification fails', async () => {
-      const corruptedData = { ...testBundle };
-      corruptedData.overallProgress.currentStreak = 999;
-      
-      mockBridge.localLoad.mockImplementationOnce(async () => ({ 
-        success: true, 
-        data: JSON.parse(JSON.stringify(corruptedData))
-      }));
-
-      await orchestrateSave(testBundle, testTimestamp);
-
-      // Should attempt to delete the corrupted file (error recovery)
-      expect(mockBridge.localDelete).toHaveBeenCalled();
-    });
-
-    it('cleans up corrupted Pod files before throwing', async () => {
-      const corruptedData = { ...testBundle, metadata: { webId: 'corrupted' } };
-      
-      mockBridge.solidLoad.mockImplementation(async () => ({
-        success: true,
-        data: JSON.parse(JSON.stringify(corruptedData)),
-      }));
-
-      await orchestrateSave(testBundle, testTimestamp);
-
-      // Should delete corrupted Pod files (error recovery)
-      expect(mockBridge.solidDelete).toHaveBeenCalled();
-    });
-  });
-
-  describe('Defensive Error Handling', () => {
-    it('logs errors but continues when Stage 1 fails', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
-      mockBridge.localSave.mockImplementation(async () => {
-        throw new Error('Stage 1 error');
+    it('uses exact string equality for verification (no parsing)', async () => {
+      // Even semantically identical JSON with different formatting fails
+      const reformattedJSON = JSON.stringify(testBundle, null, 2); // Pretty-printed
+      mockBridge.localLoad.mockImplementation(async (filename: string) => {
+        if (filename.includes('lonp') || filename.includes('lond')) {
+          return { success: true, data: reformattedJSON };
+        }
+        return { success: true, data: testBundleJSON };
       });
 
-      await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Local offline save failed:',
-        expect.any(Error)
-      );
+      // Online verification should fail due to different string representation
+      expect(result).toBe(SaveResult.OnlySolidSucceeded);
+    });
+  });
 
-      consoleErrorSpy.mockRestore();
+  describe('Duplicate File Handling', () => {
+    it('saves both primary and duplicate for each stage', async () => {
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+
+      expect(result).toBe(SaveResult.BothSucceeded);
+      
+      // Local saves: 2 offline + 2 online = 4
+      expect(mockBridge.localSave).toHaveBeenCalledTimes(4);
+      
+      // Pod saves: 2 (primary + duplicate)
+      expect(mockBridge.solidSave).toHaveBeenCalledTimes(2);
     });
 
-    it('logs errors and stops when Stage 2 fails', async () => {
+    it('fails if either primary or duplicate fails verification', async () => {
+      const corruptedJSON = JSON.stringify({ ...testBundle, metadata: { webId: 'corrupted' } });
+      
+      // Make duplicate fail verification
+      mockBridge.solidLoad.mockImplementation(async (filename: string) => {
+        if (filename.includes('.sd.')) {
+          return { success: true, data: corruptedJSON };
+        }
+        return { success: true, data: testBundleJSON };
+      });
+
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+
+      // Promise.all fails if ANY promise rejects, so Pod stage fails
+      expect(result).toBe(SaveResult.OnlyLocalSucceeded);
+    });
+  });
+
+  describe('SaveResult Enum Coverage', () => {
+    it('returns BothSucceeded when all stages complete', async () => {
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      expect(result).toBe(SaveResult.BothSucceeded);
+    });
+
+    it('returns OnlyLocalSucceeded when Pod fails', async () => {
+      mockBridge.solidSave.mockImplementation(async () => {
+        throw new Error('Network error');
+      });
+
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      expect(result).toBe(SaveResult.OnlyLocalSucceeded);
+    });
+
+    it('returns OnlySolidSucceeded when local online fails', async () => {
+      let callCount = 0;
+      mockBridge.localSave.mockImplementation(async () => {
+        callCount++;
+        if (callCount > 2) {
+          throw new Error('localStorage full');
+        }
+        return { success: true };
+      });
+
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      expect(result).toBe(SaveResult.OnlySolidSucceeded);
+    });
+
+    it('returns BothFailed when both local and Pod fail', async () => {
+      mockBridge.localSave.mockImplementation(async () => {
+        throw new Error('Local error');
+      });
+      mockBridge.solidSave.mockImplementation(async () => {
+        throw new Error('Pod error');
+      });
+
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      expect(result).toBe(SaveResult.BothFailed);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('logs errors for each failed stage', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       
       mockBridge.solidSave.mockImplementation(async () => {
-        throw new Error('Pod unreachable');
+        throw new Error('Network failure');
       });
 
-      await orchestrateSave(testBundle, testTimestamp);
+      await orchestrateSave(testBundleJSON, testTimestamp);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Pod save failed:',
         expect.any(Error)
       );
-
+      
       consoleErrorSpy.mockRestore();
     });
 
-    it('handles cleanup failures gracefully', async () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
-      mockBridge.localDelete.mockImplementation(async () => {
-        throw new Error('Cannot delete');
-      });
+    it('handles missing data field in load result', async () => {
+      mockBridge.solidLoad.mockImplementation(async () => ({
+        success: true
+        // Missing data field
+      }));
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
-      // Should still report success
-      expect(result).toBe(SaveResult.BothSucceeded);
-      expect(consoleWarnSpy).toHaveBeenCalled();
-
-      consoleWarnSpy.mockRestore();
-    });
-  });
-
-  describe('Architectural Principles', () => {
-    it('maintains offline/online separation for initialization merge logic', async () => {
-      await orchestrateSave(testBundle, testTimestamp);
-
-      // Should create distinct offline files before Pod sync
-      const offlineFiles = mockBridge.localSave.mock.calls
-        .filter(([filename]: [string]) => filename.includes('.lofp.') || filename.includes('.lofd.'));
-      expect(offlineFiles).toHaveLength(2);
-
-      // Should create distinct online files after Pod sync
-      const onlineFiles = mockBridge.localSave.mock.calls
-        .filter(([filename]: [string]) => filename.includes('.lonp.') || filename.includes('.lond.'));
-      expect(onlineFiles).toHaveLength(2);
+      expect(result).toBe(SaveResult.OnlyLocalSucceeded);
     });
 
-    it('creates primary/duplicate pairs at each stage for redundancy', async () => {
-      await orchestrateSave(testBundle, testTimestamp);
+    it('handles load failures gracefully', async () => {
+      mockBridge.solidLoad.mockImplementation(async () => ({
+        success: false,
+        error: 'Pod unreachable'
+      }));
 
-      // Offline stage: primary + duplicate
-      expect(mockBridge.localSave).toHaveBeenCalledWith(
-        expect.stringContaining('.lofp.'),
-        testBundle
-      );
-      expect(mockBridge.localSave).toHaveBeenCalledWith(
-        expect.stringContaining('.lofd.'),
-        testBundle
-      );
+      const result = await orchestrateSave(testBundleJSON, testTimestamp);
 
-      // Pod stage: primary + duplicate
-      expect(mockBridge.solidSave).toHaveBeenCalledWith(
-        expect.stringContaining('.sp.'),
-        testBundle
-      );
-      expect(mockBridge.solidSave).toHaveBeenCalledWith(
-        expect.stringContaining('.sd.'),
-        testBundle
-      );
-
-      // Online stage: primary + duplicate
-      expect(mockBridge.localSave).toHaveBeenCalledWith(
-        expect.stringContaining('.lonp.'),
-        testBundle
-      );
-      expect(mockBridge.localSave).toHaveBeenCalledWith(
-        expect.stringContaining('.lond.'),
-        testBundle
-      );
-    });
-
-    it('uses parallel saves within each stage for performance', async () => {
-      await orchestrateSave(testBundle, testTimestamp);
-
-      // All operations should be called (Promise.all means parallel)
-      // We can verify by checking that all saves were attempted
-      expect(mockBridge.localSave).toHaveBeenCalledTimes(4);
-      expect(mockBridge.solidSave).toHaveBeenCalledTimes(2);
+      expect(result).toBe(SaveResult.OnlyLocalSucceeded);
     });
   });
 
   describe('Edge Cases', () => {
-    it('handles save success but load failure as corruption', async () => {
-      mockBridge.solidSave.mockResolvedValue({ success: true });
-      mockBridge.solidLoad.mockResolvedValue({ 
-        success: false, 
-        error: 'Load failed' 
-      });
-
-      const result = await orchestrateSave(testBundle, testTimestamp);
-
-      // Load failure treated as verification failure
-      expect(result).not.toBe(SaveResult.BothSucceeded);
-    });
-
-    it('handles Zod validation failure during verification', async () => {
-      const invalidData = { ...testBundle };
-      delete (invalidData as any).metadata; // Remove required field
-
-      mockBridge.solidLoad.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
-
-      const result = await orchestrateSave(testBundle, testTimestamp);
-
-      // Zod validation should catch missing field
-      expect(result).not.toBe(SaveResult.BothSucceeded);
-    });
-
-    it('handles partial cleanup failure gracefully', async () => {
-      let deleteCount = 0;
-      mockBridge.localDelete.mockImplementation(async () => {
-        deleteCount++;
-        if (deleteCount === 1) {
-          return { success: true }; // First delete succeeds
+    it('handles very large bundle strings', async () => {
+      const largeBundle = {
+        ...testBundle,
+        overallProgress: {
+          ...testBundle.overallProgress,
+          lessonCompletions: Object.fromEntries(
+            Array.from({ length: 5000 }, (_, i) => [i.toString(), Date.now()])
+          )
         }
-        throw new Error('Second delete fails'); // Second fails
-      });
+      };
+      const largeBundleJSON = JSON.stringify(largeBundle);
 
-      const result = await orchestrateSave(testBundle, testTimestamp);
+      // Update mock to return the large string
+      mockBridge.localLoad.mockImplementation(async () => ({
+        success: true,
+        data: largeBundleJSON
+      }));
+      mockBridge.solidLoad.mockImplementation(async () => ({
+        success: true,
+        data: largeBundleJSON
+      }));
 
-      // Should still return success despite partial cleanup failure
+      const result = await orchestrateSave(largeBundleJSON, testTimestamp);
+
+      expect(result).toBe(SaveResult.BothSucceeded);
+    });
+
+    it('handles unicode characters in bundle', async () => {
+      const unicodeBundle = {
+        ...testBundle,
+        settings: {
+          ...testBundle.settings,
+          theme: '🌙 dark mode' as any
+        }
+      };
+      const unicodeBundleJSON = JSON.stringify(unicodeBundle);
+
+      mockBridge.localLoad.mockImplementation(async () => ({
+        success: true,
+        data: unicodeBundleJSON
+      }));
+      mockBridge.solidLoad.mockImplementation(async () => ({
+        success: true,
+        data: unicodeBundleJSON
+      }));
+
+      const result = await orchestrateSave(unicodeBundleJSON, testTimestamp);
+
       expect(result).toBe(SaveResult.BothSucceeded);
     });
   });

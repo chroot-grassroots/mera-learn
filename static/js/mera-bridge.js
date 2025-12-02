@@ -32771,14 +32771,11 @@ var _MeraBridge = class _MeraBridge {
     console.log("\u{1F4E6} Pod URL extracted:", this.podUrl);
   }
   /**
-   * Check if user is authenticated
-   * Trusts Solid Client's session state
+   * Check if bridge is ready (lightweight check - doesn't trigger initialization)
+   * Use this for polling in bootstrap.ts
    */
-  async check() {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-    return this.session?.info.isLoggedIn || false;
+  check() {
+    return this.initialized && this.session?.info.isLoggedIn === true;
   }
   /**
    * Logout user
@@ -32795,12 +32792,12 @@ var _MeraBridge = class _MeraBridge {
   // Local Storage Operations
   // ==========================================================================
   /**
-   * Save data to localStorage
+   * Save data to localStorage (expects pre-stringified JSON)
    */
   async localSave(filename, data) {
     try {
       const key = `mera_${filename}`;
-      localStorage.setItem(key, JSON.stringify(data));
+      localStorage.setItem(key, data);
       console.log("\u{1F4BE} Saved to localStorage:", filename);
       return { success: true, error: null };
     } catch (error) {
@@ -32813,7 +32810,7 @@ var _MeraBridge = class _MeraBridge {
     }
   }
   /**
-   * Load data from localStorage
+   * Load data from localStorage (returns JSON string)
    */
   async localLoad(filename) {
     try {
@@ -32826,9 +32823,8 @@ var _MeraBridge = class _MeraBridge {
           errorType: "not_found" /* NotFound */
         };
       }
-      const data = JSON.parse(item);
       console.log("\u{1F4E5} Loaded from localStorage:", filename);
-      return { success: true, data, error: null };
+      return { success: true, data: item, error: null };
     } catch (error) {
       console.error("\u274C localStorage load failed:", error);
       return {
@@ -32906,7 +32902,7 @@ var _MeraBridge = class _MeraBridge {
   // Solid Pod Operations
   // ==========================================================================
   /**
-   * Save data to Solid Pod
+   * Save data to Solid Pod (expects pre-stringified JSON)
    */
   async solidSave(filename, data) {
     try {
@@ -32933,7 +32929,7 @@ var _MeraBridge = class _MeraBridge {
       } catch {
       }
       const fileUrl = `${containerUrl}${filename}`;
-      const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      const blob = new Blob([data], { type: "application/json" });
       await overwriteFile(fileUrl, blob, {
         contentType: "application/json",
         fetch: this.session.fetch
@@ -32951,7 +32947,7 @@ var _MeraBridge = class _MeraBridge {
     }
   }
   /**
-   * Load data from Solid Pod
+   * Load data from Solid Pod (returns JSON string)
    */
   async solidLoad(filename) {
     try {
@@ -32975,9 +32971,8 @@ var _MeraBridge = class _MeraBridge {
       const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
       const file = await getFile(fileUrl, { fetch: this.session.fetch });
       const text = await file.text();
-      const data = JSON.parse(text);
       console.log("\u{1F4E5} Loaded from Pod:", filename);
-      return { success: true, data, error: null };
+      return { success: true, data: text, error: null };
     } catch (error) {
       const errorType = this._classifyError(error);
       console.error("\u274C Pod load failed:", error);

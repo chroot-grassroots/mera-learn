@@ -8,7 +8,6 @@
  * SaveManager handles timing, retries, and conflict prevention independently.
  */
 
-import { PodStorageBundle } from "./podStorageSchema";
 import { orchestrateSave } from "./saveOrchestrator";
 import { showCriticalError } from "../ui/errorDisplay.js";
 
@@ -50,8 +49,8 @@ class SaveManager {
   /** Last save outcome, used for retry logic and online status */
   private lastSaveResult: SaveResult = SaveResult.BothSucceeded;
   
-  /** Latest progress bundle queued by Main Core */
-  private queuedSave: PodStorageBundle | null = null;
+  /** Latest progress bundle JSON queued by Main Core */
+  private queuedSave: string | null = null;
   
   /** Flag indicating bundle has changed since last save */
   private saveHasChanged: boolean = false;
@@ -111,8 +110,8 @@ class SaveManager {
       // Clear changed flag to prevent endless repeats
       this.saveHasChanged = false;
       
-      // Clone bundle to prevent mutations during async save
-      const bundleSnapshot = structuredClone(this.queuedSave);
+      // Capture string reference (no clone needed - strings are immutable)
+      const bundleSnapshot = this.queuedSave;
       
       // Capture timestamp for backup filename
       const timestamp = Date.now();
@@ -148,7 +147,7 @@ class SaveManager {
   }
 
   /**
-   * Queues progress bundle for next save cycle.
+   * Queues progress bundle JSON for next save cycle.
    * 
    * Called by Main Core after processing progress updates. Does not
    * block - save happens asynchronously during next polling cycle.
@@ -156,11 +155,11 @@ class SaveManager {
    * Typically happens once every 15 seconds if there had been a change
    * or happens with major progress event.
    * 
-   * @param save - Complete progress bundle to persist
+   * @param bundleJSON - Pre-stringified JSON representation of complete progress bundle
    * @param hasChanged - True if bundle differs from last save
    */
-  queueSave(save: PodStorageBundle, hasChanged: boolean): void {
-    this.queuedSave = save;
+  queueSave(bundleJSON: string, hasChanged: boolean): void {
+    this.queuedSave = bundleJSON;
     this.saveHasChanged = hasChanged;
   }
 

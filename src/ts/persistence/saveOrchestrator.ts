@@ -2,7 +2,7 @@
  * @fileoverview Four-stage save orchestration with verification and cleanup
  * @module persistence/saveOrchestrator
  *
- * Implements defense-in-depth save strategy: save → load → validate → verify.
+ * Implements defense-in-depth save strategy: save → load → verify.
  * Creates duplicate files at each stage for redundancy.
  * 
  * Four-stage process:
@@ -13,12 +13,11 @@
  * 
  * Purpose of offline/online is for merge logic for offline progress in initialization logic.
  * 
- * All saves are verified via load-back and deep equality check to catch
+ * All saves are verified via load-back and string equality check to catch
  * corruption immediately rather than discovering it later during recovery.
  */
 
 import {
-  PodStorageBundle,
   PodStorageBundleSchema,
 } from "./podStorageSchema.js";
 import { SaveResult } from "./saveManager.js";
@@ -51,16 +50,16 @@ interface SaveFilenames {
  * - Local online files provide additional redundancy
  * - Duplicates at each stage provide redundancy if primary corrupts
  * 
- * Verification: Every save is immediately loaded back and validated
- * (Zod schema + deep equality). Corrupted writes are deleted and reported
- * as failures rather than silently persisting bad data.
+ * Verification: Every save is immediately loaded back and verified via
+ * string equality. Corrupted writes are deleted and reported as failures
+ * rather than silently persisting bad data.
  * 
- * @param bundle - Complete progress bundle to persist
+ * @param bundleJSON - Pre-stringified JSON representation of complete progress bundle
  * @param timestamp - Unix timestamp for backup filename generation
  * @returns SaveResult enum indicating which operations succeeded
  */
 export async function orchestrateSave(
-  bundle: PodStorageBundle,
+  bundleJSON: string,
   timestamp: number
 ): Promise<SaveResult> {
   const fileNames = generateFilenames(timestamp);
@@ -70,8 +69,8 @@ export async function orchestrateSave(
   let localOfflineSucceeded = false;
   try {
     await Promise.all([
-      saveLoadCheckCleanLocal(fileNames.localOfflinePrimary, bundle),
-      saveLoadCheckCleanLocal(fileNames.localOfflineDup, bundle),
+      saveLoadCheckCleanLocal(fileNames.localOfflinePrimary, bundleJSON),
+      saveLoadCheckCleanLocal(fileNames.localOfflineDup, bundleJSON),
     ]);
     localOfflineSucceeded = true;
   } catch (localOfflineError) {
@@ -84,8 +83,8 @@ export async function orchestrateSave(
   let podSucceeded = false;
   try {
     await Promise.all([
-      saveLoadCheckCleanSolid(fileNames.solidPrimary, bundle),
-      saveLoadCheckCleanSolid(fileNames.solidDup, bundle),
+      saveLoadCheckCleanSolid(fileNames.solidPrimary, bundleJSON),
+      saveLoadCheckCleanSolid(fileNames.solidDup, bundleJSON),
     ]);
     podSucceeded = true;
   } catch (podError) {
@@ -103,8 +102,8 @@ export async function orchestrateSave(
   // Pod succeeded, now create final localStorage copies
   try {
     await Promise.all([
-      saveLoadCheckCleanLocal(fileNames.localOnlinePrimary, bundle),
-      saveLoadCheckCleanLocal(fileNames.localOnlineDup, bundle),
+      saveLoadCheckCleanLocal(fileNames.localOnlinePrimary, bundleJSON),
+      saveLoadCheckCleanLocal(fileNames.localOnlineDup, bundleJSON),
     ]);
 
     // Stage 4: Cleanup offline files (best effort)
@@ -131,46 +130,43 @@ export async function orchestrateSave(
 /**
  * Saves to localStorage with immediate verification and cleanup on failure.
  * 
- * Process: save → load → Zod validate → deep equality check
+ * Process: save → load → string equality check
  * 
  * If any step fails, deletes the corrupted file before throwing.
  * This prevents accumulation of invalid backup files that could
  * interfere with recovery logic.
  * 
  * @param filename - localStorage key for this backup
- * @param bundle - Progress bundle to save
- * @throws Error if save, load, validation, or equality check fails
+ * @param bundleJSON - Pre-stringified JSON to save
+ * @throws Error if save, load, or equality check fails
  */
 async function saveLoadCheckCleanLocal(
   filename: string,
-  bundle: PodStorageBundle
+  bundleJSON: string
 ): Promise<void> {
   const bridge = MeraBridge.getInstance();
   
   try {
     // Save to localStorage
-    const saveResult = await bridge.localSave(filename, bundle);
+    const saveResult = await bridge.localSave(filename, bundleJSON);
     if (!saveResult.success) {
       throw new Error(saveResult.error || 'Local save failed');
     }
 
     // Load back immediately for verification
     const loadResult = await bridge.localLoad(filename);
-    if (!loadResult.success) {
+    if (!loadResult.success || !loadResult.data) {
       throw new Error(loadResult.error || 'Local load failed');
     }
 
-    // Validate structure with Zod schema
-    PodStorageBundleSchema.parse(loadResult.data);
-
-    // Verify deep equality (catches subtle corruption)
-    if (!deepEqual(bundle, loadResult.data)) {
+    // Verify string equality (catches any corruption)
+    if (loadResult.data !== bundleJSON) {
       throw new Error(`Data mismatch in ${filename}`);
     }
     
     // Success - file is verified and intact
   } catch (error) {
-    // If error occurred before we could delete, clean up now
+    // If error occurred, clean up corrupted file
     try {
       await bridge.localDelete(filename);
     } catch (cleanupError) {
@@ -183,46 +179,43 @@ async function saveLoadCheckCleanLocal(
 /**
  * Saves to Solid Pod with immediate verification and cleanup on failure.
  * 
- * Process: save → load → Zod validate → deep equality check
+ * Process: save → load → string equality check
  * 
  * If any step fails, deletes the corrupted Pod file before throwing.
  * This prevents accumulation of invalid backup files that could
  * interfere with recovery logic.
  * 
  * @param filename - Pod file path for this backup
- * @param bundle - Progress bundle to save
- * @throws Error if save, load, validation, or equality check fails
+ * @param bundleJSON - Pre-stringified JSON to save
+ * @throws Error if save, load, or equality check fails
  */
 async function saveLoadCheckCleanSolid(
   filename: string,
-  bundle: PodStorageBundle
+  bundleJSON: string
 ): Promise<void> {
   const bridge = MeraBridge.getInstance();
   
   try {
     // Save to Solid Pod
-    const saveResult = await bridge.solidSave(filename, bundle);
+    const saveResult = await bridge.solidSave(filename, bundleJSON);
     if (!saveResult.success) {
       throw new Error(saveResult.error || 'Solid save failed');
     }
 
     // Load back immediately for verification
     const loadResult = await bridge.solidLoad(filename);
-    if (!loadResult.success) {
+    if (!loadResult.success || !loadResult.data) {
       throw new Error(loadResult.error || 'Solid load failed');
     }
 
-    // Validate structure with Zod schema
-    PodStorageBundleSchema.parse(loadResult.data);
-
-    // Verify deep equality (catches subtle corruption)
-    if (!deepEqual(bundle, loadResult.data)) {
+    // Verify string equality (catches any corruption)
+    if (loadResult.data !== bundleJSON) {
       throw new Error(`Data mismatch in ${filename}`);
     }
     
     // Success - file is verified and intact
   } catch (error) {
-    // If error occurred before we could delete, clean up now
+    // If error occurred, clean up corrupted file
     try {
       await bridge.solidDelete(filename);
     } catch (cleanupError) {
@@ -256,35 +249,4 @@ function generateFilenames(timestamp: number): SaveFilenames {
     localOnlinePrimary: `${prefix}.lonp.${timestamp}.json`,
     localOnlineDup: `${prefix}.lond.${timestamp}.json`,
   };
-}
-
-/**
- * Performs deep equality comparison via JSON serialization.
- * 
- * Catches subtle corruption that schema validation might miss, such as:
- * - Incorrect numeric precision
- * - Extra/missing properties
- * - Type coercion issues
- * 
- * Note: This is not robust for objects with complex prototypes, functions,
- * or circular references, but works perfectly for plain JSON-serializable
- * data structures like PodStorageBundle.
- * 
- * @param obj1 - First object to compare
- * @param obj2 - Second object to compare
- * @returns True if JSON representations are identical
- */
-function deepEqual(obj1: any, obj2: any): boolean {
-  const str1 = JSON.stringify(obj1);
-  const str2 = JSON.stringify(obj2);
-  const result = str1 === str2;
-  
-  if (!result) {
-    console.log('DEEP EQUAL FAILED');
-    console.log('Length:', str1.length, 'vs', str2.length);
-    console.log('First 200 chars of obj1:', str1.substring(0, 200));
-    console.log('First 200 chars of obj2:', str2.substring(0, 200));
-  }
-  
-  return result;
 }

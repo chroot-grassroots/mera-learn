@@ -72,6 +72,9 @@ describe('SaveManager', () => {
     }
   };
 
+  // Pre-stringify the test bundle for use in tests
+  const testBundleJSON = JSON.stringify(testBundle);
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
@@ -121,7 +124,7 @@ describe('SaveManager', () => {
     });
 
     it('does not trigger save when hasChanged is false and last save succeeded', () => {
-      manager.queueSave(testBundle, false);
+      manager.queueSave(testBundleJSON, false);
       
       vi.advanceTimersByTime(50);
       
@@ -134,7 +137,7 @@ describe('SaveManager', () => {
         new Promise(resolve => setTimeout(() => resolve(SaveResult.BothSucceeded), 200))
       );
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       
       // First poll cycle triggers save
       vi.advanceTimersByTime(50);
@@ -156,20 +159,20 @@ describe('SaveManager', () => {
     });
 
     it('triggers save when hasChanged is true', () => {
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       
       vi.advanceTimersByTime(50);
       
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
       expect(orchestrateSaveMock).toHaveBeenCalledWith(
-        expect.objectContaining(testBundle),
+        testBundleJSON,
         expect.any(Number)
       );
     });
 
     it('passes timestamp to orchestrator', () => {
       const startTime = Date.now();
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       
       vi.advanceTimersByTime(50);
       
@@ -178,22 +181,18 @@ describe('SaveManager', () => {
       expect(callTimestamp).toBeLessThanOrEqual(Date.now());
     });
 
-    it('clones bundle to prevent mutation during async save', async () => {
-      const mutableBundle = { ...testBundle };
-      manager.queueSave(mutableBundle, true);
+    it('passes string reference without cloning (strings are immutable)', async () => {
+      manager.queueSave(testBundleJSON, true);
       
       vi.advanceTimersByTime(50);
       
-      // Mutate original after save started
-      mutableBundle.overallProgress.currentStreak = 999;
-      
-      // Verify orchestrator received original values
-      const savedBundle = orchestrateSaveMock.mock.calls[0][0];
-      expect(savedBundle.overallProgress.currentStreak).toBe(5);
+      // Verify orchestrator received the same string
+      const savedString = orchestrateSaveMock.mock.calls[0][0];
+      expect(savedString).toBe(testBundleJSON);
     });
 
     it('clears hasChanged flag to prevent repeated saves', async () => {
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       
       // First poll triggers save
       vi.advanceTimersByTime(50);
@@ -219,7 +218,7 @@ describe('SaveManager', () => {
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.OnlyLocalSucceeded);
       
       // First attempt - Pod fails
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       
       // Wait for the promise to resolve (no timer advancement)
@@ -232,7 +231,7 @@ describe('SaveManager', () => {
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
       
       // Queue same bundle with hasChanged=false
-      manager.queueSave(testBundle, false);
+      manager.queueSave(testBundleJSON, false);
       
       // Should trigger retry despite hasChanged=false
       vi.advanceTimersByTime(50);
@@ -242,12 +241,12 @@ describe('SaveManager', () => {
     it('retries when last save was BothFailed', async () => {
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothFailed);
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
-      manager.queueSave(testBundle, false);
+      manager.queueSave(testBundleJSON, false);
       
       vi.advanceTimersByTime(50);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
@@ -256,12 +255,12 @@ describe('SaveManager', () => {
     it('does not retry when last save was BothSucceeded', async () => {
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
       // Queue with hasChanged=false
-      manager.queueSave(testBundle, false);
+      manager.queueSave(testBundleJSON, false);
       vi.advanceTimersByTime(50);
       
       // Should not trigger save
@@ -281,13 +280,16 @@ describe('SaveManager', () => {
       });
       orchestrateSaveMock.mockReturnValueOnce(firstSavePromise);
       
+      // Create different bundle JSONs
+      const bundle1JSON = JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 5 } });
+      const bundle2JSON = JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 6 } });
+      
       // Queue first save
-      manager.queueSave(testBundle, true);
+      manager.queueSave(bundle1JSON, true);
       vi.advanceTimersByTime(50);
       
       // Save is now in progress - queue another with changes
-      const updatedBundle = { ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 6 } };
-      manager.queueSave(updatedBundle, true);
+      manager.queueSave(bundle2JSON, true);
       
       // Should not trigger concurrent save
       vi.advanceTimersByTime(50);
@@ -307,24 +309,24 @@ describe('SaveManager', () => {
       
       // Verify second save got updated bundle
       const secondCallBundle = orchestrateSaveMock.mock.calls[1][0];
-      expect(secondCallBundle.overallProgress.currentStreak).toBe(6);
+      expect(secondCallBundle).toBe(bundle2JSON);
     });
 
     it('overwrites queued bundle on subsequent queueSave calls', () => {
-      const bundle1 = { ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 5 } };
-      const bundle2 = { ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 6 } };
-      const bundle3 = { ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 7 } };
+      const bundle1JSON = JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 5 } });
+      const bundle2JSON = JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 6 } });
+      const bundle3JSON = JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 7 } });
       
-      manager.queueSave(bundle1, true);
-      manager.queueSave(bundle2, true);
-      manager.queueSave(bundle3, true);
+      manager.queueSave(bundle1JSON, true);
+      manager.queueSave(bundle2JSON, true);
+      manager.queueSave(bundle3JSON, true);
       
       vi.advanceTimersByTime(50);
       
       // Only latest bundle should be saved
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
       const savedBundle = orchestrateSaveMock.mock.calls[0][0];
-      expect(savedBundle.overallProgress.currentStreak).toBe(7);
+      expect(savedBundle).toBe(bundle3JSON);
     });
   });
 
@@ -336,7 +338,7 @@ describe('SaveManager', () => {
     it('returns true when BothSucceeded', async () => {
       orchestrateSaveMock.mockResolvedValue(SaveResult.BothSucceeded);
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
@@ -346,7 +348,7 @@ describe('SaveManager', () => {
     it('returns true when OnlySolidSucceeded', async () => {
       orchestrateSaveMock.mockResolvedValue(SaveResult.OnlySolidSucceeded);
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
@@ -356,7 +358,7 @@ describe('SaveManager', () => {
     it('returns false when OnlyLocalSucceeded', async () => {
       orchestrateSaveMock.mockResolvedValue(SaveResult.OnlyLocalSucceeded);
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
@@ -366,7 +368,7 @@ describe('SaveManager', () => {
     it('returns false when BothFailed', async () => {
       orchestrateSaveMock.mockResolvedValue(SaveResult.BothFailed);
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
@@ -387,7 +389,7 @@ describe('SaveManager', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       orchestrateSaveMock.mockResolvedValue(SaveResult.OnlySolidSucceeded);
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
@@ -401,7 +403,7 @@ describe('SaveManager', () => {
     it('shows critical error when orchestrator throws', async () => {
       orchestrateSaveMock.mockRejectedValue(new Error('Orchestrator bug'));
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
@@ -416,7 +418,7 @@ describe('SaveManager', () => {
     it('sets lastSaveResult to BothFailed when orchestrator throws', async () => {
       orchestrateSaveMock.mockRejectedValue(new Error('Orchestrator bug'));
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await vi.runOnlyPendingTimersAsync();
       
@@ -429,13 +431,13 @@ describe('SaveManager', () => {
         .mockResolvedValueOnce(SaveResult.BothSucceeded);
       
       // First save throws
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await Promise.resolve();
       await Promise.resolve();
       
       // Second save should be able to proceed (lock released)
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
@@ -447,7 +449,7 @@ describe('SaveManager', () => {
         .mockResolvedValueOnce(SaveResult.BothSucceeded);
       
       // First save fails
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await Promise.resolve();
       await Promise.resolve();
@@ -457,7 +459,7 @@ describe('SaveManager', () => {
       vi.advanceTimersByTime(50);
       
       // Second save succeeds
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
@@ -475,7 +477,7 @@ describe('SaveManager', () => {
       );
       
       const startTime = Date.now();
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       const endTime = Date.now();
       
       // Should return instantly
@@ -487,7 +489,7 @@ describe('SaveManager', () => {
         new Promise(resolve => setTimeout(() => resolve(SaveResult.BothSucceeded), 1000))
       );
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       
       // Trigger save
       vi.advanceTimersByTime(50);
@@ -522,7 +524,7 @@ describe('SaveManager', () => {
       });
       
       // Queue just before poll
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       
       // Poll cycle runs
       vi.advanceTimersByTime(50);
@@ -532,9 +534,10 @@ describe('SaveManager', () => {
     });
 
     it('handles very rapid sequential queueSave calls', () => {
+      const bundles: string[] = [];
       for (let i = 0; i < 100; i++) {
-        const bundle = { ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: i } };
-        manager.queueSave(bundle, true);
+        bundles.push(JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: i } }));
+        manager.queueSave(bundles[i], true);
       }
       
       vi.advanceTimersByTime(50);
@@ -542,13 +545,13 @@ describe('SaveManager', () => {
       // Only latest bundle saved
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
       const savedBundle = orchestrateSaveMock.mock.calls[0][0];
-      expect(savedBundle.overallProgress.currentStreak).toBe(99);
+      expect(savedBundle).toBe(bundles[99]);
     });
 
     it('maintains correct state through multiple save cycles', async () => {
       // Cycle 1: Success
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await Promise.resolve();
       await Promise.resolve();
@@ -556,7 +559,7 @@ describe('SaveManager', () => {
       
       // Cycle 2: Offline (this will trigger retry on next queue)
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.OnlyLocalSucceeded);
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
       await Promise.resolve();
       await Promise.resolve();
@@ -564,7 +567,7 @@ describe('SaveManager', () => {
       
       // Cycle 3: Recovery (retry triggered even with hasChanged=false)
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
-      manager.queueSave(testBundle, false); // hasChanged=false but should retry
+      manager.queueSave(testBundleJSON, false); // hasChanged=false but should retry
       vi.advanceTimersByTime(50);
       await Promise.resolve();
       await Promise.resolve();
@@ -585,7 +588,7 @@ describe('SaveManager', () => {
         })
       );
       
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50); // Trigger save
       
       expect(saveCompleted).toBe(false);
@@ -603,7 +606,7 @@ describe('SaveManager', () => {
     });
 
     it('preserves 50ms polling interval', () => {
-      manager.queueSave(testBundle, true);
+      manager.queueSave(testBundleJSON, true);
       
       vi.advanceTimersByTime(49);
       expect(orchestrateSaveMock).not.toHaveBeenCalled();

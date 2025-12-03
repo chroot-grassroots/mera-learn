@@ -7,26 +7,38 @@
  * - Polling cycle behavior at 50ms intervals
  * - Retry logic for failed Pod saves
  * - Concurrent save prevention
- * - Fire-and-forget async coordination
+ * - Sequential polling coordination
  * - Error handling and critical error display
  * - Online/offline status tracking
  * - Edge cases with timing and rapid queueSave calls
+ * - Concurrent session detection (tamper-detection tripwire)
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SaveManager, SaveResult } from './saveManager';
 import { PodStorageBundle } from './podStorageSchema';
 import * as saveOrchestrator from './saveOrchestrator';
 import * as errorDisplay from '../ui/errorDisplay';
 
-// Mock dependencies
+// Mock dependencies BEFORE importing SaveManager
 vi.mock('./saveOrchestrator');
 vi.mock('../ui/errorDisplay');
+vi.mock('../solid/meraBridge', () => {
+  return {
+    MeraBridge: {
+      getInstance: vi.fn()
+    }
+  };
+});
+
+// Import SaveManager AFTER mocks are set up
+import { SaveManager, SaveResult } from './saveManager';
+import { MeraBridge } from '../solid/meraBridge';
 
 describe('SaveManager', () => {
   let manager: SaveManager;
   let orchestrateSaveMock: ReturnType<typeof vi.fn>;
   let showCriticalErrorMock: ReturnType<typeof vi.fn>;
+  let mockBridge: any;
   
   const testBundle: PodStorageBundle = {
     metadata: {
@@ -75,12 +87,53 @@ describe('SaveManager', () => {
   // Pre-stringify the test bundle for use in tests
   const testBundleJSON = JSON.stringify(testBundle);
 
+  // Session ID that will be returned by mocked session file
+  const mockSessionId = 'a'.repeat(32); // 128-bit hex string
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     
     // Reset singleton between tests
     (SaveManager as any).instance = undefined;
+    
+    // Setup MeraBridge mock
+    mockBridge = {
+      solidSave: vi.fn(),
+      solidLoad: vi.fn(),
+      solidDelete: vi.fn(),
+    };
+    vi.mocked(MeraBridge.getInstance).mockReturnValue(mockBridge);
+
+    // Capture the actual session ID written by SaveManager
+    let capturedSessionData: string | null = null;
+    
+    // Setup default mock for session file operations
+    mockBridge.solidSave.mockImplementation(async (filename: string, data: string) => {
+      // Capture session file data when written
+      if (filename === 'mera_concurrent_session_protection.json') {
+        capturedSessionData = data;
+      }
+      return { success: true };
+    });
+
+    mockBridge.solidLoad.mockImplementation(async (filename: string) => {
+      if (filename === 'mera_concurrent_session_protection.json') {
+        // Return the captured session data (what was actually written)
+        if (capturedSessionData) {
+          return { 
+            success: true, 
+            data: capturedSessionData
+          };
+        }
+        // Fallback if nothing captured yet
+        return { 
+          success: true, 
+          data: JSON.stringify({ sessionId: mockSessionId })
+        };
+      }
+      return { success: true, data: '{}' };
+    });
     
     // Setup mocks
     orchestrateSaveMock = vi.mocked(saveOrchestrator.orchestrateSave);
@@ -140,7 +193,7 @@ describe('SaveManager', () => {
       manager.queueSave(testBundleJSON, true);
       
       // First poll cycle triggers save
-      vi.advanceTimersByTime(50);
+      await vi.advanceTimersByTimeAsync(100);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
       
       // Second poll cycle - save still in progress
@@ -158,11 +211,10 @@ describe('SaveManager', () => {
       manager = SaveManager.getInstance();
     });
 
-    it('triggers save when hasChanged is true', () => {
+    it('triggers save when hasChanged is true', async () => {
       manager.queueSave(testBundleJSON, true);
       
-      vi.advanceTimersByTime(50);
-      
+      await vi.advanceTimersByTimeAsync(100);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
       expect(orchestrateSaveMock).toHaveBeenCalledWith(
         testBundleJSON,
@@ -170,12 +222,11 @@ describe('SaveManager', () => {
       );
     });
 
-    it('passes timestamp to orchestrator', () => {
+    it('passes timestamp to orchestrator', async () => {
       const startTime = Date.now();
       manager.queueSave(testBundleJSON, true);
       
-      vi.advanceTimersByTime(50);
-      
+      await vi.advanceTimersByTimeAsync(100);
       const callTimestamp = orchestrateSaveMock.mock.calls[0][1];
       expect(callTimestamp).toBeGreaterThanOrEqual(startTime);
       expect(callTimestamp).toBeLessThanOrEqual(Date.now());
@@ -184,9 +235,8 @@ describe('SaveManager', () => {
     it('passes string reference without cloning (strings are immutable)', async () => {
       manager.queueSave(testBundleJSON, true);
       
-      vi.advanceTimersByTime(50);
-      
-      // Verify orchestrator received the same string
+      await vi.advanceTimersByTimeAsync(100);
+      // Verify orchestrator received the same string reference
       const savedString = orchestrateSaveMock.mock.calls[0][0];
       expect(savedString).toBe(testBundleJSON);
     });
@@ -195,11 +245,11 @@ describe('SaveManager', () => {
       manager.queueSave(testBundleJSON, true);
       
       // First poll triggers save
-      vi.advanceTimersByTime(50);
+      await vi.advanceTimersByTimeAsync(100);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
       
       // Complete the async save
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
       
       // Second poll should not trigger another save
       vi.advanceTimersByTime(50);
@@ -210,18 +260,15 @@ describe('SaveManager', () => {
   describe('Retry Logic - Failed Pod Saves', () => {
     beforeEach(() => {
       manager = SaveManager.getInstance();
-      // Clear call history but keep the mock implementation
-      orchestrateSaveMock.mockClear();
     });
 
     it('retries when last save was OnlyLocalSucceeded', async () => {
+      // First save fails Pod
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.OnlyLocalSucceeded);
       
-      // First attempt - Pod fails
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
-      
-      // Wait for the promise to resolve (no timer advancement)
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
       
@@ -230,25 +277,26 @@ describe('SaveManager', () => {
       // Setup next attempt to succeed
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
       
-      // Queue same bundle with hasChanged=false
-      manager.queueSave(testBundleJSON, false);
-      
-      // Should trigger retry despite hasChanged=false
-      vi.advanceTimersByTime(50);
+      // Don't queue new data, but retry should still trigger
+      await vi.advanceTimersByTimeAsync(100);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
     });
 
     it('retries when last save was BothFailed', async () => {
+      // First attempt fails completely
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothFailed);
       
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
       
+      // Setup second attempt
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
-      manager.queueSave(testBundleJSON, false);
       
-      vi.advanceTimersByTime(50);
+      // Retry should trigger automatically
+      await vi.advanceTimersByTimeAsync(100);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
     });
 
@@ -256,10 +304,12 @@ describe('SaveManager', () => {
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
       
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
       
-      // Queue with hasChanged=false
+      // Queue new data but with hasChanged=false
       manager.queueSave(testBundleJSON, false);
       vi.advanceTimersByTime(50);
       
@@ -286,8 +336,7 @@ describe('SaveManager', () => {
       
       // Queue first save
       manager.queueSave(bundle1JSON, true);
-      vi.advanceTimersByTime(50);
-      
+      await vi.advanceTimersByTimeAsync(100);
       // Save is now in progress - queue another with changes
       manager.queueSave(bundle2JSON, true);
       
@@ -304,7 +353,7 @@ describe('SaveManager', () => {
       await Promise.resolve();
       
       // Now second save can proceed (triggered by retry logic)
-      vi.advanceTimersByTime(50);
+      await vi.advanceTimersByTimeAsync(100);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
       
       // Verify second save got updated bundle
@@ -312,7 +361,7 @@ describe('SaveManager', () => {
       expect(secondCallBundle).toBe(bundle2JSON);
     });
 
-    it('overwrites queued bundle on subsequent queueSave calls', () => {
+    it('overwrites queued bundle on subsequent queueSave calls', async () => {
       const bundle1JSON = JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 5 } });
       const bundle2JSON = JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 6 } });
       const bundle3JSON = JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: 7 } });
@@ -321,8 +370,7 @@ describe('SaveManager', () => {
       manager.queueSave(bundle2JSON, true);
       manager.queueSave(bundle3JSON, true);
       
-      vi.advanceTimersByTime(50);
-      
+      await vi.advanceTimersByTimeAsync(100);
       // Only latest bundle should be saved
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
       const savedBundle = orchestrateSaveMock.mock.calls[0][0];
@@ -340,7 +388,7 @@ describe('SaveManager', () => {
       
       manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
       
       expect(manager.getOnlineStatus()).toBe(true);
     });
@@ -350,7 +398,7 @@ describe('SaveManager', () => {
       
       manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
       
       expect(manager.getOnlineStatus()).toBe(true);
     });
@@ -360,7 +408,7 @@ describe('SaveManager', () => {
       
       manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
       
       expect(manager.getOnlineStatus()).toBe(false);
     });
@@ -370,7 +418,7 @@ describe('SaveManager', () => {
       
       manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
       
       expect(manager.getOnlineStatus()).toBe(false);
     });
@@ -387,11 +435,12 @@ describe('SaveManager', () => {
 
     it('logs warning when OnlySolidSucceeded (localStorage failure)', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
       orchestrateSaveMock.mockResolvedValue(SaveResult.OnlySolidSucceeded);
       
       manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
       
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         '⚠️ localStorage save failed - offline mode unavailable'
@@ -405,14 +454,15 @@ describe('SaveManager', () => {
       
       manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
       
-      expect(showCriticalErrorMock).toHaveBeenCalledWith({
-        title: 'Save System Failure',
-        message: 'Progress is not being saved.',
-        technicalDetails: expect.stringContaining('Orchestrator bug'),
-        errorCode: 'save-system-failure'
-      });
+      expect(showCriticalErrorMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Save System Failure',
+          message: 'Progress is not being saved.',
+          errorCode: 'save-system-failure'
+        })
+      );
     });
 
     it('sets lastSaveResult to BothFailed when orchestrator throws', async () => {
@@ -420,7 +470,7 @@ describe('SaveManager', () => {
       
       manager.queueSave(testBundleJSON, true);
       vi.advanceTimersByTime(50);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(100);
       
       expect(manager.getOnlineStatus()).toBe(false);
     });
@@ -432,14 +482,14 @@ describe('SaveManager', () => {
       
       // First save throws
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
       
       // Second save should be able to proceed (lock released)
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
-      
+      await vi.advanceTimersByTimeAsync(100);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
     });
 
@@ -448,25 +498,19 @@ describe('SaveManager', () => {
         .mockRejectedValueOnce(new Error('Temporary failure'))
         .mockResolvedValueOnce(SaveResult.BothSucceeded);
       
-      // First save fails
+      // First save fails (first save has session init)
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
-      await Promise.resolve();
-      await Promise.resolve();
-      
-      // Polling continues
-      vi.advanceTimersByTime(50);
-      vi.advanceTimersByTime(50);
+      await vi.advanceTimersByTimeAsync(100); // Poll at 50ms + session init 50ms
       
       // Second save succeeds
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
+      await vi.advanceTimersByTimeAsync(50); // Next poll (no session init needed)
       
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('Fire-and-Forget Architecture', () => {
+  describe('Sequential Polling Architecture', () => {
     beforeEach(() => {
       manager = SaveManager.getInstance();
     });
@@ -484,29 +528,34 @@ describe('SaveManager', () => {
       expect(endTime - startTime).toBeLessThan(10);
     });
 
-    it('polling cycle does not block on async save', async () => {
-      orchestrateSaveMock.mockImplementation(() =>
-        new Promise(resolve => setTimeout(() => resolve(SaveResult.BothSucceeded), 1000))
-      );
+    it('polling waits for save to complete before next cycle', async () => {
+      let saveStarted = false;
+      let saveCompleted = false;
+      
+      orchestrateSaveMock.mockImplementation(async () => {
+        saveStarted = true;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        saveCompleted = true;
+        return SaveResult.BothSucceeded;
+      });
       
       manager.queueSave(testBundleJSON, true);
       
-      // Trigger save
-      vi.advanceTimersByTime(50);
+      // Start first poll cycle (poll at 50ms, session init takes 50ms, orchestrate starts at ~100ms)
+      await vi.advanceTimersByTimeAsync(100);
+      expect(saveStarted).toBe(true);
+      expect(saveCompleted).toBe(false); // Save still running
       
-      // Advance time - polling continues
-      vi.advanceTimersByTime(50);
-      vi.advanceTimersByTime(50);
-      vi.advanceTimersByTime(50);
-      
-      // Save hasn't completed yet, but polling continues
-      expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
-      
-      // Complete the save
-      await vi.runOnlyPendingTimersAsync();
-      
-      // Verify save eventually completed
+      // Advance to complete the save
+      await vi.advanceTimersByTimeAsync(100);
+      expect(saveCompleted).toBe(true);
       expect(manager.getOnlineStatus()).toBe(true);
+      
+      // Next poll cycle can now run
+      orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(50); // Next poll (no session init)
+      expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -515,7 +564,7 @@ describe('SaveManager', () => {
       manager = SaveManager.getInstance();
     });
 
-    it('handles queueSave called exactly when poll cycle runs', () => {
+    it('handles queueSave called exactly when poll cycle runs', async () => {
       let pollExecuted = false;
       
       orchestrateSaveMock.mockImplementation(() => {
@@ -526,21 +575,23 @@ describe('SaveManager', () => {
       // Queue just before poll
       manager.queueSave(testBundleJSON, true);
       
-      // Poll cycle runs
-      vi.advanceTimersByTime(50);
+      // Poll cycle runs at t=50ms, session check takes 50ms, orchestrate at t=100ms+
+      await vi.advanceTimersByTimeAsync(100);
       
       expect(pollExecuted).toBe(true);
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
     });
 
-    it('handles very rapid sequential queueSave calls', () => {
+    it('handles very rapid sequential queueSave calls', async () => {
       const bundles: string[] = [];
       for (let i = 0; i < 100; i++) {
-        bundles.push(JSON.stringify({ ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: i } }));
+        const bundle = { ...testBundle, overallProgress: { ...testBundle.overallProgress, currentStreak: i } };
+        bundles.push(JSON.stringify(bundle));
         manager.queueSave(bundles[i], true);
       }
       
-      vi.advanceTimersByTime(50);
+      // Poll at t=50ms, session check takes 50ms, orchestrate at t=100ms+
+      await vi.advanceTimersByTimeAsync(100);
       
       // Only latest bundle saved
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
@@ -549,28 +600,22 @@ describe('SaveManager', () => {
     });
 
     it('maintains correct state through multiple save cycles', async () => {
-      // Cycle 1: Success
+      // Cycle 1: Success (first save has session init overhead)
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(100); // Poll + session init
       expect(manager.getOnlineStatus()).toBe(true);
       
-      // Cycle 2: Offline (this will trigger retry on next queue)
+      // Cycle 2: Offline (subsequent saves are faster, no session init)
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.OnlyLocalSucceeded);
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50);
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(50); // Just the poll
       expect(manager.getOnlineStatus()).toBe(false);
       
       // Cycle 3: Recovery (retry triggered even with hasChanged=false)
       orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
       manager.queueSave(testBundleJSON, false); // hasChanged=false but should retry
-      vi.advanceTimersByTime(50);
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(50);
       expect(manager.getOnlineStatus()).toBe(true);
       
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(3);
@@ -579,21 +624,20 @@ describe('SaveManager', () => {
     it('handles save completion exactly at next poll cycle boundary', async () => {
       let saveCompleted = false;
       
-      orchestrateSaveMock.mockImplementation(() =>
-        new Promise(resolve => {
-          setTimeout(() => {
-            saveCompleted = true;
-            resolve(SaveResult.BothSucceeded);
-          }, 50);
-        })
-      );
+      orchestrateSaveMock.mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        saveCompleted = true;
+        return SaveResult.BothSucceeded;
+      });
       
       manager.queueSave(testBundleJSON, true);
-      vi.advanceTimersByTime(50); // Trigger save
       
-      expect(saveCompleted).toBe(false);
+      // Trigger poll at 50ms, session init takes 50ms more, orchestrate starts at ~100ms
+      await vi.advanceTimersByTimeAsync(100);
+      expect(saveCompleted).toBe(false); // orchestrate's setTimeout not yet complete
       
-      await vi.advanceTimersByTimeAsync(50); // Save completes
+      // Complete the orchestrate's 50ms setTimeout
+      await vi.advanceTimersByTimeAsync(50);
       
       expect(saveCompleted).toBe(true);
       expect(manager.getOnlineStatus()).toBe(true);
@@ -605,13 +649,14 @@ describe('SaveManager', () => {
       manager = SaveManager.getInstance();
     });
 
-    it('preserves 50ms polling interval', () => {
+    it('preserves 50ms polling interval', async () => {
       manager.queueSave(testBundleJSON, true);
       
-      vi.advanceTimersByTime(49);
+      await vi.advanceTimersByTimeAsync(49);
       expect(orchestrateSaveMock).not.toHaveBeenCalled();
       
-      vi.advanceTimersByTime(1);
+      // Poll fires at 50ms, session check takes 50ms more
+      await vi.advanceTimersByTimeAsync(51); // Now at 100ms total
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
     });
 
@@ -623,6 +668,187 @@ describe('SaveManager', () => {
       vi.advanceTimersByTime(50);
       
       expect(instance1).toBe(instance2);
+    });
+  });
+
+  describe('Concurrent Session Protection', () => {
+    beforeEach(() => {
+      manager = SaveManager.getInstance();
+    });
+
+    it('writes session ID on first save attempt', async () => {
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      
+      // Verify session file was written
+      expect(mockBridge.solidSave).toHaveBeenCalledWith(
+        'mera_concurrent_session_protection.json',
+        expect.stringContaining('sessionId')
+      );
+    });
+
+    it('verifies session ID after writing', async () => {
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      
+      // Verify session file was read back for verification
+      expect(mockBridge.solidLoad).toHaveBeenCalledWith(
+        'mera_concurrent_session_protection.json'
+      );
+    });
+
+    it('checks session ID on subsequent saves', async () => {
+      // First save
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      
+      const firstSaveCallCount = mockBridge.solidLoad.mock.calls.length;
+      
+      // Second save
+      orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      
+      // Should have checked session ID again
+      expect(mockBridge.solidLoad.mock.calls.length).toBeGreaterThan(firstSaveCallCount);
+    });
+
+    it('detects concurrent session when session ID changes', async () => {
+      // First save succeeds
+      orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(100); // Poll at 50ms + session check 50ms
+      
+      expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
+      
+      // Simulate another device/tab changing the session ID
+      const differentSessionId = 'b'.repeat(32);
+      mockBridge.solidLoad.mockImplementation(async (filename: string) => {
+        if (filename === 'mera_concurrent_session_protection.json') {
+          return { 
+            success: true, 
+            data: JSON.stringify({ sessionId: differentSessionId })
+          };
+        }
+        return { success: true, data: '{}' };
+      });
+      
+      // Attempt second save - should detect concurrent session
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(50); // Next poll at t=150ms (50ms after first save completed)
+      
+      // Should have shown concurrent session error
+      expect(showCriticalErrorMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Concurrent Session Detected',
+          errorCode: 'concurrent-session'
+        })
+      );
+      
+      // Should NOT have called orchestrateSave again (error thrown before orchestration)
+      expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles session file write failures with retry', async () => {
+      let writeAttempts = 0;
+      mockBridge.solidSave.mockImplementation(async (filename: string) => {
+        if (filename === 'mera_concurrent_session_protection.json') {
+          writeAttempts++;
+          if (writeAttempts < 3) {
+            throw new Error('Network error');
+          }
+          return { success: true };
+        }
+        return { success: true };
+      });
+      
+      manager.queueSave(testBundleJSON, true);
+      vi.advanceTimersByTime(50);
+      
+      // Wait for retries with exponential backoff
+      await Promise.resolve();
+      vi.advanceTimersByTime(50); // First retry
+      await Promise.resolve();
+      vi.advanceTimersByTime(100); // Second retry
+      await Promise.resolve();
+      vi.advanceTimersByTime(200); // Third attempt succeeds
+      await Promise.resolve();
+      
+      // Should have retried
+      expect(writeAttempts).toBeGreaterThan(1);
+    });
+
+    it('fails initialization after max retry attempts', async () => {
+      // Make session file write always fail
+      mockBridge.solidSave.mockImplementation(async (filename: string) => {
+        if (filename === 'mera_concurrent_session_protection.json') {
+          throw new Error('Persistent network failure');
+        }
+        return { success: true };
+      });
+      
+      manager.queueSave(testBundleJSON, true);
+      
+      // Trigger poll and wait through all retry attempts
+      // Retries happen at: 50, 100, 200, 400, 800ms (exponential backoff)
+      await vi.advanceTimersByTimeAsync(50);  // Initial attempt
+      await vi.advanceTimersByTimeAsync(50);  // Retry 1
+      await vi.advanceTimersByTimeAsync(100); // Retry 2
+      await vi.advanceTimersByTimeAsync(200); // Retry 3
+      await vi.advanceTimersByTimeAsync(400); // Retry 4
+      await vi.advanceTimersByTimeAsync(800); // Retry 5
+      await vi.advanceTimersByTimeAsync(100); // Buffer for completion
+      
+      // Should have shown critical error
+      expect(showCriticalErrorMock).toHaveBeenCalled();
+      
+      // Should NOT have called orchestrateSave
+      expect(orchestrateSaveMock).not.toHaveBeenCalled();
+    });
+
+    it('continues save if session check read fails (graceful degradation)', async () => {
+      // First save succeeds
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      
+      // On second save, session read fails
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockBridge.solidLoad.mockImplementation(async (filename: string) => {
+        if (filename === 'mera_concurrent_session_protection.json') {
+          throw new Error('Network timeout');
+        }
+        return { success: true, data: '{}' };
+      });
+      
+      orchestrateSaveMock.mockResolvedValueOnce(SaveResult.BothSucceeded);
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      
+      // Should have logged warning
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      
+      // Should have continued with save anyway
+      expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
+      
+      consoleWarnSpy.mockRestore();
     });
   });
 });

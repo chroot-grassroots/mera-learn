@@ -3,17 +3,18 @@
  * @module persistence/saveManager
  *
  * Polls every 50ms to detect changed state and initiate save orchestration.
- * 
- * Fire-and-forget architecture: Main Core queues saves without blocking.
+ *
+ * Sequential architecture: Each poll cycle completes before the next begins.
  * SaveManager handles timing, retries, and conflict prevention independently.
  */
 
 import { orchestrateSave } from "./saveOrchestrator";
 import { showCriticalError } from "../ui/errorDisplay.js";
+import { MeraBridge } from "../solid/meraBridge";
 
 /**
  * Results of dual-persistence save operation.
- * 
+ *
  * Used to track online status and determine retry behavior.
  */
 enum SaveResult {
@@ -28,32 +29,59 @@ enum SaveResult {
 }
 
 /**
- * Manages automatic background saves with retry logic.
- * 
+ * Session protection file stored in Pod to detect concurrent access.
+ */
+interface SessionProtectionFile {
+  sessionId: string;
+}
+
+/**
+ * Manages automatic background saves with retry logic and concurrent session protection.
+ *
  * Responsibilities:
  * - Poll every 50ms for dirty state
  * - Orchestrate saves without blocking Main Core
  * - Retry failed Pod saves automatically
  * - Prevent concurrent save operations
  * - Track online/offline status
- * 
+ * - Detect concurrent sessions across devices/tabs (tamper-detection tripwire)
+ *
  * Why 50ms polling: Fast enough for immediate UI feedback (<100ms imperceptible
  * to users), slow enough to not use excessive resources.
  */
 class SaveManager {
   private static instance: SaveManager;
-  
+
+  // ============================================================================
+  // CORE STATE
+  // ============================================================================
+
   /** Prevents concurrent save operations */
   private saveInProgress: boolean = false;
-  
+
   /** Last save outcome, used for retry logic and online status */
   private lastSaveResult: SaveResult = SaveResult.BothSucceeded;
-  
+
   /** Latest progress bundle JSON queued by Main Core */
   private queuedSave: string | null = null;
-  
+
   /** Flag indicating bundle has changed since last save */
   private saveHasChanged: boolean = false;
+
+  // ============================================================================
+  // CONCURRENT SESSION PROTECTION STATE
+  // ============================================================================
+
+  /** Session ID for concurrent session detection (null until first save) */
+  private sessionId: string | null = null;
+
+  /** Path to session protection file in Pod */
+  private readonly SESSION_FILE_PATH =
+    "mera_concurrent_session_protection.json";
+
+  // ============================================================================
+  // INITIALIZATION
+  // ============================================================================
 
   private constructor() {
     this.startPolling();
@@ -61,7 +89,7 @@ class SaveManager {
 
   /**
    * Gets singleton instance, creating and starting it if needed.
-   * 
+   *
    * @returns The global SaveManager instance
    */
   static getInstance(): SaveManager {
@@ -73,30 +101,39 @@ class SaveManager {
 
   /**
    * Begins save polling cycle. Called automatically by constructor.
-   * 
+   *
    * Runs every 50ms to check for changed state and trigger saves.
+   * Each poll cycle completes before scheduling the next one.
    */
   private startPolling(): void {
-    setInterval(() => this.checkAndSave(), 50);
+    const poll = async () => {
+      await this.checkAndSave();
+      setTimeout(poll, 50); // Wait 50ms before next check
+    };
+    poll(); 
   }
+
+  // ============================================================================
+  // CORE SAVE LOGIC
+  // ============================================================================
 
   /**
    * Polling cycle that checks for changed state and triggers saves.
-   * 
+   *
    * Save triggers when:
    * - No save currently in progress, AND
    * - Either progress has changed, OR last Pod save failed (retry logic)
-   * 
+   *
    * However, core generally only calls queueSave() every 15 seconds except for with progress events
-   * 
-   * Fire-and-forget: orchestrateSave runs async, doesn't block polling.
+   *
+   * Sequential execution: Each poll waits for save to complete before returning.
    */
-  private checkAndSave() {
+  private async checkAndSave(): Promise<void> {
     // Don't save if no bundle queued
     if (this.queuedSave === null) {
       return;
     }
-    
+
     // Trigger save if not in progress and either changed or last Pod save failed
     if (
       !this.saveInProgress &&
@@ -104,57 +141,73 @@ class SaveManager {
         this.lastSaveResult === SaveResult.BothFailed ||
         this.lastSaveResult === SaveResult.OnlyLocalSucceeded)
     ) {
-      // Mark save in progress to prevent concurrent operations
+      // Mark save in progress to prevent concurrent operations. Not technically needed but extra safeguard.
       this.saveInProgress = true;
-      
+
       // Clear changed flag to prevent endless repeats
       this.saveHasChanged = false;
-      
+
       // Capture string reference (no clone needed - strings are immutable)
       const bundleSnapshot = this.queuedSave;
-      
+
       // Capture timestamp for backup filename
       const timestamp = Date.now();
-      
-      // Start async save operation
-      orchestrateSave(bundleSnapshot, timestamp)
-        .then((result: SaveResult) => {
-          // Store result for retry logic and online status
-          this.lastSaveResult = result;
-          
-          // Release lock for next save
-          this.saveInProgress = false;
-          
-          // Log localStorage failures (rare edge case)
-          if (result === SaveResult.OnlySolidSucceeded) {
-            console.error(
-              "⚠️ localStorage save failed - offline mode unavailable"
-            );
-          }
-        })
-        // Catch should never fire - indicates programming error in orchestrator
-        .catch((error: Error) => {
+
+      // Sequential save operation with session protection
+      try {
+        // Check for concurrent sessions before saving
+        await this.checkConcurrentSessions();
+
+        // Proceed with save
+        const result = await orchestrateSave(bundleSnapshot, timestamp);
+
+        // Store result for retry logic and online status
+        this.lastSaveResult = result;
+
+        // Log localStorage failures (rare edge case)
+        if (result === SaveResult.OnlySolidSucceeded) {
+          console.error(
+            "⚠️ localStorage save failed - offline mode unavailable"
+          );
+        }
+      } catch (error: any) {
+        // Check if this is a concurrent session error
+        if (
+          error.message &&
+          error.message.includes("Concurrent session detected")
+        ) {
+          showCriticalError({
+            title: "Concurrent Session Detected",
+            message:
+              "Another device or tab is using this account. Please refresh to continue.",
+            technicalDetails: error.stack,
+            errorCode: "concurrent-session",
+          });
+        } else {
           showCriticalError({
             title: "Save System Failure",
             message: "Progress is not being saved.",
             technicalDetails: error.stack,
             errorCode: "save-system-failure",
           });
-          this.lastSaveResult = SaveResult.BothFailed;
-          this.saveInProgress = false;
-        });
+        }
+        this.lastSaveResult = SaveResult.BothFailed;
+      } finally {
+        // Always release lock
+        this.saveInProgress = false;
+      }
     }
   }
 
   /**
    * Queues progress bundle JSON for next save cycle.
-   * 
+   *
    * Called by Main Core after processing progress updates. Does not
    * block - save happens asynchronously during next polling cycle.
-   * 
+   *
    * Typically happens once every 15 seconds if there had been a change
    * or happens with major progress event.
-   * 
+   *
    * @param bundleJSON - Pre-stringified JSON representation of complete progress bundle
    * @param hasChanged - True if bundle differs from last save
    */
@@ -165,10 +218,10 @@ class SaveManager {
 
   /**
    * Returns whether Solid Pod sync is currently working.
-   * 
+   *
    * Used by UI to display online/offline status. True if last save
    * succeeded in reaching the Pod, false if offline or Pod unreachable.
-   * 
+   *
    * @returns True if Pod sync operational, false otherwise
    */
   getOnlineStatus(): boolean {
@@ -179,6 +232,133 @@ class SaveManager {
       return true;
     } else {
       return false;
+    }
+  }
+
+  // ============================================================================
+  // CONCURRENT SESSION PROTECTION (Edge Case Prevention)
+  // ============================================================================
+  //
+  // This section implements tamper-detection tripwire logic to prevent data
+  // corruption when the same Pod is accessed from multiple devices/tabs.
+  //
+  // Strategy: Write a random session ID to the Pod, then verify it hasn't
+  // changed before each save. If it changes, another session is active.
+  //
+  // This is NOT a lock - it's detection after the fact. The 50ms pause after
+  // writing creates a window to catch near-simultaneous session starts.
+  // ============================================================================
+
+  /**
+   * Generates a cryptographically random 128-bit session ID.
+   *
+   * @returns Hex-encoded 128-bit random ID
+   */
+  private generateSessionId(): string {
+    const array = new Uint8Array(16); // 128 bits = 16 bytes
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+      ""
+    );
+  }
+
+  /**
+   * Checks for concurrent sessions by verifying session ID in Pod.
+   *
+   * First call: Writes random session ID, waits, verifies write succeeded
+   * Subsequent calls: Reads session ID, verifies it matches local copy
+   *
+   * This is a tamper-detection tripwire, not a lock. If another device/tab
+   * starts a session, we detect the ID change and halt to prevent corruption.
+   *
+   * @throws Error if concurrent session detected or Pod operations fail
+   */
+  private async checkConcurrentSessions(): Promise<void> {
+    const bridge = MeraBridge.getInstance();
+
+    if (this.sessionId === null) {
+      // First call: Initialize session protection
+      const newSessionId = this.generateSessionId();
+      const sessionFile: SessionProtectionFile = { sessionId: newSessionId };
+
+      // Write session ID to Pod with retry
+      const maxRetries = 5;
+      let retryCount = 0;
+      let writeSucceeded = false;
+
+      while (retryCount < maxRetries && !writeSucceeded) {
+        try {
+          await bridge.solidSave(
+            this.SESSION_FILE_PATH,
+            JSON.stringify(sessionFile)
+          );
+          writeSucceeded = true;
+        } catch (error) {
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            throw new Error(
+              `Failed to write session protection file after ${maxRetries} attempts: ${error}`
+            );
+          }
+          // Exponential backoff: 50ms, 100ms, 200ms, 400ms, 800ms
+          await new Promise((resolve) =>
+            setTimeout(resolve, 50 * Math.pow(2, retryCount - 1))
+          );
+        }
+      }
+
+      // Pause briefly to catch near-simultaneous writes from other sessions
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify our write succeeded (read back and check)
+      try {
+        const readBackResult = await bridge.solidLoad(this.SESSION_FILE_PATH);
+        if (!readBackResult.success || !readBackResult.data) {
+          throw new Error(`Session file read failed: ${readBackResult.error}`);
+        }
+        const verified: SessionProtectionFile = JSON.parse(readBackResult.data);
+
+        if (verified.sessionId !== newSessionId) {
+          throw new Error(
+            "Concurrent session detected during initialization - another device/tab overwrote session ID"
+          );
+        }
+
+        // Success - store session ID locally
+        this.sessionId = newSessionId;
+      } catch (error) {
+        throw new Error(`Session verification failed: ${error}`);
+      }
+    } else {
+      // Subsequent calls: Verify session ID hasn't changed
+      try {
+        const currentResult = await bridge.solidLoad(this.SESSION_FILE_PATH);
+        if (!currentResult.success || !currentResult.data) {
+          throw new Error(`Session file read failed: ${currentResult.error}`);
+        }
+        const currentFile: SessionProtectionFile = JSON.parse(
+          currentResult.data
+        );
+
+        if (currentFile.sessionId !== this.sessionId) {
+          throw new Error(
+            "Concurrent session detected - session ID changed. Another device/tab is active."
+          );
+        }
+      } catch (error: any) {
+        // Re-throw concurrent session errors - these are critical
+        if (
+          error.message &&
+          error.message.includes("Concurrent session detected")
+        ) {
+          throw error;
+        }
+
+        // For other errors (network issues, parse failures), degrade gracefully
+        // Log warning but allow save to proceed - network issues shouldn't brick the app
+        // Worst case: takes an extra save cycle or two to detect concurrency
+        console.warn("Session check failed (network issue?):", error);
+      }
     }
   }
 }

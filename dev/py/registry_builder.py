@@ -32,6 +32,7 @@ COMPONENT_PATTERNS = {
     "config_schema": r"export\s+const\s+(\w+ConfigSchema)\s*=",
     "progress_schema": r"export\s+const\s+(\w+ProgressSchema)\s*=",
     "component_type": r'type:\s*z\.literal\([\'"]([^\'"]+)[\'"]\)',
+    "validator_function": r"export\s+function\s+(validate\w+Structure)\s*\(",
 }
 
 
@@ -57,10 +58,15 @@ def scan_component_file(filepath: Path) -> Optional[Dict[str, str]]:
                 component_info["configSchema"] = match.group(1)
             elif pattern_name == "progress_schema":
                 component_info["progressSchema"] = match.group(1)
+            elif pattern_name == "validator_function":
+                component_info["validatorFunction"] = match.group(1)
 
     required_fields = ["componentClass", "configSchema", "progressSchema", "typeName"]
     if all(field in component_info for field in required_fields):
         component_info["file"] = filepath.stem
+        # Validator function is optional (not all components have it yet)
+        if "validatorFunction" not in component_info:
+            print(f"  ⚠️  No validator function found (this is okay for now)")
         return component_info
     else:
         missing = [field for field in required_fields if field not in component_info]
@@ -368,10 +374,17 @@ def generate_component_registry(
     registrations = []
 
     for component in components:
+        imports_list = [
+            component['componentClass'],
+            component['configSchema'],
+            component['progressSchema']
+        ]
+        # Add validator function if it exists
+        if 'validatorFunction' in component:
+            imports_list.append(component['validatorFunction'])
+        
         import_stmt = f"""import {{ 
-    {component['componentClass']}, 
-    {component['configSchema']}, 
-    {component['progressSchema']}
+    {', '.join(imports_list)}
 }} from '../components/cores/{component['file']}.js';"""
         imports.append(import_stmt)
 
@@ -403,6 +416,14 @@ def generate_component_registry(
         entry = f'    ["{comp["typeName"]}", {comp["progressSchema"]}]'
         progress_schema_entries.append(entry)
     progress_schema_content = ",\n".join(progress_schema_entries) if progress_schema_entries else ""
+
+    # NEW: Generate validator function map
+    validator_entries = []
+    for comp in components:
+        if 'validatorFunction' in comp:
+            entry = f'    ["{comp["typeName"]}", {comp["validatorFunction"]}]'
+            validator_entries.append(entry)
+    validator_content = ",\n".join(validator_entries) if validator_entries else ""
 
     entity_metrics_entries = []
     for entity in entities:
@@ -486,6 +507,15 @@ export const configSchemaMap = new Map<string, z.ZodType<any>>([
  */
 export const progressSchemaMap = new Map<string, z.ZodType<any>>([
 {progress_schema_content}
+]);
+
+/**
+ * MAPPING 4.5: Component Validator Map
+ * Maps component type string to validator function
+ * Used by progressRecovery to validate component progress against config
+ */
+export const componentValidatorMap = new Map<string, any>([
+{validator_content}
 ]);
 
 /**

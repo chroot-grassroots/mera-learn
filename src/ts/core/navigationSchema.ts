@@ -5,11 +5,16 @@
  * Tracks current lesson/page position with session-based persistence.
  * Restores user's location within 30 minutes of leaving, enabling smooth
  * UX on page refresh or brief navigation away.
+ *
+ * VALIDATION ARCHITECTURE:
+ * - Shared validation helpers: Atomic checks used by both validators and managers
+ * - Full validators: Pure functions that validate entire navigation state
+ * - Manager classes: Use helpers for defensive runtime validation
  */
 
 import { z } from "zod";
-import { ImmutableId, TrumpStrategy } from "./coreTypes";
-import { CurriculumRegistry } from "../registry/mera-registry";
+import { ImmutableId, TrumpStrategy } from "./coreTypes.js";
+import { CurriculumRegistry } from "../registry/mera-registry.js";
 
 /**
  * Navigation state schema
@@ -25,6 +30,121 @@ export const NavigationStateSchema = z.object({
 
 export type NavigationState = z.infer<typeof NavigationStateSchema>;
 
+// ============================================================================
+// SHARED VALIDATION HELPERS
+// ============================================================================
+
+/**
+ * Check if an entity ID exists in the curriculum registry.
+ *
+ * Used by both validateNavigationEntity (recovery) and
+ * NavigationStateManager (runtime mutations) to ensure consistency.
+ *
+ * @param entityId - Entity ID to validate (0 = main menu is always valid)
+ * @param curriculum - Curriculum registry to check against
+ * @returns true if entity exists in curriculum
+ */
+export function isValidEntityId(
+  entityId: number,
+  curriculum: CurriculumRegistry
+): boolean {
+  return entityId === 0 || curriculum.hasEntity(entityId);
+}
+
+/**
+ * Check if a page number is valid for a given entity.
+ *
+ * Used by both validateNavigationEntity (recovery) and
+ * NavigationStateManager (runtime mutations) to ensure consistency.
+ *
+ * @param entityId - Entity ID to check page count for
+ * @param page - Page number to validate
+ * @param curriculum - Curriculum registry to check against
+ * @returns true if page is within entity's page count
+ */
+export function isValidPageNumber(
+  entityId: number,
+  page: number,
+  curriculum: CurriculumRegistry
+): boolean {
+  const pageCount = curriculum.getEntityPageCount(entityId);
+  return page >= 0 && page < pageCount;
+}
+
+// ============================================================================
+// FULL VALIDATORS
+// ============================================================================
+
+/**
+ * Result of validating navigation state against curriculum.
+ *
+ * Returns cleaned state (defaulted if invalid) and whether defaulting occurred.
+ */
+export interface NavigationValidationResult {
+  cleaned: NavigationState;
+  wasDefaulted: boolean;
+}
+
+/**
+ * Validate navigation state against current curriculum registry.
+ *
+ * PURE FUNCTION - Never throws, always returns valid data.
+ *
+ * Checks if the current entity exists and the page number is valid.
+ * If either is invalid (e.g., entity was deleted from curriculum),
+ * defaults to main menu.
+ *
+ * Used by:
+ * - progressRecovery: Gracefully handles deleted entities
+ * - NavigationStateManager: Defensive check (throws if defaulted)
+ *
+ * @param data - Navigation state to validate
+ * @param curriculum - Current curriculum registry (source of truth)
+ * @returns Cleaned state + whether it was defaulted
+ */
+export function validateNavigationEntity(
+  data: NavigationState,
+  curriculum: CurriculumRegistry
+): NavigationValidationResult {
+  const entityId = data.currentEntityId;
+
+  // Check if entity is valid
+  if (!isValidEntityId(entityId, curriculum)) {
+    // Entity deleted from curriculum - default to main menu
+    return {
+      cleaned: {
+        currentEntityId: 0,
+        currentPage: 0,
+        lastUpdated: Date.now(),
+      },
+      wasDefaulted: true,
+    };
+  }
+
+  // Entity is valid, check page number
+  if (!isValidPageNumber(entityId, data.currentPage, curriculum)) {
+    // Page out of bounds - default to main menu
+    return {
+      cleaned: {
+        currentEntityId: 0,
+        currentPage: 0,
+        lastUpdated: Date.now(),
+      },
+      wasDefaulted: true,
+    };
+  }
+
+  // Navigation state is valid
+  return {
+    cleaned: data,
+    wasDefaulted: false,
+  };
+}
+
+// ============================================================================
+// MANAGER CLASSES
+// ============================================================================
+
 /**
  * Manages navigation state with validated mutations.
  *
@@ -37,13 +157,21 @@ export class NavigationStateManager {
     private curriculumRegistry: CurriculumRegistry
   ) {}
 
-  // Returns state for persistence. Validates before returning.
+  /**
+   * Returns state for persistence.
+   *
+   * Validates before returning using private helper.
+   */
   getState(): NavigationState {
     this.validateCurrentView();
     return this.state;
   }
 
-  // Returns current view for the startup after page load
+  /**
+   * Returns current view for startup after page load.
+   *
+   * Reverts to main menu if timestamp is older than 30 minutes.
+   */
   getCurrentViewStartup(): { entityId: number; page: number } {
     // Uses Unix time in seconds
     const now = Math.floor(Date.now() / 1000);
@@ -61,7 +189,11 @@ export class NavigationStateManager {
     };
   }
 
-  // Returns current view once running. Used by core to check if new page needs to be loaded.
+  /**
+   * Returns current view while running.
+   *
+   * Used by core to check if new page needs to be loaded.
+   */
   getCurrentViewRunning(): { entityId: number; page: number } {
     return {
       entityId: this.state.currentEntityId,
@@ -69,21 +201,32 @@ export class NavigationStateManager {
     };
   }
 
-  // The only setter available by message from the components. Completely sets new state.
+  /**
+   * Set navigation to specific entity and page.
+   *
+   * The only setter available via messages from components.
+   * Completely replaces current state.
+   */
   setCurrentView(entityId: number, page: number): void {
     this.state.currentEntityId = entityId;
     this.state.currentPage = page;
     this.state.lastUpdated = Math.floor(Date.now() / 1000);
   }
 
-  // Defaults to main menu.
+  /**
+   * Reset navigation to main menu.
+   */
   setDefaults(): void {
     this.state.currentEntityId = 0;
     this.state.currentPage = 0;
     this.state.lastUpdated = Math.floor(Date.now() / 1000);
   }
 
-  // Most recent record trumps
+  /**
+   * Define trump strategies for offline/online conflict resolution.
+   *
+   * Most recent timestamp wins for all fields.
+   */
   getAllTrumpStrategies(): Record<keyof NavigationState, TrumpStrategy<any>> {
     return {
       currentEntityId: "LATEST_TIMESTAMP",
@@ -92,19 +235,25 @@ export class NavigationStateManager {
     };
   }
 
-  // Makes sure the entity ID exists and page count is possible for entity
+  /**
+   * Validate current navigation state.
+   *
+   * Uses shared validation helpers to ensure entity and page are valid.
+   * Throws if validation fails (defensive runtime check).
+   *
+   * @throws Error if entity doesn't exist or page is out of bounds
+   */
   private validateCurrentView(): void {
     const { currentEntityId, currentPage } = this.state;
 
-    if (!this.curriculumRegistry.hasEntity(currentEntityId)) {
+    if (!isValidEntityId(currentEntityId, this.curriculumRegistry)) {
       throw new Error(
         `Invalid navigation state: Entity ${currentEntityId} does not exist in registry`
       );
     }
 
-    const pageCount =
-      this.curriculumRegistry.getEntityPageCount(currentEntityId);
-    if (currentPage >= pageCount) {
+    if (!isValidPageNumber(currentEntityId, currentPage, this.curriculumRegistry)) {
+      const pageCount = this.curriculumRegistry.getEntityPageCount(currentEntityId);
       throw new Error(
         `Invalid navigation state: Page ${currentPage} exceeds entity ${currentEntityId} page count (${pageCount})`
       );
@@ -118,7 +267,6 @@ export class NavigationStateManager {
  * Format: single setCurrentView method as first argument followed by menu/lesson
  * immutable ID and page number.
  */
-
 export const NavigationMessageSchema = z.object({
   method: z.literal("setCurrentView"),
   args: z.tuple([ImmutableId, z.number().min(0)]),
@@ -133,30 +281,43 @@ export type NavigationMessage = z.infer<typeof NavigationMessageSchema>;
  * to NavigationStateManager. Used by Main Core to handle queued
  * component navigation requests.
  */
-
 export class NavigationMessageManager {
   constructor(
     private navigationManager: NavigationStateManager,
     private curriculumRegistry: CurriculumRegistry
   ) {}
 
-  // Makes sure the message calls an entity that exists and the page number is possible for entity.
+  /**
+   * Validate a navigation message.
+   *
+   * Uses shared validation helpers to ensure entity and page are valid.
+   *
+   * @param message - Navigation message to validate
+   * @throws Error if entity doesn't exist or page is out of bounds
+   */
   validateMessage(message: NavigationMessage): void {
     const [entityId, page] = message.args;
 
-    if (!this.curriculumRegistry.hasEntity(entityId)) {
+    if (!isValidEntityId(entityId, this.curriculumRegistry)) {
       throw new Error(`Invalid entity ID: ${entityId}`);
     }
 
-    const pageCount = this.curriculumRegistry.getEntityPageCount(entityId);
-    if (page >= pageCount) {
+    if (!isValidPageNumber(entityId, page, this.curriculumRegistry)) {
+      const pageCount = this.curriculumRegistry.getEntityPageCount(entityId);
       throw new Error(
         `Invalid page ${page} for entity ${entityId} (max: ${pageCount - 1})`
       );
     }
   }
 
-  // Validates the message, and, if valid, calls the method on the navigation manager.
+  /**
+   * Validate and handle a navigation message.
+   *
+   * Validates message, then forwards to navigation manager if valid.
+   *
+   * @param message - Navigation message to handle
+   * @throws Error if validation fails
+   */
   handleMessage(message: NavigationMessage): void {
     this.validateMessage(message);
     const [entityId, page] = message.args;
@@ -170,12 +331,20 @@ export class NavigationMessageManager {
  * Components use this to queue navigation updates. Main Core polls via
  * getMessages() to apply validated changes to navigation state.
  */
-
 export class NavigationMessageQueueManager {
   private messageQueue: NavigationMessage[] = [];
 
   constructor(private curriculumRegistry: CurriculumRegistry) {}
 
+  /**
+   * Queue a navigation message.
+   *
+   * Validates entity and page using shared helpers before queueing.
+   *
+   * @param entityId - Entity to navigate to
+   * @param page - Page number within entity
+   * @throws Error if entity doesn't exist or page is out of bounds
+   */
   queueNavigationMessage(entityId: number, page: number): void {
     const message: NavigationMessage = {
       method: "setCurrentView",
@@ -183,22 +352,28 @@ export class NavigationMessageQueueManager {
     };
 
     // Validate before queuing
-    if (!this.curriculumRegistry.hasEntity(entityId)) {
+    if (!isValidEntityId(entityId, this.curriculumRegistry)) {
       throw new Error(`Invalid entity ID: ${entityId}`);
     }
 
-    const pageCount = this.curriculumRegistry.getEntityPageCount(entityId);
-    if (page >= pageCount) {
+    if (!isValidPageNumber(entityId, page, this.curriculumRegistry)) {
       throw new Error(`Invalid page ${page} for entity ${entityId}`);
     }
 
     this.messageQueue.push(message);
   }
 
-  // Core drains queue by copying and clearing
+  /**
+   * Retrieve and clear all queued messages.
+   *
+   * Core polls this method to get pending navigation updates.
+   * Messages are removed from queue after retrieval.
+   *
+   * @returns Array of queued messages
+   */
   getMessages(): NavigationMessage[] {
     const messages = [...this.messageQueue];
-    this.messageQueue = []; // Clear queue
+    this.messageQueue = [];
     return messages;
   }
 }

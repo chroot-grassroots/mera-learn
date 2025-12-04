@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2025-12-03T21:07:47.604952
+ * Generated on: 2025-12-03T22:23:59.720736
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -13,9 +13,7 @@ import { z } from 'zod';
 import type { BaseComponentProgressManager } from '../components/cores/baseComponentCore.js';
 
 import { 
-    BasicTaskProgressManager, 
-    BasicTaskComponentConfigSchema, 
-    BasicTaskComponentProgressSchema
+    BasicTaskProgressManager, BasicTaskComponentConfigSchema, BasicTaskComponentProgressSchema, validateBasicTaskStructure
 } from '../components/cores/basicTaskCore.js';
 
 export interface ComponentRegistration {
@@ -67,6 +65,15 @@ export const configSchemaMap = new Map<string, z.ZodType<any>>([
  */
 export const progressSchemaMap = new Map<string, z.ZodType<any>>([
     ["basic_task", BasicTaskComponentProgressSchema]
+]);
+
+/**
+ * MAPPING 4.5: Component Validator Map
+ * Maps component type string to validator function
+ * Used by progressRecovery to validate component progress against config
+ */
+export const componentValidatorMap = new Map<string, any>([
+    ["basic_task", validateBasicTaskStructure]
 ]);
 
 /**

@@ -44,10 +44,12 @@
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
     "events": "^3.3.0",
+    "js-yaml": "^4.1.1",
     "stream-browserify": "^3.0.0",
     "zod": "^4.1.9"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.5.1",
     "concurrently": "^9.2.1",
     "esbuild": "^0.27.0",

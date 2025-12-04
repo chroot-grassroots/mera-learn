@@ -218,7 +218,8 @@ describe('SaveManager', () => {
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
       expect(orchestrateSaveMock).toHaveBeenCalledWith(
         testBundleJSON,
-        expect.any(Number)
+        expect.any(Number),
+        true  // allowSolidSaves should be true when session check passes
       );
     });
 
@@ -460,7 +461,7 @@ describe('SaveManager', () => {
         expect.objectContaining({
           title: 'Save System Failure',
           message: 'Progress is not being saved.',
-          errorCode: 'save-system-failure'
+          errorCode: 'save-orchestration-failure'
         })
       );
     });
@@ -757,7 +758,7 @@ describe('SaveManager', () => {
         })
       );
       
-      // Should NOT have called orchestrateSave again (error thrown before orchestration)
+      // Should NOT have called orchestrateSave again (early return before orchestration)
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(1);
     });
 
@@ -811,10 +812,15 @@ describe('SaveManager', () => {
       await vi.advanceTimersByTimeAsync(800); // Retry 5
       await vi.advanceTimersByTimeAsync(100); // Buffer for completion
       
-      // Should have shown critical error
-      expect(showCriticalErrorMock).toHaveBeenCalled();
+      // Should have shown initialization failure error
+      expect(showCriticalErrorMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Save System Failure',
+          errorCode: 'session-init-failure'
+        })
+      );
       
-      // Should NOT have called orchestrateSave
+      // Should NOT have called orchestrateSave (early return after init failure)
       expect(orchestrateSaveMock).not.toHaveBeenCalled();
     });
 
@@ -842,13 +848,68 @@ describe('SaveManager', () => {
       await Promise.resolve();
       await Promise.resolve();
       
-      // Should have logged warning
+      // Should have logged warning about blocking solid saves
       expect(consoleWarnSpy).toHaveBeenCalled();
       
-      // Should have continued with save anyway
+      // Should have continued with save, but with allowSolidSaves=false
       expect(orchestrateSaveMock).toHaveBeenCalledTimes(2);
+      expect(orchestrateSaveMock).toHaveBeenLastCalledWith(
+        testBundleJSON,
+        expect.any(Number),
+        false  // allowSolidSaves should be false when network error occurs
+      );
       
       consoleWarnSpy.mockRestore();
+    });
+
+    it('passes allowSolidSaves=true when session check passes', async () => {
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(100);
+      
+      expect(orchestrateSaveMock).toHaveBeenCalledWith(
+        testBundleJSON,
+        expect.any(Number),
+        true  // Session check passed, allow solid saves
+      );
+    });
+
+    it('shows correct error for verification failure during initialization', async () => {
+      // Write succeeds but read-back shows different session ID (concurrent session during init)
+      let writeCount = 0;
+      const initialSessionId = JSON.stringify({ sessionId: 'original-id' });
+      const overwrittenSessionId = JSON.stringify({ sessionId: 'overwritten-id' });
+      
+      mockBridge.solidSave.mockImplementation(async (filename: string, data: string) => {
+        if (filename === 'mera_concurrent_session_protection.json') {
+          writeCount++;
+          return { success: true };
+        }
+        return { success: true };
+      });
+      
+      mockBridge.solidLoad.mockImplementation(async (filename: string) => {
+        if (filename === 'mera_concurrent_session_protection.json') {
+          // Return different ID than what was written
+          return { 
+            success: true, 
+            data: overwrittenSessionId 
+          };
+        }
+        return { success: true, data: '{}' };
+      });
+      
+      manager.queueSave(testBundleJSON, true);
+      await vi.advanceTimersByTimeAsync(150); // Poll + write + pause + verification
+      
+      // Should detect concurrent session during initialization
+      expect(showCriticalErrorMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Concurrent Session Detected',
+          errorCode: 'concurrent-session'
+        })
+      );
+      
+      expect(orchestrateSaveMock).not.toHaveBeenCalled();
     });
   });
 });

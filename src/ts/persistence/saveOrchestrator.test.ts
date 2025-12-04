@@ -103,7 +103,7 @@ describe('orchestrateSave', () => {
 
   describe('Four-Stage Success Path', () => {
     it('returns BothSucceeded when all four stages complete successfully', async () => {
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.BothSucceeded);
       
@@ -147,7 +147,7 @@ describe('orchestrateSave', () => {
     });
 
     it('creates files with correct naming convention', async () => {
-      await orchestrateSave(testBundleJSON, testTimestamp);
+      await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Verify filename pattern: mera.{major}.{minor}.{patch}.{type}.{timestamp}.json
       const filenamePattern = /^mera\.\d+\.\d+\.\d+\.(lofp|lofd|sp|sd|lonp|lond)\.\d+\.json$/;
@@ -163,7 +163,7 @@ describe('orchestrateSave', () => {
     });
 
     it('embeds the provided timestamp in all filenames', async () => {
-      await orchestrateSave(testBundleJSON, testTimestamp);
+      await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       const timestampString = testTimestamp.toString();
 
@@ -186,7 +186,7 @@ describe('orchestrateSave', () => {
         throw new Error('Local storage full');
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Should still attempt Pod save
       expect(mockBridge.solidSave).toHaveBeenCalled();
@@ -202,7 +202,7 @@ describe('orchestrateSave', () => {
         throw new Error('Network failure');
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.OnlyLocalSucceeded);
       
@@ -227,7 +227,7 @@ describe('orchestrateSave', () => {
         throw new Error('Pod unreachable');
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.BothFailed);
     });
@@ -237,7 +237,7 @@ describe('orchestrateSave', () => {
         throw new Error('Pod authentication failed');
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Should not attempt Stage 3 (online local) after Pod failure
       expect(mockBridge.localSave).toHaveBeenCalledTimes(2); // Only offline files
@@ -251,7 +251,7 @@ describe('orchestrateSave', () => {
     });
 
     it('saves both primary and duplicate to Pod in parallel', async () => {
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.BothSucceeded);
       
@@ -281,7 +281,7 @@ describe('orchestrateSave', () => {
         return { success: true };
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.OnlySolidSucceeded);
       
@@ -290,7 +290,7 @@ describe('orchestrateSave', () => {
     });
 
     it('creates online files after Pod succeeds', async () => {
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.BothSucceeded);
       
@@ -308,7 +308,7 @@ describe('orchestrateSave', () => {
 
   describe('Stage 4: Cleanup Offline Files', () => {
     it('removes offline files after all stages succeed', async () => {
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.BothSucceeded);
       
@@ -332,7 +332,7 @@ describe('orchestrateSave', () => {
         return { success: true };
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.OnlySolidSucceeded);
       
@@ -346,7 +346,7 @@ describe('orchestrateSave', () => {
         throw new Error('Delete failed');
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Should still return BothSucceeded despite cleanup failure
       expect(result).toBe(SaveResult.BothSucceeded);
@@ -355,7 +355,7 @@ describe('orchestrateSave', () => {
 
   describe('Verification Logic', () => {
     it('verifies saved data by loading it back', async () => {
-      await orchestrateSave(testBundleJSON, testTimestamp);
+      await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Should load back all six files for verification
       // 2 offline + 2 Pod + 2 online = 6 loads
@@ -371,7 +371,7 @@ describe('orchestrateSave', () => {
         data: corruptedJSON  // Different string
       }));
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Pod verification failed
       expect(result).toBe(SaveResult.OnlyLocalSucceeded);
@@ -384,7 +384,7 @@ describe('orchestrateSave', () => {
         data: corruptedJSON
       }));
 
-      await orchestrateSave(testBundleJSON, testTimestamp);
+      await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Should delete corrupted Pod files
       expect(mockBridge.solidDelete).toHaveBeenCalledWith(
@@ -405,7 +405,7 @@ describe('orchestrateSave', () => {
         return { success: true, data: testBundleJSON };
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Online verification should fail due to different string representation
       expect(result).toBe(SaveResult.OnlySolidSucceeded);
@@ -414,7 +414,7 @@ describe('orchestrateSave', () => {
 
   describe('Duplicate File Handling', () => {
     it('saves both primary and duplicate for each stage', async () => {
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.BothSucceeded);
       
@@ -436,7 +436,7 @@ describe('orchestrateSave', () => {
         return { success: true, data: testBundleJSON };
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       // Promise.all fails if ANY promise rejects, so Pod stage fails
       expect(result).toBe(SaveResult.OnlyLocalSucceeded);
@@ -445,7 +445,7 @@ describe('orchestrateSave', () => {
 
   describe('SaveResult Enum Coverage', () => {
     it('returns BothSucceeded when all stages complete', async () => {
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
       expect(result).toBe(SaveResult.BothSucceeded);
     });
 
@@ -454,7 +454,7 @@ describe('orchestrateSave', () => {
         throw new Error('Network error');
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
       expect(result).toBe(SaveResult.OnlyLocalSucceeded);
     });
 
@@ -468,7 +468,7 @@ describe('orchestrateSave', () => {
         return { success: true };
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
       expect(result).toBe(SaveResult.OnlySolidSucceeded);
     });
 
@@ -480,7 +480,7 @@ describe('orchestrateSave', () => {
         throw new Error('Pod error');
       });
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
       expect(result).toBe(SaveResult.BothFailed);
     });
   });
@@ -493,7 +493,7 @@ describe('orchestrateSave', () => {
         throw new Error('Network failure');
       });
 
-      await orchestrateSave(testBundleJSON, testTimestamp);
+      await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Pod save failed:',
@@ -509,7 +509,7 @@ describe('orchestrateSave', () => {
         // Missing data field
       }));
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.OnlyLocalSucceeded);
     });
@@ -520,7 +520,7 @@ describe('orchestrateSave', () => {
         error: 'Pod unreachable'
       }));
 
-      const result = await orchestrateSave(testBundleJSON, testTimestamp);
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.OnlyLocalSucceeded);
     });
@@ -549,7 +549,7 @@ describe('orchestrateSave', () => {
         data: largeBundleJSON
       }));
 
-      const result = await orchestrateSave(largeBundleJSON, testTimestamp);
+      const result = await orchestrateSave(largeBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.BothSucceeded);
     });
@@ -573,9 +573,61 @@ describe('orchestrateSave', () => {
         data: unicodeBundleJSON
       }));
 
-      const result = await orchestrateSave(unicodeBundleJSON, testTimestamp);
+      const result = await orchestrateSave(unicodeBundleJSON, testTimestamp, true);
 
       expect(result).toBe(SaveResult.BothSucceeded);
+    });
+  });
+
+  describe('Concurrence Protection (allowSolidSaves parameter)', () => {
+    it('blocks Pod saves when allowSolidSaves=false', async () => {
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, false);
+
+      // Stage 1: Local offline should still happen
+      expect(mockBridge.localSave).toHaveBeenCalledWith(
+        expect.stringContaining('.lofp.'),
+        testBundleJSON
+      );
+      expect(mockBridge.localSave).toHaveBeenCalledWith(
+        expect.stringContaining('.lofd.'),
+        testBundleJSON
+      );
+
+      // Stage 2: Pod saves should be BLOCKED
+      expect(mockBridge.solidSave).not.toHaveBeenCalled();
+
+      // Stage 3 and 4 should not happen (Pod failed)
+      expect(mockBridge.localSave).not.toHaveBeenCalledWith(
+        expect.stringContaining('.lonp.'),
+        expect.anything()
+      );
+      expect(mockBridge.localDelete).not.toHaveBeenCalled();
+
+      // Should return OnlyLocalSucceeded since Pod was blocked
+      expect(result).toBe(SaveResult.OnlyLocalSucceeded);
+    });
+
+    it('proceeds normally when allowSolidSaves=true', async () => {
+      const result = await orchestrateSave(testBundleJSON, testTimestamp, true);
+
+      // All stages should complete
+      expect(mockBridge.localSave).toHaveBeenCalledTimes(4); // offline + online
+      expect(mockBridge.solidSave).toHaveBeenCalledTimes(2); // Pod primary + dup
+      expect(mockBridge.localDelete).toHaveBeenCalledTimes(2); // cleanup
+
+      expect(result).toBe(SaveResult.BothSucceeded);
+    });
+
+    it('logs warning when Pod saves are blocked', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await orchestrateSave(testBundleJSON, testTimestamp, false);
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Pod save blocked - concurrence check did not pass'
+      );
+
+      consoleWarnSpy.mockRestore();
     });
   });
 });

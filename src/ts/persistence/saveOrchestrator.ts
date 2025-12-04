@@ -54,13 +54,18 @@ interface SaveFilenames {
  * string equality. Corrupted writes are deleted and reported as failures
  * rather than silently persisting bad data.
  * 
+ * Concurrence protection: If allowSolidSaves is false, solid saves are
+ * blocked to prevent stale sessions from overwriting newer data.
+ * 
  * @param bundleJSON - Pre-stringified JSON representation of complete progress bundle
  * @param timestamp - Unix timestamp for backup filename generation
+ * @param allowSolidSaves - Whether to attempt solid Pod saves (false blocks them)
  * @returns SaveResult enum indicating which operations succeeded
  */
 export async function orchestrateSave(
   bundleJSON: string,
-  timestamp: number
+  timestamp: number,
+  allowSolidSaves: boolean
 ): Promise<SaveResult> {
   const fileNames = generateFilenames(timestamp);
 
@@ -80,15 +85,20 @@ export async function orchestrateSave(
 
   // Stage 2: Pod save (critical operation)
   // Pod sync determines overall success. If this fails, entire save fails.
+  // BLOCKED if allowSolidSaves is false to prevent stale sessions overwriting newer data.
   let podSucceeded = false;
-  try {
-    await Promise.all([
-      saveLoadCheckCleanSolid(fileNames.solidPrimary, bundleJSON),
-      saveLoadCheckCleanSolid(fileNames.solidDup, bundleJSON),
-    ]);
-    podSucceeded = true;
-  } catch (podError) {
-    console.error("Pod save failed:", podError);
+  if (allowSolidSaves) {
+    try {
+      await Promise.all([
+        saveLoadCheckCleanSolid(fileNames.solidPrimary, bundleJSON),
+        saveLoadCheckCleanSolid(fileNames.solidDup, bundleJSON),
+      ]);
+      podSucceeded = true;
+    } catch (podError) {
+      console.error("Pod save failed:", podError);
+    }
+  } else {
+    console.warn("Pod save blocked - concurrence check did not pass");
   }
 
   // If Pod failed, stop here - no point updating local files

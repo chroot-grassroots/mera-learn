@@ -29,6 +29,22 @@ enum SaveResult {
 }
 
 /**
+ * Results of concurrent session check.
+ * 
+ * Determines whether to proceed with solid saves and whether to show errors.
+ */
+enum ConcurrenceCheckResult {
+  /** Session check passed - proceed with all saves */
+  Passed,
+  /** Definitive concurrent session detected - halt everything, show error */
+  ConcurrentSessionDetected,
+  /** Failed to initialize session file - halt everything, show error */
+  InitializationFailed,
+  /** Network error during subsequent check - allow local saves only, block solid */
+  NetworkError,
+}
+
+/**
  * Session protection file stored in Pod to detect concurrent access.
  */
 interface SessionProtectionFile {
@@ -154,12 +170,37 @@ class SaveManager {
       const timestamp = Date.now();
 
       // Sequential save operation with session protection
-      try {
-        // Check for concurrent sessions before saving
-        await this.checkConcurrentSessions();
+      const concurrenceCheck = await this.checkConcurrentSessions();
 
-        // Proceed with save
-        const result = await orchestrateSave(bundleSnapshot, timestamp);
+      // Handle critical failures - show error and stop everything
+      if (concurrenceCheck === ConcurrenceCheckResult.ConcurrentSessionDetected) {
+        showCriticalError({
+          title: "Concurrent Session Detected",
+          message: "Another device or tab is using this account. Please refresh to continue.",
+          technicalDetails: "Session ID mismatch detected in Pod",
+          errorCode: "concurrent-session",
+        });
+        this.lastSaveResult = SaveResult.BothFailed;
+        return;
+      }
+
+      if (concurrenceCheck === ConcurrenceCheckResult.InitializationFailed) {
+        showCriticalError({
+          title: "Save System Failure",
+          message: "Failed to initialize session protection. Progress is not being saved.",
+          technicalDetails: "Could not write or verify session file after retries",
+          errorCode: "session-init-failure",
+        });
+        this.lastSaveResult = SaveResult.BothFailed;
+        return;
+      }
+
+      // Proceed with save
+      // NetworkError: block solid saves but allow local saves to continue
+      // Passed: proceed normally with all saves
+      try {
+        const allowSolidSaves = (concurrenceCheck === ConcurrenceCheckResult.Passed);
+        const result = await orchestrateSave(bundleSnapshot, timestamp, allowSolidSaves);
 
         // Store result for retry logic and online status
         this.lastSaveResult = result;
@@ -171,26 +212,13 @@ class SaveManager {
           );
         }
       } catch (error: any) {
-        // Check if this is a concurrent session error
-        if (
-          error.message &&
-          error.message.includes("Concurrent session detected")
-        ) {
-          showCriticalError({
-            title: "Concurrent Session Detected",
-            message:
-              "Another device or tab is using this account. Please refresh to continue.",
-            technicalDetails: error.stack,
-            errorCode: "concurrent-session",
-          });
-        } else {
-          showCriticalError({
-            title: "Save System Failure",
-            message: "Progress is not being saved.",
-            technicalDetails: error.stack,
-            errorCode: "save-system-failure",
-          });
-        }
+        // Orchestration failure (should be rare - mainly corruption detection)
+        showCriticalError({
+          title: "Save System Failure",
+          message: "Progress is not being saved.",
+          technicalDetails: error.stack,
+          errorCode: "save-orchestration-failure",
+        });
         this.lastSaveResult = SaveResult.BothFailed;
       } finally {
         // Always release lock
@@ -271,9 +299,9 @@ class SaveManager {
    * This is a tamper-detection tripwire, not a lock. If another device/tab
    * starts a session, we detect the ID change and halt to prevent corruption.
    *
-   * @throws Error if concurrent session detected or Pod operations fail
+   * @returns ConcurrenceCheckResult indicating what happened
    */
-  private async checkConcurrentSessions(): Promise<void> {
+  private async checkConcurrentSessions(): Promise<ConcurrenceCheckResult> {
     const bridge = MeraBridge.getInstance();
 
     if (this.sessionId === null) {
@@ -296,9 +324,8 @@ class SaveManager {
         } catch (error) {
           retryCount++;
           if (retryCount >= maxRetries) {
-            throw new Error(
-              `Failed to write session protection file after ${maxRetries} attempts: ${error}`
-            );
+            console.error(`Failed to write session protection file after ${maxRetries} attempts:`, error);
+            return ConcurrenceCheckResult.InitializationFailed;
           }
           // Exponential backoff: 50ms, 100ms, 200ms, 400ms, 800ms
           await new Promise((resolve) =>
@@ -314,50 +341,46 @@ class SaveManager {
       try {
         const readBackResult = await bridge.solidLoad(this.SESSION_FILE_PATH);
         if (!readBackResult.success || !readBackResult.data) {
-          throw new Error(`Session file read failed: ${readBackResult.error}`);
+          console.error("Session file read failed:", readBackResult.error);
+          return ConcurrenceCheckResult.InitializationFailed;
         }
         const verified: SessionProtectionFile = JSON.parse(readBackResult.data);
 
         if (verified.sessionId !== newSessionId) {
-          throw new Error(
-            "Concurrent session detected during initialization - another device/tab overwrote session ID"
-          );
+          console.error("Concurrent session detected during initialization - another device/tab overwrote session ID");
+          return ConcurrenceCheckResult.ConcurrentSessionDetected;
         }
 
         // Success - store session ID locally
         this.sessionId = newSessionId;
+        return ConcurrenceCheckResult.Passed;
       } catch (error) {
-        throw new Error(`Session verification failed: ${error}`);
+        console.error("Session verification failed:", error);
+        return ConcurrenceCheckResult.InitializationFailed;
       }
     } else {
       // Subsequent calls: Verify session ID hasn't changed
       try {
         const currentResult = await bridge.solidLoad(this.SESSION_FILE_PATH);
         if (!currentResult.success || !currentResult.data) {
-          throw new Error(`Session file read failed: ${currentResult.error}`);
+          // Network error reading session file - degrade gracefully
+          console.warn("Session check network error, blocking solid saves:", currentResult.error);
+          return ConcurrenceCheckResult.NetworkError;
         }
         const currentFile: SessionProtectionFile = JSON.parse(
           currentResult.data
         );
 
         if (currentFile.sessionId !== this.sessionId) {
-          throw new Error(
-            "Concurrent session detected - session ID changed. Another device/tab is active."
-          );
+          console.error("Concurrent session detected - session ID changed. Another device/tab is active.");
+          return ConcurrenceCheckResult.ConcurrentSessionDetected;
         }
+        
+        return ConcurrenceCheckResult.Passed;
       } catch (error: any) {
-        // Re-throw concurrent session errors - these are critical
-        if (
-          error.message &&
-          error.message.includes("Concurrent session detected")
-        ) {
-          throw error;
-        }
-
-        // For other errors (network issues, parse failures), degrade gracefully
-        // Log warning but allow save to proceed - network issues shouldn't brick the app
-        // Worst case: takes an extra save cycle or two to detect concurrency
-        console.warn("Session check failed (network issue?):", error);
+        // Parse error or other unexpected failure - degrade gracefully
+        console.warn("Session check failed, blocking solid saves:", error);
+        return ConcurrenceCheckResult.NetworkError;
       }
     }
   }

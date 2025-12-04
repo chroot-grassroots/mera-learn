@@ -556,6 +556,10 @@ export class CurriculumRegistry {{
         return metadata?.entityType === "menu" || false;
     }}
 
+    hasDomain(domainId: number): boolean {{
+        return this.domainMap.has(domainId);
+    }}
+
     getEntityPageCount(entityId: number): number {{
         const metrics = lessonMetrics.get(entityId);
         if (!metrics) {{

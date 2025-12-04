@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2025-12-03T20:28:59.428710
+ * Generated on: 2025-12-03T21:07:47.604952
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -136,6 +136,10 @@ export class CurriculumRegistry {
     hasMenu(menuId: number): boolean {
         const metadata = lessonMetadata.find(l => l.id === menuId);
         return metadata?.entityType === "menu" || false;
+    }
+
+    hasDomain(domainId: number): boolean {
+        return this.domainMap.has(domainId);
     }
 
     getEntityPageCount(entityId: number): number {

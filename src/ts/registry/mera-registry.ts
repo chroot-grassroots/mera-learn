@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2025-12-03T22:23:59.720736
+ * Generated on: 2025-12-05T23:10:50.648487
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -12,9 +12,7 @@
 import { z } from 'zod';
 import type { BaseComponentProgressManager } from '../components/cores/baseComponentCore.js';
 
-import { 
-    BasicTaskProgressManager, BasicTaskComponentConfigSchema, BasicTaskComponentProgressSchema, validateBasicTaskStructure
-} from '../components/cores/basicTaskCore.js';
+// No components discovered yet
 
 export interface ComponentRegistration {
     componentClass: any;
@@ -35,12 +33,7 @@ export interface LessonMetrics {
  * Array of all component registrations with classes and schemas
  */
 export const componentRegistrations: ComponentRegistration[] = [
-    {
-        componentClass: BasicTaskProgressManager,
-        configSchema: BasicTaskComponentConfigSchema,
-        progressSchema: BasicTaskComponentProgressSchema,
-        typeName: 'basic_task'
-    }
+
 ];
 
 /**
@@ -48,7 +41,7 @@ export const componentRegistrations: ComponentRegistration[] = [
  * Maps component type string to component class
  */
 export const componentTypeMap = new Map<string, any>([
-    ["basic_task", BasicTaskProgressManager]
+
 ]);
 
 /**
@@ -56,7 +49,7 @@ export const componentTypeMap = new Map<string, any>([
  * Maps component type string to config schema
  */
 export const configSchemaMap = new Map<string, z.ZodType<any>>([
-    ["basic_task", BasicTaskComponentConfigSchema]
+
 ]);
 
 /**
@@ -64,16 +57,25 @@ export const configSchemaMap = new Map<string, z.ZodType<any>>([
  * Maps component type string to progress schema
  */
 export const progressSchemaMap = new Map<string, z.ZodType<any>>([
-    ["basic_task", BasicTaskComponentProgressSchema]
+
 ]);
 
 /**
  * MAPPING 4.5: Component Validator Map
  * Maps component type string to validator function
- * Used by progressRecovery to validate component progress against config
+ * Used by progressIntegrity to validate component progress against config
  */
 export const componentValidatorMap = new Map<string, any>([
-    ["basic_task", validateBasicTaskStructure]
+
+]);
+
+/**
+ * MAPPING 4.6: Component Initializer Map
+ * Maps component type string to createInitialProgress function
+ * Used by progressIntegrity to initialize missing/new components with defaults
+ */
+export const componentInitializerMap = new Map<string, () => any>([
+
 ]);
 
 /**
@@ -107,6 +109,16 @@ export const componentIdToTypeMap = new Map<number, string>([
 ]);
 
 /**
+ * MAPPING 8.5: Component ID to Lesson ID Map
+ * Maps component ID (number) to the lesson ID that contains it
+ * Used by progressIntegrity to find lesson configs for component validation
+ */
+export const componentToLessonMap = new Map<number, number>([
+    [123456, 12345],
+    [123457, 12345]
+]);
+
+/**
  * MAPPING 9: Domain-Lesson Map
  * Maps domain ID to array of lesson IDs in that domain
  */
@@ -128,7 +140,8 @@ export class CurriculumRegistry {
         private curriculum: any,
         private lessonIds: Set<number>,
         private domainMap: Map<number, number[]>,
-        private componentIdToType: Map<number, string>
+        private componentIdToType: Map<number, string>,
+        private componentToLesson: Map<number, number>
     ) {}
     
     hasEntity(entityId: number): boolean {
@@ -166,13 +179,22 @@ export class CurriculumRegistry {
     getComponentType(componentId: number): string | undefined {
         return this.componentIdToType.get(componentId);
     }
+
+    getAllComponentIds(): number[] {
+        return Array.from(this.componentIdToType.keys());
+    }
+
+    getLessonIdForComponent(componentId: number): number | undefined {
+        return this.componentToLesson.get(componentId);
+    }
 }
 
 export const curriculumData = new CurriculumRegistry(
     curriculumDataRaw,
     new Set(allLessonIds),
     domainLessonMap,
-    componentIdToTypeMap
+    componentIdToTypeMap,
+    componentToLessonMap
 );
 
 /**

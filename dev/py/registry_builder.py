@@ -33,6 +33,7 @@ COMPONENT_PATTERNS = {
     "progress_schema": r"export\s+const\s+(\w+ProgressSchema)\s*=",
     "component_type": r'type:\s*z\.literal\([\'"]([^\'"]+)[\'"]\)',
     "validator_function": r"export\s+function\s+(validate\w+Structure)\s*\(",
+    "initializer_function": r"export\s+function\s+(createInitialProgress)\s*\(",
 }
 
 
@@ -60,8 +61,10 @@ def scan_component_file(filepath: Path) -> Optional[Dict[str, str]]:
                 component_info["progressSchema"] = match.group(1)
             elif pattern_name == "validator_function":
                 component_info["validatorFunction"] = match.group(1)
+            elif pattern_name == "initializer_function":
+                component_info["initializerFunction"] = match.group(1)
 
-    required_fields = ["componentClass", "configSchema", "progressSchema", "typeName"]
+    required_fields = ["componentClass", "configSchema", "progressSchema", "typeName", "initializerFunction"]
     if all(field in component_info for field in required_fields):
         component_info["file"] = filepath.stem
         # Validator function is optional (not all components have it yet)
@@ -177,7 +180,7 @@ def parse_entity_yaml(yaml_file: Path, entity_type: str) -> Optional[Dict]:
         return None
 
 
-def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List[int]], Dict[int, str]]:
+def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List[int]], Dict[int, str], Dict[int, int]]:
     """Parse all entity YAML files (lessons and menus).
     
     Returns:
@@ -185,13 +188,15 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
         - entity_ids: Set of all entity IDs
         - component_ids: Set of all component IDs
         - domain_lesson_map: Map of domain ID to lesson IDs
-        - component_id_to_type: Map of component ID to component type string (NEW!)
+        - component_id_to_type: Map of component ID to component type string
+        - component_to_lesson_map: Map of component ID to lesson ID (NEW!)
     """
     all_entities = []
     entity_ids = set()
     component_ids = set()
     domain_lesson_map = {}
-    component_id_to_type = {}  # NEW: Track componentId -> type mapping
+    component_id_to_type = {}
+    component_to_lesson_map = {}  # NEW: Reverse index componentId -> lessonId
 
     # Parse lesson entities
     lessons_path = Path(LESSONS_DIR)
@@ -218,7 +223,7 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
                         comp_type = component.get("type")
                         if comp_id and comp_type:
                             component_ids.add(comp_id)
-                            # NEW: Store the mapping - FAIL on conflict
+                            # Store the type mapping - FAIL on conflict
                             if comp_id in component_id_to_type and component_id_to_type[comp_id] != comp_type:
                                 raise ValueError(
                                     f"FATAL: Component ID {comp_id} has conflicting types!\n"
@@ -228,6 +233,8 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
                                     f"Component IDs must be unique across all components."
                                 )
                             component_id_to_type[comp_id] = comp_type
+                            # NEW: Build reverse index componentId -> lessonId
+                            component_to_lesson_map[comp_id] = entity_id
 
             # Map domain to lessons (only for lesson type)
             domain_id = entity_info.get("domainId")
@@ -272,7 +279,7 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
                                 )
                             component_id_to_type[comp_id] = comp_type
 
-    return all_entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type
+    return all_entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type, component_to_lesson_map
 
 
 def parse_curriculum() -> Optional[Dict]:
@@ -365,11 +372,12 @@ def generate_component_registry(
     entity_ids: Set,
     component_ids: Set,
     domain_lesson_map: Dict[int, List[int]],
-    component_id_to_type: Dict[int, str],  # NEW parameter!
+    component_id_to_type: Dict[int, str],
+    component_to_lesson_map: Dict[int, int],  # NEW parameter!
     curriculum: Optional[Dict],
     domains: List[Dict],
 ) -> str:
-    """Generate complete TypeScript registry with all 11 mappings."""
+    """Generate complete TypeScript registry with all 13 mappings."""
     imports = []
     registrations = []
 
@@ -425,6 +433,14 @@ def generate_component_registry(
             validator_entries.append(entry)
     validator_content = ",\n".join(validator_entries) if validator_entries else ""
 
+    # NEW: Generate initializer function map
+    initializer_entries = []
+    for comp in components:
+        if 'initializerFunction' in comp:
+            entry = f'    ["{comp["typeName"]}", {comp["initializerFunction"]}]'
+            initializer_entries.append(entry)
+    initializer_content = ",\n".join(initializer_entries) if initializer_entries else ""
+
     entity_metrics_entries = []
     for entity in entities:
         entry = f'    [{entity["id"]}, {{ pageCount: {entity["pageCount"]}, componentCount: {entity["componentCount"]}, title: "{entity["title"]}", difficulty: "{entity.get("difficulty", "beginner")}" }}]'
@@ -443,6 +459,13 @@ def generate_component_registry(
         entry = f'    [{comp_id}, "{comp_type}"]'
         component_id_to_type_entries.append(entry)
     component_id_to_type_content = ",\n".join(component_id_to_type_entries) if component_id_to_type_entries else ""
+
+    # NEW: Generate MAPPING 8.5 - Component ID to Lesson ID
+    component_to_lesson_entries = []
+    for comp_id, lesson_id in sorted(component_to_lesson_map.items()):
+        entry = f'    [{comp_id}, {lesson_id}]'
+        component_to_lesson_entries.append(entry)
+    component_to_lesson_content = ",\n".join(component_to_lesson_entries) if component_to_lesson_entries else ""
 
     entity_ids_array = json.dumps(sorted(list(entity_ids)))
     component_ids_array = json.dumps(sorted(list(component_ids)))
@@ -512,10 +535,19 @@ export const progressSchemaMap = new Map<string, z.ZodType<any>>([
 /**
  * MAPPING 4.5: Component Validator Map
  * Maps component type string to validator function
- * Used by progressRecovery to validate component progress against config
+ * Used by progressIntegrity to validate component progress against config
  */
 export const componentValidatorMap = new Map<string, any>([
 {validator_content}
+]);
+
+/**
+ * MAPPING 4.6: Component Initializer Map
+ * Maps component type string to createInitialProgress function
+ * Used by progressIntegrity to initialize missing/new components with defaults
+ */
+export const componentInitializerMap = new Map<string, () => any>([
+{initializer_content}
 ]);
 
 /**
@@ -548,6 +580,15 @@ export const componentIdToTypeMap = new Map<number, string>([
 ]);
 
 /**
+ * MAPPING 8.5: Component ID to Lesson ID Map
+ * Maps component ID (number) to the lesson ID that contains it
+ * Used by progressIntegrity to find lesson configs for component validation
+ */
+export const componentToLessonMap = new Map<number, number>([
+{component_to_lesson_content}
+]);
+
+/**
  * MAPPING 9: Domain-Lesson Map
  * Maps domain ID to array of lesson IDs in that domain
  */
@@ -569,7 +610,8 @@ export class CurriculumRegistry {{
         private curriculum: any,
         private lessonIds: Set<number>,
         private domainMap: Map<number, number[]>,
-        private componentIdToType: Map<number, string>
+        private componentIdToType: Map<number, string>,
+        private componentToLesson: Map<number, number>
     ) {{}}
     
     hasEntity(entityId: number): boolean {{
@@ -607,13 +649,22 @@ export class CurriculumRegistry {{
     getComponentType(componentId: number): string | undefined {{
         return this.componentIdToType.get(componentId);
     }}
+
+    getAllComponentIds(): number[] {{
+        return Array.from(this.componentIdToType.keys());
+    }}
+
+    getLessonIdForComponent(componentId: number): number | undefined {{
+        return this.componentToLesson.get(componentId);
+    }}
 }}
 
 export const curriculumData = new CurriculumRegistry(
     curriculumDataRaw,
     new Set(allLessonIds),
     domainLessonMap,
-    componentIdToTypeMap
+    componentIdToTypeMap,
+    componentToLessonMap
 );
 
 /**
@@ -675,7 +726,7 @@ def main():
     yaml_files = scan_all_yaml_files()
 
     print("\n📚 Phase 3: YAML Content Parsing")
-    entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type = parse_all_entities()
+    entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type, component_to_lesson_map = parse_all_entities()
     curriculum = parse_curriculum()
     domains = parse_domains()
 
@@ -687,7 +738,8 @@ def main():
         entity_ids,
         component_ids,
         domain_lesson_map,
-        component_id_to_type,  # NEW: Pass the mapping!
+        component_id_to_type,
+        component_to_lesson_map,  # NEW: Pass the reverse index!
         curriculum,
         domains,
     )

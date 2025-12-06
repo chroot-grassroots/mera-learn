@@ -27,12 +27,19 @@ import { CurriculumRegistry } from "../registry/mera-registry.js";
  * Tracks lesson completions, domain completions, and learning streaks.
  * Validated on load (from Solid Pod) and on mutation (from messages)
  * by OverallProgressManager.
+ * 
+ * Monotonic counters (totalLessonsEverCompleted, totalDomainsEverCompleted)
+ * serve as corruption detection checksums. They always match the count of
+ * entries in lessonCompletions/domainsCompleted during normal operation.
+ * Mismatch indicates data corruption (e.g., lost entries in backup).
  */
 export const OverallProgressDataSchema = z.object({
   lessonCompletions: z.record(z.string(), z.number()), // lessonId -> Unix timestamp
   domainsCompleted: z.array(ImmutableId), // Domain Immutable IDs
   currentStreak: z.number().min(0).max(1000), // Completed weeks (not including current)
   lastStreakCheck: z.number().int().min(0), // Unix timestamp of last validation
+  totalLessonsEverCompleted: z.number().int().min(0).default(0), // Monotonic counter for corruption detection
+  totalDomainsEverCompleted: z.number().int().min(0).default(0), // Monotonic counter for corruption detection
 });
 
 export type OverallProgressData = z.infer<typeof OverallProgressDataSchema>;
@@ -150,6 +157,9 @@ export function reconcileAgainstCurriculum(
       domainsCompleted: reconciledDomains,
       currentStreak: data.currentStreak,
       lastStreakCheck: data.lastStreakCheck,
+      // Fix counters to match cleaned data after curriculum reconciliation
+      totalLessonsEverCompleted: lessonsKept,
+      totalDomainsEverCompleted: domainsKept,
     },
     lessonsDropped,
     domainsDropped,
@@ -204,6 +214,14 @@ export class OverallProgressManager {
     if (!this.progress.lastStreakCheck) {
       this.progress.lastStreakCheck = Math.floor(Date.now() / 1000);
     }
+
+    if (this.progress.totalLessonsEverCompleted === undefined) {
+      this.progress.totalLessonsEverCompleted = Object.keys(this.progress.lessonCompletions).length;
+    }
+
+    if (this.progress.totalDomainsEverCompleted === undefined) {
+      this.progress.totalDomainsEverCompleted = this.progress.domainsCompleted.length;
+    }
   }
 
   /**
@@ -221,6 +239,8 @@ export class OverallProgressManager {
       domainsCompleted: "UNION",
       currentStreak: "LATEST_TIMESTAMP", // Use lastStreakCheck to determine freshness
       lastStreakCheck: "MAX",
+      totalLessonsEverCompleted: "MAX", // Higher count indicates more progress
+      totalDomainsEverCompleted: "MAX", // Higher count indicates more progress
     };
   }
 
@@ -240,6 +260,11 @@ export class OverallProgressManager {
 
     const lessonKey = lessonId.toString();
     const timestamp = Math.floor(Date.now() / 1000);
+
+    // Increment counter only if this is a new completion
+    if (this.progress.lessonCompletions[lessonKey] === undefined) {
+      this.progress.totalLessonsEverCompleted++;
+    }
 
     this.progress.lessonCompletions[lessonKey] = timestamp;
 
@@ -261,6 +286,12 @@ export class OverallProgressManager {
     }
 
     const lessonKey = lessonId.toString();
+    
+    // Decrement counter only if lesson was actually completed
+    if (this.progress.lessonCompletions[lessonKey] !== undefined) {
+      this.progress.totalLessonsEverCompleted--;
+    }
+    
     delete this.progress.lessonCompletions[lessonKey];
   }
 

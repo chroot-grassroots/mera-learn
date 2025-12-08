@@ -5,7 +5,7 @@
  * Transforms potentially corrupted, outdated, or malformed backup data into a valid
  * PodStorageBundle matching current schema version. Handles:
  * 
- * - Corruption detection via monotonic counters
+ * - Corruption detection via current-count trackers
  * - Migration from old curriculum versions to current
  * - Recovery from partial data loss
  * - Initialization of missing components with sensible defaults
@@ -318,8 +318,8 @@ function extractOverallProgress(
     domainsCompleted: [],
     currentStreak: 0,
     lastStreakCheck: 0,
-    totalLessonsEverCompleted: 0,
-    totalDomainsEverCompleted: 0,
+    totalLessonsCompleted: 0,
+    totalDomainsCompleted: 0,
   };
 
   // Extract lessonCompletions
@@ -342,13 +342,13 @@ function extractOverallProgress(
     overallProgress.lastStreakCheck = candidate.lastStreakCheck;
   }
 
-  // Extract monotonic counters (for corruption detection)
-  if (typeof candidate.totalLessonsEverCompleted === 'number' && candidate.totalLessonsEverCompleted >= 0) {
-    overallProgress.totalLessonsEverCompleted = candidate.totalLessonsEverCompleted;
+  // Extract current-count trackers (for corruption detection)
+  if (typeof candidate.totalLessonsCompleted === 'number' && candidate.totalLessonsCompleted >= 0) {
+    overallProgress.totalLessonsCompleted = candidate.totalLessonsCompleted;
   }
 
-  if (typeof candidate.totalDomainsEverCompleted === 'number' && candidate.totalDomainsEverCompleted >= 0) {
-    overallProgress.totalDomainsEverCompleted = candidate.totalDomainsEverCompleted;
+  if (typeof candidate.totalDomainsCompleted === 'number' && candidate.totalDomainsCompleted >= 0) {
+    overallProgress.totalDomainsCompleted = candidate.totalDomainsCompleted;
   }
 
   return reconcileOverallProgress(overallProgress);
@@ -357,9 +357,13 @@ function extractOverallProgress(
 /**
  * Reconcile lesson completions and domains against current curriculum.
  * 
- * First detects corruption by comparing monotonic counters to actual data.
+ * First detects corruption by comparing current-count trackers to actual data.
  * Then filters out deleted lessons/domains using shared validator from schema module.
  * Finally calculates defaulted ratios (0.0 = all kept, 1.0 = all defaulted).
+ * 
+ * In valid data, the counters always equal array length (they increment on
+ * completion and decrement on un-completion). Mismatch indicates backup file
+ * corruption where some array entries were lost but the counter survived.
  * 
  * @param progress - Progress data to reconcile
  * @returns Reconciled progress + corruption detection + defaulted ratios
@@ -368,9 +372,9 @@ function reconcileOverallProgress(
   progress: OverallProgressData
 ): OverallProgressExtractionResult {
   // STEP 1: Detect corruption BEFORE curriculum reconciliation
-  // Monotonic counters should always match actual data count
-  const claimedLessons = progress.totalLessonsEverCompleted ?? 0;
-  const claimedDomains = progress.totalDomainsEverCompleted ?? 0;
+  // Current-count trackers should match actual array length in valid data
+  const claimedLessons = progress.totalLessonsCompleted ?? 0;
+  const claimedDomains = progress.totalDomainsCompleted ?? 0;
   const actualLessons = Object.keys(progress.lessonCompletions).length;
   const actualDomains = progress.domainsCompleted.length;
   
@@ -763,8 +767,8 @@ function createFullyDefaultedResult(
         domainsCompleted: [],
         currentStreak: 0,
         lastStreakCheck: 0,
-        totalLessonsEverCompleted: 0,
-        totalDomainsEverCompleted: 0,
+        totalLessonsCompleted: 0,
+        totalDomainsCompleted: 0,
       },
       settings: {
         weekStartDay: 'monday',

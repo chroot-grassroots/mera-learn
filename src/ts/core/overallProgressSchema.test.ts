@@ -19,6 +19,8 @@ describe('OverallProgressManager', () => {
       domainsCompleted: [],
       currentStreak: 0,
       lastStreakCheck: Math.floor(Date.now() / 1000),
+      totalLessonsCompleted: 0,
+      totalDomainsCompleted: 0,
     };
 
     manager = new OverallProgressManager(initialProgress, mockRegistry);
@@ -56,6 +58,24 @@ describe('OverallProgressManager', () => {
         'Invalid lesson ID: 999'
       );
     });
+
+    it('increments counter on first completion', () => {
+      expect(manager.getProgress().totalLessonsCompleted).toBe(0);
+      
+      manager.markLessonComplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
+      
+      manager.markLessonComplete(200);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(2);
+    });
+
+    it('does not increment counter on re-completion', () => {
+      manager.markLessonComplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
+      
+      manager.markLessonComplete(100); // Re-complete same lesson
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1); // Still 1
+    });
   });
 
   describe('markLessonIncomplete', () => {
@@ -75,6 +95,23 @@ describe('OverallProgressManager', () => {
 
     it('does not error if lesson was not completed', () => {
       expect(() => manager.markLessonIncomplete(100)).not.toThrow();
+    });
+
+    it('decrements counter when removing completion', () => {
+      manager.markLessonComplete(100);
+      manager.markLessonComplete(200);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(2);
+      
+      manager.markLessonIncomplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
+    });
+
+    it('does not decrement counter if lesson was not completed', () => {
+      manager.markLessonComplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
+      
+      manager.markLessonIncomplete(200); // Was never completed
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1); // Still 1
     });
   });
 
@@ -120,6 +157,8 @@ describe('OverallProgressManager', () => {
       expect(progress.domainsCompleted).toEqual([]);
       expect(progress.currentStreak).toBe(0);
       expect(progress.lastStreakCheck).toBeGreaterThan(0);
+      expect(progress.totalLessonsCompleted).toBe(0);
+      expect(progress.totalDomainsCompleted).toBe(0);
     });
 
     it('does not overwrite existing values', () => {
@@ -132,6 +171,21 @@ describe('OverallProgressManager', () => {
       expect(progress.lessonCompletions['100']).toBeDefined();
       expect(progress.currentStreak).toBe(5);
     });
+
+    it('initializes counters from existing completions when undefined', () => {
+      const progress: any = {
+        lessonCompletions: { '100': 123456, '200': 123457 },
+        domainsCompleted: [1, 2, 3],
+        currentStreak: 0,
+        lastStreakCheck: 123456,
+        // counters missing
+      };
+      const customManager = new OverallProgressManager(progress, mockRegistry);
+      customManager.setDefaultsIfBlank();
+      
+      expect(customManager.getProgress().totalLessonsCompleted).toBe(2);
+      expect(customManager.getProgress().totalDomainsCompleted).toBe(3);
+    });
   });
 
   describe('getAllTrumpStrategies', () => {
@@ -142,6 +196,39 @@ describe('OverallProgressManager', () => {
       expect(strategies.domainsCompleted).toBe('UNION');
       expect(strategies.currentStreak).toBe('LATEST_TIMESTAMP');
       expect(strategies.lastStreakCheck).toBe('MAX');
+      expect(strategies.totalLessonsCompleted).toBe('MAX');
+      expect(strategies.totalDomainsCompleted).toBe('MAX');
+    });
+  });
+
+  describe('counter integrity', () => {
+    it('maintains counter === array length invariant', () => {
+      const progress = manager.getProgress();
+      
+      // Initial state
+      expect(progress.totalLessonsCompleted).toBe(
+        Object.keys(progress.lessonCompletions).length
+      );
+      
+      // After completing lessons
+      manager.markLessonComplete(100);
+      manager.markLessonComplete(200);
+      expect(progress.totalLessonsCompleted).toBe(
+        Object.keys(progress.lessonCompletions).length
+      );
+      
+      // After uncompleting one
+      manager.markLessonIncomplete(100);
+      expect(progress.totalLessonsCompleted).toBe(
+        Object.keys(progress.lessonCompletions).length
+      );
+      
+      // After uncompleting all
+      manager.markLessonIncomplete(200);
+      expect(progress.totalLessonsCompleted).toBe(
+        Object.keys(progress.lessonCompletions).length
+      );
+      expect(progress.totalLessonsCompleted).toBe(0);
     });
   });
 });

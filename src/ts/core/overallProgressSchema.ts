@@ -28,18 +28,19 @@ import { CurriculumRegistry } from "../registry/mera-registry.js";
  * Validated on load (from Solid Pod) and on mutation (from messages)
  * by OverallProgressManager.
  * 
- * Monotonic counters (totalLessonsEverCompleted, totalDomainsEverCompleted)
- * serve as corruption detection checksums. They always match the count of
- * entries in lessonCompletions/domainsCompleted during normal operation.
- * Mismatch indicates data corruption (e.g., lost entries in backup).
+ * Current-count trackers (totalLessonsCompleted, totalDomainsCompleted)
+ * mirror the count of entries in lessonCompletions/domainsCompleted.
+ * They increment on completion and decrement on un-completion, always
+ * matching array length in valid data. Mismatch during recovery indicates
+ * backup file corruption (e.g., lost entries due to incomplete write).
  */
 export const OverallProgressDataSchema = z.object({
   lessonCompletions: z.record(z.string(), z.number()), // lessonId -> Unix timestamp
   domainsCompleted: z.array(ImmutableId), // Domain Immutable IDs
   currentStreak: z.number().min(0).max(1000), // Completed weeks (not including current)
   lastStreakCheck: z.number().int().min(0), // Unix timestamp of last validation
-  totalLessonsEverCompleted: z.number().int().min(0).default(0), // Monotonic counter for corruption detection
-  totalDomainsEverCompleted: z.number().int().min(0).default(0), // Monotonic counter for corruption detection
+  totalLessonsCompleted: z.number().int().min(0).default(0), // Current count tracker for corruption detection
+  totalDomainsCompleted: z.number().int().min(0).default(0), // Current count tracker for corruption detection
 });
 
 export type OverallProgressData = z.infer<typeof OverallProgressDataSchema>;
@@ -89,7 +90,7 @@ export function isValidDomainId(
 /**
  * Result of reconciling progress against current curriculum.
  *
- * Provides counts (not IDs) of dropped entries so progressRecovery
+ * Provides counts (not IDs) of dropped entries so progressIntegrity
  * can calculate retention ratios.
  */
 export interface ReconciliationResult {
@@ -110,7 +111,7 @@ export interface ReconciliationResult {
  * content has been removed or reorganized since the backup was created.
  *
  * Used by:
- * - progressRecovery: Calculates retention ratios from counts
+ * - progressIntegrity: Calculates retention ratios from counts
  * - OverallProgressManager: Defensive check (throws if any dropped)
  *
  * @param data - Progress data to reconcile (potentially contains deleted IDs)
@@ -158,8 +159,8 @@ export function reconcileAgainstCurriculum(
       currentStreak: data.currentStreak,
       lastStreakCheck: data.lastStreakCheck,
       // Fix counters to match cleaned data after curriculum reconciliation
-      totalLessonsEverCompleted: lessonsKept,
-      totalDomainsEverCompleted: domainsKept,
+      totalLessonsCompleted: lessonsKept,
+      totalDomainsCompleted: domainsKept,
     },
     lessonsDropped,
     domainsDropped,
@@ -215,12 +216,12 @@ export class OverallProgressManager {
       this.progress.lastStreakCheck = Math.floor(Date.now() / 1000);
     }
 
-    if (this.progress.totalLessonsEverCompleted === undefined) {
-      this.progress.totalLessonsEverCompleted = Object.keys(this.progress.lessonCompletions).length;
+    if (this.progress.totalLessonsCompleted === undefined) {
+      this.progress.totalLessonsCompleted = Object.keys(this.progress.lessonCompletions).length;
     }
 
-    if (this.progress.totalDomainsEverCompleted === undefined) {
-      this.progress.totalDomainsEverCompleted = this.progress.domainsCompleted.length;
+    if (this.progress.totalDomainsCompleted === undefined) {
+      this.progress.totalDomainsCompleted = this.progress.domainsCompleted.length;
     }
   }
 
@@ -239,8 +240,8 @@ export class OverallProgressManager {
       domainsCompleted: "UNION",
       currentStreak: "LATEST_TIMESTAMP", // Use lastStreakCheck to determine freshness
       lastStreakCheck: "MAX",
-      totalLessonsEverCompleted: "MAX", // Higher count indicates more progress
-      totalDomainsEverCompleted: "MAX", // Higher count indicates more progress
+      totalLessonsCompleted: "MAX", // Higher count indicates more progress
+      totalDomainsCompleted: "MAX", // Higher count indicates more progress
     };
   }
 
@@ -249,6 +250,7 @@ export class OverallProgressManager {
    *
    * Validates lesson exists in curriculum using shared helper.
    * Updates timestamp even if already completed (tracks most recent completion).
+   * Increments counter only on first completion.
    *
    * @param lessonId - Lesson to mark complete
    * @throws Error if lesson ID not in curriculum
@@ -263,7 +265,7 @@ export class OverallProgressManager {
 
     // Increment counter only if this is a new completion
     if (this.progress.lessonCompletions[lessonKey] === undefined) {
-      this.progress.totalLessonsEverCompleted++;
+      this.progress.totalLessonsCompleted++;
     }
 
     this.progress.lessonCompletions[lessonKey] = timestamp;
@@ -276,6 +278,7 @@ export class OverallProgressManager {
    *
    * Validates lesson exists in curriculum using shared helper.
    * Safe to call even if lesson was not completed.
+   * Decrements counter only if lesson was actually completed.
    *
    * @param lessonId - Lesson to mark incomplete
    * @throws Error if lesson ID not in curriculum
@@ -289,7 +292,7 @@ export class OverallProgressManager {
     
     // Decrement counter only if lesson was actually completed
     if (this.progress.lessonCompletions[lessonKey] !== undefined) {
-      this.progress.totalLessonsEverCompleted--;
+      this.progress.totalLessonsCompleted--;
     }
     
     delete this.progress.lessonCompletions[lessonKey];

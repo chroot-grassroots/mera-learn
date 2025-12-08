@@ -88,8 +88,8 @@ interface ExtractionResult<T> {
  */
 interface OverallProgressExtractionResult {
   data: OverallProgressData;
-  lessonsDefaultedRatio: number;  // 0.0 = all kept, 1.0 = all defaulted
-  domainsDefaultedRatio: number;  // 0.0 = all kept, 1.0 = all defaulted
+  lessonsDroppedRatio: number;  // 0.0 = none dropped, 1.0 = all dropped
+  domainsDroppedRatio: number;  // 0.0 = none dropped, 1.0 = all dropped
   corruptionDetected: boolean;    // Mismatch between counters and actual data
   lessonsLostToCorruption: number; // Lessons missing due to corruption
   domainsLostToCorruption: number; // Domains missing due to corruption
@@ -106,8 +106,8 @@ export interface EnforcementResult {
       defaultedRatio: number;
     };
     overallProgress: {
-      lessonsDefaultedRatio: number;
-      domainsDefaultedRatio: number;
+      lessonsDroppedRatio: number;
+      domainsDroppedRatio: number;
       corruptionDetected: boolean;
       lessonsLostToCorruption: number;
       domainsLostToCorruption: number;
@@ -189,8 +189,8 @@ export function enforceDataIntegrity(
     !hasCriticalFailures &&
     !overallProgressResult.corruptionDetected &&
     metadataResult.defaultedRatio === 0 &&
-    overallProgressResult.lessonsDefaultedRatio === 0 &&
-    overallProgressResult.domainsDefaultedRatio === 0 &&
+    overallProgressResult.lessonsDroppedRatio === 0 &&
+    overallProgressResult.domainsDroppedRatio === 0 &&
     settingsResult.defaultedRatio === 0 &&
     !navigationResult.wasDefaulted &&
     componentProgressResult.defaultedRatio === 0;
@@ -204,8 +204,8 @@ export function enforceDataIntegrity(
         defaultedRatio: metadataResult.defaultedRatio,
       },
       overallProgress: {
-        lessonsDefaultedRatio: overallProgressResult.lessonsDefaultedRatio,
-        domainsDefaultedRatio: overallProgressResult.domainsDefaultedRatio,
+        lessonsDroppedRatio: overallProgressResult.lessonsDroppedRatio,
+        domainsDroppedRatio: overallProgressResult.domainsDroppedRatio,
         corruptionDetected: overallProgressResult.corruptionDetected,
         lessonsLostToCorruption: overallProgressResult.lessonsLostToCorruption,
         domainsLostToCorruption: overallProgressResult.domainsLostToCorruption,
@@ -359,14 +359,14 @@ function extractOverallProgress(
  * 
  * First detects corruption by comparing current-count trackers to actual data.
  * Then filters out deleted lessons/domains using shared validator from schema module.
- * Finally calculates defaulted ratios (0.0 = all kept, 1.0 = all defaulted).
+ * Finally calculates dropped ratios (0.0 = none dropped, 1.0 = all dropped).
  * 
  * In valid data, the counters always equal array length (they increment on
  * completion and decrement on un-completion). Mismatch indicates backup file
  * corruption where some array entries were lost but the counter survived.
  * 
  * @param progress - Progress data to reconcile
- * @returns Reconciled progress + corruption detection + defaulted ratios
+ * @returns Reconciled progress + corruption detection + dropped ratios
  */
 function reconcileOverallProgress(
   progress: OverallProgressData
@@ -385,21 +385,21 @@ function reconcileOverallProgress(
   // STEP 2: Reconcile against curriculum (filters out deleted content)
   const reconciled = reconcileAgainstCurriculum(progress, curriculumData);
   
-  // STEP 3: Calculate defaulted ratios from curriculum reconciliation
+  // STEP 3: Calculate dropped ratios from curriculum reconciliation
   // Note: This is SEPARATE from corruption detection
   // Corruption = data loss from backup corruption
-  // Defaulting = valid data for deleted curriculum content
+  // Dropping = valid data for deleted curriculum content
   const originalLessonCount = actualLessons;  // Use actual, not claimed
   const originalDomainCount = actualDomains;
   
   return {
     data: reconciled.cleaned,
-    lessonsDefaultedRatio: originalLessonCount > 0 
+    lessonsDroppedRatio: originalLessonCount > 0 
       ? reconciled.lessonsDropped / originalLessonCount 
-      : 0.0,  // No lessons = nothing to default
-    domainsDefaultedRatio: originalDomainCount > 0 
+      : 0.0,  // No lessons = nothing to drop
+    domainsDroppedRatio: originalDomainCount > 0 
       ? reconciled.domainsDropped / originalDomainCount 
-      : 0.0,  // No domains = nothing to default
+      : 0.0,  // No domains = nothing to drop
     corruptionDetected,
     lessonsLostToCorruption,
     domainsLostToCorruption,
@@ -795,8 +795,8 @@ function createFullyDefaultedResult(
     recoveryMetrics: {
       metadata: { defaultedRatio: 1.0 },
       overallProgress: { 
-        lessonsDefaultedRatio: 1.0, 
-        domainsDefaultedRatio: 1.0,
+        lessonsDroppedRatio: 1.0, 
+        domainsDroppedRatio: 1.0,
         corruptionDetected: false,  // Fully defaulted = no corruption, just empty
         lessonsLostToCorruption: 0,
         domainsLostToCorruption: 0,

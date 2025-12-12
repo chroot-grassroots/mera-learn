@@ -9,7 +9,7 @@
  * - Establish Solid Pod authentication
  * - Validate client clock synchronization
  * - Initialize error handling UI
- * - Hand off to progressLoading.ts when ready
+ * - Hand off to initializationOrchestrator.ts when ready
  * 
  * Critical safety checks ensure timestamps are reliable for backup management
  * and concurrent session detection across multiple devices.
@@ -17,7 +17,7 @@
 
 import { TimelineContainer } from "../ui/timelineContainer.js";
 import { SolidConnectionErrorDisplay } from "../ui/errorDisplay.js";
-import { orchestrateProgressLoading } from "./progressLoading.js";
+import { initializationOrchestrator } from "./initializationOrchestrator.js";
 import { MeraBridge } from "../solid/meraBridge.js";
 
 /**
@@ -150,42 +150,43 @@ function showBootstrapError(error: Error | unknown): void {
  * Execution sequence:
  * 1. Poll for Solid Pod authentication (up to 5 seconds)
  * 2. Verify client clock is synchronized with server
- * 3. Hand off to progressLoading.ts if all checks pass
+ * 3. Fire off initializationOrchestrator.ts and exit
  * 4. Show authentication error if Solid unavailable
+ * 
+ * Fire-and-forget: Bootstrap validates environment readiness, then hands off
+ * to initialization phase. Bootstrap's Promise resolves when handoff completes,
+ * not when initialization completes.
  * 
  * @throws {Error} If clock skew exceeds threshold or authentication fails
  */
 async function startBootstrap(): Promise<void> {
   console.log("🚀 BOOTSTRAP: start_bootstrap() function called!");
-
+  
   const bridge = MeraBridge.getInstance();
   let solidSessionReady = false;
 
-  // Poll for bridge readiness
+  // Poll for Solid session readiness (up to 5 seconds)
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      // Check if bridge is ready
       if (await bridge.check()) {
         solidSessionReady = true;
         console.log(`✅ Bridge ready on attempt ${attempt + 1}`);
         break;
       } else {
-        console.log(
-          `🔄 Attempt ${attempt + 1}/${MAX_ATTEMPTS} - Bridge not ready`
-        );
+        console.log(`🔄 Attempt ${attempt + 1}/${MAX_ATTEMPTS} - Bridge not ready`);
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       }
     } catch (error) {
-      console.log(
-        `❌ Attempt ${attempt + 1}/${MAX_ATTEMPTS} - Error: ${error}`
-      );
+      console.log(`❌ Attempt ${attempt + 1}/${MAX_ATTEMPTS} - Error: ${error}`);
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
   }
 
-  // Initialize based on Solid connection status
   if (solidSessionReady) {
+    // Verify clock synchronization before proceeding
     await checkClockSkew();
+    
+    // Fire and forget - bootstrap exits after handing off
     continueToNextModule();
   } else {
     console.log("❌ Solid pod not connected. Authentication required.");
@@ -194,21 +195,13 @@ async function startBootstrap(): Promise<void> {
 }
 
 /**
- * Verify client clock is synchronized with server time.
+ * Verify client clock is synchronized with server.
  * 
- * CRITICAL SAFETY CHECK: Prevents backup timestamp corruption from devices
- * with incorrect clocks. Bad timestamps break:
- * - Backup selection (choosing newest backup)
- * - Concurrent session detection (comparing save timestamps)
- * - Future timestamp filtering (rejecting corrupted backups)
- * 
- * How it works:
- * - Fetches small static file from Django
- * - Compares HTTP Date header (server time) with client time
- * - Throws if difference exceeds threshold
- * 
- * Why this approach: HTTP Date header is always UTC and directly comparable
- * to JavaScript's Date.now() (also UTC-based).
+ * Uses Django's Date header from a HEAD request to static resource.
+ * Ensures timestamps are reliable for:
+ * - Backup file sorting
+ * - Concurrent session detection
+ * - Save collision prevention
  * 
  * Threshold rationale: 60 seconds catches seriously wrong clocks (hours/days off)
  * without falsely triggering on high-latency networks (satellite, Tor, etc.).
@@ -258,27 +251,34 @@ async function checkClockSkew(): Promise<void> {
  * Continue initialization after environment validation.
  * 
  * Called when Solid Pod is authenticated and clock is verified.
- * Hands off to progressLoading.ts to fetch user data.
+ * Fires off initializationOrchestrator.ts and exits - bootstrap's job is done.
  * 
- * Error handling: Catches synchronous errors from orchestrateProgressLoading().
- * Network errors during progress loading are handled by progressLoading.ts itself.
+ * Fire-and-forget pattern: Bootstrap verifies environment readiness, then hands
+ * off to initialization. Each phase manages its own lifecycle independently.
+ * 
+ * Error handling: The Promise's .catch() handles initialization failures even
+ * though we don't await it. The Promise still exists and can reject.
  */
 function continueToNextModule(): void {
-  console.log("🔗 Solid Pod connected - initializing learning platform");
+  console.log("🔗 Solid Pod connected - starting initialization");
 
-  try {
-    orchestrateProgressLoading();
-    console.log("✅ Initialization sequence started successfully");
-  } catch (error) {
-    console.error("❌ Failed to start initialization sequence:", error);
-    if (errorDisplay) {
-      errorDisplay.showSystemError(
-        "initialization-startup",
-        "Failed to start learning platform initialization",
-        error instanceof Error ? error.message : "Unknown startup error"
-      );
-    }
-  }
+  // Fire and forget - bootstrap's responsibility ends here
+  initializationOrchestrator()
+    .then(() => {
+      console.log("✅ Initialization completed successfully");
+    })
+    .catch((error) => {
+      console.error("❌ Initialization failed:", error);
+      if (errorDisplay) {
+        errorDisplay.showSystemError(
+          "initialization-failed",
+          "Failed to load user progress",
+          error instanceof Error ? error.message : "Unknown initialization error"
+        );
+      }
+    });
+  
+  console.log("✅ Bootstrap complete - initialization running independently");
 }
 
 /**

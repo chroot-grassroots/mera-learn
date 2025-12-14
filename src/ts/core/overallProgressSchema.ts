@@ -283,8 +283,11 @@ export class OverallProgressManager {
       };
       this.progress.totalLessonsCompleted++;
     } else {
-      // Already completed, just update lastUpdated
-      current.lastUpdated = timestamp;
+      // Already completed, create new object with updated lastUpdated
+      this.progress.lessonCompletions[lessonKey] = {
+        firstCompleted: current.firstCompleted,
+        lastUpdated: timestamp
+      };
     }
 
     // TODO: Check for domain completion
@@ -318,8 +321,11 @@ export class OverallProgressManager {
       };
       this.progress.totalLessonsCompleted--;
     } else if (current) {
-      // Already incomplete, just update timestamp
-      current.lastUpdated = timestamp;
+      // Already incomplete, create new object with updated timestamp
+      this.progress.lessonCompletions[lessonKey] = {
+        firstCompleted: null,
+        lastUpdated: timestamp
+      };
     } else {
       // Doesn't exist yet, create as incomplete
       this.progress.lessonCompletions[lessonKey] = {
@@ -354,8 +360,11 @@ export class OverallProgressManager {
       };
       this.progress.totalDomainsCompleted++;
     } else {
-      // Already completed, just update lastUpdated
-      current.lastUpdated = timestamp;
+      // Already completed, create new object with updated lastUpdated
+      this.progress.domainCompletions[domainKey] = {
+        firstCompleted: current.firstCompleted,
+        lastUpdated: timestamp
+      };
     }
   }
 
@@ -384,8 +393,11 @@ export class OverallProgressManager {
       };
       this.progress.totalDomainsCompleted--;
     } else if (current) {
-      // Already incomplete, just update timestamp
-      current.lastUpdated = timestamp;
+      // Already incomplete, create new object with updated timestamp
+      this.progress.domainCompletions[domainKey] = {
+        firstCompleted: null,
+        lastUpdated: timestamp
+      };
     } else {
       // Doesn't exist yet, create as incomplete
       this.progress.domainCompletions[domainKey] = {

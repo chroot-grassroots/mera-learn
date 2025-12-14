@@ -38,11 +38,12 @@ describe('OverallProgressManager', () => {
     });
 
     it('preserves firstCompleted but updates lastUpdated on lesson re-completion', () => {
+      vi.useFakeTimers();
+      
       manager.markLessonComplete(100);
       const firstCompletion = manager.getProgress().lessonCompletions['100'];
       
-      vi.useFakeTimers();
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2000); // Advance 2 seconds (2000ms)
       
       manager.markLessonComplete(100);
       const secondCompletion = manager.getProgress().lessonCompletions['100'];

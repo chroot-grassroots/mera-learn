@@ -1,97 +1,103 @@
 /**
- * @fileoverview Progress bundle merging using trump strategies
+ * @fileoverview Progress bundle merging using timestamp-based conflict resolution
  * @module initialization/progressMerger
  * 
- * Merges two PodStorageBundles using trump strategies defined in manager classes.
- * Used for:
- * - Offline/online conflict resolution during initialization
+ * Merges two PodStorageBundles using timestamp comparison for conflict resolution.
+ * Used for offline/online conflict resolution during initialization.
  * 
- * Trump strategies ensure data preservation - they never destroy user progress
- * in favor of empty/default values. Examples:
- * - MAX: Choose higher timestamp or counter value
- * - UNION: Combine arrays preserving all unique values
- * - OR: Choose first non-default value
- * - LATEST_TIMESTAMP: Use value with most recent associated timestamp
+ * Architecture:
+ * - Each data structure carries its own timestamp(s)
+ * - Merge logic: newest timestamp wins
+ * - No field-level heuristics, no complex strategies
  * 
- * The merge is conservative - when in doubt, preserve data rather than discard it.
+ * How timestamps work:
+ * - Settings: Each field is [value, timestamp] tuple - per-field resolution
+ * - Navigation: Single lastUpdated for whole state
+ * - OverallProgress: CompletionData with lastUpdated per lesson/domain
+ * - Components: Single lastUpdated per component (entire state is atomic)
+ * 
+ * The merge is conservative - it preserves user data by taking the most
+ * recent version of each independent piece.
  */
 
-import type {
-  PodStorageBundle,
-} from '../persistence/podStorageSchema.js';
-import type {
-  OverallProgressData,
-} from '../core/overallProgressSchema.js';
-import type {
-  SettingsData,
-} from '../core/settingsSchema.js';
-import type {
-  NavigationState,
-} from '../core/navigationSchema.js';
-import type {
-  CombinedComponentProgress,
-} from '../core/combinedComponentProgressSchema.js';
-import type { TrumpStrategy } from '../core/coreTypes.js';
+import type { PodStorageBundle } from '../persistence/podStorageSchema.js';
+import type { OverallProgressData, CompletionData } from '../core/overallProgressSchema.js';
+import type { SettingsData } from '../core/settingsSchema.js';
+import type { NavigationState } from '../core/navigationSchema.js';
+import type { CombinedComponentProgress } from '../core/combinedComponentProgressSchema.js';
 
 // ============================================================================
 // OVERALL PROGRESS MERGING
 // ============================================================================
 
 /**
- * Merge overall progress using trump strategies.
+ * Merge overall progress using per-item timestamp comparison.
  * 
- * Applies strategies defined in OverallProgressManager:
- * - lessonCompletions: MAX timestamp per lesson (UNION of all lessons)
- * - domainsCompleted: UNION of arrays
- * - totalLessonsCompleted: Recalculated from merged completions
- * - totalDomainsCompleted: Recalculated from merged domains
- * - currentStreak: LATEST_TIMESTAMP (use lastStreakCheck to determine)
- * - lastStreakCheck: MAX
+ * PRECONDITION: Both dataA and dataB have been reconciled against the curriculum
+ * by progressIntegrity.ts, so they contain identical lesson/domain IDs.
  * 
- * @param dataA - First progress data
- * @param dataB - Second progress data
- * @returns Merged progress data
+ * Each lesson and domain completion has CompletionData with:
+ * - firstCompleted: timestamp of first completion (null if incomplete)
+ * - lastUpdated: timestamp of most recent state change
+ * 
+ * Merge strategy:
+ * - For each lesson/domain, compare lastUpdated timestamps
+ * - Take the CompletionData with the newer lastUpdated
+ * - Recalculate counters from merged completion data
+ * 
+ * This correctly preserves both completions and incompletions. If a user marks
+ * a lesson incomplete on one device (giving it a newer lastUpdated), that state
+ * wins over an older completion state from another device.
+ * 
+ * @param dataA - First progress data (already reconciled)
+ * @param dataB - Second progress data (already reconciled)
+ * @returns Merged progress data with recalculated counters
  */
 function mergeOverallProgress(
   dataA: OverallProgressData,
   dataB: OverallProgressData
 ): OverallProgressData {
   
-  // Merge lessonCompletions: MAX timestamp wins per lesson (UNION of all lessons)
-  // Start by copying all completions from dataA
-  const mergedCompletions: Record<string, number> = { ...dataA.lessonCompletions };
+  // Merge lessonCompletions: newest lastUpdated wins per lesson
+  // Both inputs have same keys after reconciliation, so iterate over dataA
+  const mergedLessons: Record<string, CompletionData> = {};
   
-  // Go through each completion from dataB
-  // Keep it if the timestamp is newer or if the counterpart in dataA doesn't exist
-  for (const [lessonId, timestamp] of Object.entries(dataB.lessonCompletions)) {
-    const existingTimestamp = mergedCompletions[lessonId];
-    const newTimestamp = timestamp as number;  // Type assertion - we know this is a number from OverallProgressData
-    if (!existingTimestamp || newTimestamp > existingTimestamp) {
-      mergedCompletions[lessonId] = newTimestamp;
-    }
+  for (const [lessonId, compA] of Object.entries(dataA.lessonCompletions)) {
+    const compB = dataB.lessonCompletions[lessonId];
+    
+    // Newest timestamp wins
+    mergedLessons[lessonId] = 
+      compA.lastUpdated >= compB.lastUpdated ? compA : compB;
   }
   
-  // Merge domainsCompleted: UNION
-  const mergedDomains = Array.from(
-    new Set([...dataA.domainsCompleted, ...dataB.domainsCompleted])
-  );
+  // Merge domainCompletions: same pattern
+  const mergedDomains: Record<string, CompletionData> = {};
   
-  // Recalculate counters from merged data (not MAX of pre-merge counters)
-  // This ensures counters accurately reflect the UNION of completions
-  const mergedLessonsCount = Object.keys(mergedCompletions).length;
-  const mergedDomainsCount = mergedDomains.length;
+  for (const [domainId, compA] of Object.entries(dataA.domainCompletions)) {
+    const compB = dataB.domainCompletions[domainId];
+    
+    // Newest timestamp wins
+    mergedDomains[domainId] = 
+      compA.lastUpdated >= compB.lastUpdated ? compA : compB;
+  }
   
-  // Merge streak: LATEST_TIMESTAMP (use lastStreakCheck to determine which is newer)
-  // TODO: Revisit when motivation component is implemented
+  // Recalculate counters from merged completion data
+  // Count entries where firstCompleted is not null
+  const totalLessonsCompleted = Object.values(mergedLessons)
+    .filter(c => c.firstCompleted !== null).length;
+  const totalDomainsCompleted = Object.values(mergedDomains)
+    .filter(c => c.firstCompleted !== null).length;
+  
+  // Merge streak data: use lastStreakCheck to determine which is newer
   const useDataA = dataA.lastStreakCheck >= dataB.lastStreakCheck;
   const mergedStreak = useDataA ? dataA.currentStreak : dataB.currentStreak;
   const mergedStreakCheck = Math.max(dataA.lastStreakCheck, dataB.lastStreakCheck);
   
   return {
-    lessonCompletions: mergedCompletions,
-    domainsCompleted: mergedDomains,
-    totalLessonsCompleted: mergedLessonsCount,
-    totalDomainsCompleted: mergedDomainsCount,
+    lessonCompletions: mergedLessons,
+    domainCompletions: mergedDomains,
+    totalLessonsCompleted,
+    totalDomainsCompleted,
     currentStreak: mergedStreak,
     lastStreakCheck: mergedStreakCheck,
   };
@@ -102,29 +108,77 @@ function mergeOverallProgress(
 // ============================================================================
 
 /**
- * Merge settings using LATEST_TIMESTAMP strategy.
+ * Merge settings using per-field timestamp comparison.
  * 
- * Settings use LATEST_TIMESTAMP for all fields - whichever bundle was
- * modified more recently wins entirely. This preserves user's most recent
- * preference changes as a cohesive set rather than mixing old and new.
+ * Settings use [value, timestamp] tuple format for each field.
+ * This enables granular conflict resolution - each setting merges independently
+ * based on its own timestamp.
  * 
- * Note: SettingsData doesn't have a lastUpdated field, so we rely on
- * the bundle-level filename timestamp to determine which is newer.
- * The caller (mergeBundles) passes bundleAIsNewer to indicate this.
+ * For example:
+ * - Device A: theme=["dark", 1000], fontSize=["large", 2000]
+ * - Device B: theme=["light", 3000], fontSize=["small", 500]
+ * - Merged: theme=["light", 3000], fontSize=["large", 2000]
+ * 
+ * Benefits:
+ * - Users may change different settings on different devices
+ * - Each preference has independent conflict resolution
+ * - No settings are lost due to timestamp of unrelated preference
  * 
  * @param dataA - First settings data
  * @param dataB - Second settings data
- * @param bundleAIsNewer - True if bundleA has more recent timestamp than bundleB
- * @returns Settings from newer source
+ * @returns Settings with per-field newest timestamp
  */
 function mergeSettings(
   dataA: SettingsData,
-  dataB: SettingsData,
-  bundleAIsNewer: boolean
+  dataB: SettingsData
 ): SettingsData {
   
-  // Use LATEST_TIMESTAMP strategy: newer bundle wins entirely
-  return bundleAIsNewer ? dataA : dataB;
+  // Merge each field independently - newest timestamp wins per field
+  return {
+    weekStartDay: dataA.weekStartDay[1] >= dataB.weekStartDay[1] 
+      ? dataA.weekStartDay 
+      : dataB.weekStartDay,
+    
+    weekStartTimeUTC: dataA.weekStartTimeUTC[1] >= dataB.weekStartTimeUTC[1]
+      ? dataA.weekStartTimeUTC
+      : dataB.weekStartTimeUTC,
+    
+    theme: dataA.theme[1] >= dataB.theme[1]
+      ? dataA.theme
+      : dataB.theme,
+    
+    learningPace: dataA.learningPace[1] >= dataB.learningPace[1]
+      ? dataA.learningPace
+      : dataB.learningPace,
+    
+    optOutDailyPing: dataA.optOutDailyPing[1] >= dataB.optOutDailyPing[1]
+      ? dataA.optOutDailyPing
+      : dataB.optOutDailyPing,
+    
+    optOutErrorPing: dataA.optOutErrorPing[1] >= dataB.optOutErrorPing[1]
+      ? dataA.optOutErrorPing
+      : dataB.optOutErrorPing,
+    
+    fontSize: dataA.fontSize[1] >= dataB.fontSize[1]
+      ? dataA.fontSize
+      : dataB.fontSize,
+    
+    highContrast: dataA.highContrast[1] >= dataB.highContrast[1]
+      ? dataA.highContrast
+      : dataB.highContrast,
+    
+    reducedMotion: dataA.reducedMotion[1] >= dataB.reducedMotion[1]
+      ? dataA.reducedMotion
+      : dataB.reducedMotion,
+    
+    focusIndicatorStyle: dataA.focusIndicatorStyle[1] >= dataB.focusIndicatorStyle[1]
+      ? dataA.focusIndicatorStyle
+      : dataB.focusIndicatorStyle,
+    
+    audioEnabled: dataA.audioEnabled[1] >= dataB.audioEnabled[1]
+      ? dataA.audioEnabled
+      : dataB.audioEnabled,
+  };
 }
 
 // ============================================================================
@@ -132,21 +186,24 @@ function mergeSettings(
 // ============================================================================
 
 /**
- * Merge navigation state using LATEST_TIMESTAMP strategy.
+ * Merge navigation state using lastUpdated timestamp.
  * 
- * Uses the navigation state with the most recent lastUpdated timestamp.
- * This preserves the user's most recent navigation position.
+ * Navigation already had a lastUpdated field tracking position changes.
+ * Simple strategy: newest timestamp wins.
+ * 
+ * This preserves the user's most recent navigation position regardless
+ * of which device it came from.
  * 
  * @param dataA - First navigation state
  * @param dataB - Second navigation state
- * @returns Merged navigation state
+ * @returns Navigation state with newer lastUpdated
  */
 function mergeNavigationState(
   dataA: NavigationState,
   dataB: NavigationState
 ): NavigationState {
   
-  // Use whichever has more recent lastUpdated timestamp
+  // Newest timestamp wins
   return dataA.lastUpdated >= dataB.lastUpdated ? dataA : dataB;
 }
 
@@ -155,22 +212,21 @@ function mergeNavigationState(
 // ============================================================================
 
 /**
- * Merge component progress using trump strategies per component.
+ * Merge component progress using per-component timestamp comparison.
  * 
- * Each component type defines its own trump strategies via getAllTrumpStrategies().
- * Common strategies:
- * - ELEMENT_WISE_OR: For checkbox arrays (if either checked, keep checked)
- * - MAX: For counters, scores, attempt counts
- * - LATEST_TIMESTAMP: For timestamped data
+ * PRECONDITION: Both dataA and dataB have been reconciled against the curriculum
+ * by progressIntegrity.ts, so they contain identical component IDs.
  * 
- * This implementation currently uses a simple "keep most complete" heuristic.
- * Full implementation would:
- * 1. Look up component type from registry
- * 2. Get trump strategies from component's progress manager
- * 3. Apply strategies field-by-field
+ * Each component has a lastUpdated timestamp. Merge strategy:
+ * - Take the entire component with the newer timestamp
+ * - Component state is atomic (no field-level merging)
  * 
- * @param dataA - First component progress data
- * @param dataB - Second component progress data
+ * This works because when a user interacts with a component, they update its
+ * entire state together, so taking the newest version preserves their most
+ * recent interaction.
+ * 
+ * @param dataA - First component progress data (already reconciled)
+ * @param dataB - Second component progress data (already reconciled)
  * @returns Merged component progress data
  */
 function mergeCombinedComponentProgress(
@@ -178,62 +234,18 @@ function mergeCombinedComponentProgress(
   dataB: CombinedComponentProgress
 ): CombinedComponentProgress {
   
-  const mergedComponents: Record<string, any> = { ...dataA.components };
+  const mergedComponents: Record<string, any> = {};
   
-  // Merge each component from dataB
-  for (const [componentId, progressB] of Object.entries(dataB.components)) {
-    const progressA = mergedComponents[componentId];
+  // Both inputs have same component IDs after reconciliation
+  for (const [componentId, progA] of Object.entries(dataA.components)) {
+    const progB = dataB.components[componentId];
     
-    if (!progressA) {
-      // Component only exists in B, use it
-      mergedComponents[componentId] = progressB;
-      continue;
-    }
-    
-    // Both exist - apply component-specific trump strategies
-    // TODO: Full implementation would:
-    // 1. const componentType = curriculumData.getComponentType(componentId);
-    // 2. const strategies = componentTrumpStrategyMap.get(componentType);
-    // 3. Apply each strategy field-by-field
-    
-    // Simple heuristic for now: count non-default values
-    const scoreA = countNonDefaultValues(progressA);
-    const scoreB = countNonDefaultValues(progressB);
-    
-    // Keep whichever has more progress
-    mergedComponents[componentId] = scoreA >= scoreB ? progressA : progressB;
+    // Newest timestamp wins entire component
+    mergedComponents[componentId] = 
+      progA.lastUpdated >= progB.lastUpdated ? progA : progB;
   }
   
-  return {
-    components: mergedComponents,
-  };
-}
-
-/**
- * Count non-default values in component progress (heuristic for "completeness").
- * 
- * Used as simple merge heuristic until full trump strategy implementation.
- * 
- * @param progress - Component progress object
- * @returns Score representing amount of progress
- */
-function countNonDefaultValues(progress: any): number {
-  let score = 0;
-  
-  for (const value of Object.values(progress)) {
-    if (Array.isArray(value)) {
-      // Count true/checked values in arrays
-      score += value.filter(v => v === true).length;
-    } else if (typeof value === 'number' && value > 0) {
-      score += value;
-    } else if (typeof value === 'boolean' && value) {
-      score += 1;
-    } else if (typeof value === 'string' && value.length > 0) {
-      score += 1;
-    }
-  }
-  
-  return score;
+  return { components: mergedComponents };
 }
 
 // ============================================================================
@@ -241,36 +253,31 @@ function countNonDefaultValues(progress: any): number {
 // ============================================================================
 
 /**
- * Merge two PodStorageBundles using trump strategies.
+ * Merge two PodStorageBundles using timestamp-based conflict resolution.
  * 
- * Merges each section independently:
- * - metadata: Use primary (bundleA)
- * - overallProgress: Merge using trump strategies (UNION + MAX per field)
- * - settings: Use LATEST_TIMESTAMP (newer bundle)
- * - navigationState: Use LATEST_TIMESTAMP (per navigationState.lastUpdated)
- * - combinedComponentProgress: Merge per-component using heuristic
+ * Merges each section independently using newest-wins strategy:
+ * - metadata: Use primary bundle's metadata (webId should be identical)
+ * - overallProgress: Per-lesson/domain timestamp comparison
+ * - settings: Per-field timestamp comparison
+ * - navigationState: Whole-object timestamp comparison
+ * - combinedComponentProgress: Per-component timestamp comparison
  * 
- * The metadata (webId) is always taken from bundleA (primary).
- * Only user data sections are merged.
- * 
- * @param bundleA - Primary bundle (better quality or has offline work)
+ * @param bundleA - Primary bundle (typically has offline work or better quality)
  * @param bundleB - Secondary bundle
- * @param bundleAIsNewer - True if bundleA has more recent filename timestamp than bundleB
- * @returns Merged bundle preserving best data from both sources
+ * @returns Merged bundle preserving most recent data from both sources
  */
 export function mergeBundles(
   bundleA: PodStorageBundle,
-  bundleB: PodStorageBundle,
-  bundleAIsNewer: boolean
+  bundleB: PodStorageBundle
 ): PodStorageBundle {
   
-  console.log('Merging bundles using trump strategies');
+  console.log('Merging bundles using timestamp-based conflict resolution');
   
   return {
-    // Metadata from primary bundle
+    // Metadata from primary bundle (webId should be identical in both)
     metadata: bundleA.metadata,
     
-    // Merge user data sections
+    // Merge user data sections using timestamps
     overallProgress: mergeOverallProgress(
       bundleA.overallProgress,
       bundleB.overallProgress
@@ -278,8 +285,7 @@ export function mergeBundles(
     
     settings: mergeSettings(
       bundleA.settings,
-      bundleB.settings,
-      bundleAIsNewer
+      bundleB.settings
     ),
     
     navigationState: mergeNavigationState(
@@ -292,60 +298,4 @@ export function mergeBundles(
       bundleB.combinedComponentProgress
     ),
   };
-}
-
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-/**
- * Helper to determine if a value is "default" or "set".
- * 
- * Used in OR strategy to decide which value to keep.
- * Default values are empty/falsy, set values have user data.
- * 
- * @param value - Value to check
- * @returns True if value is considered "default" (empty)
- */
-function isDefaultValue(value: any): boolean {
-  if (value === null || value === undefined) return true;
-  if (value === false) return true;
-  if (value === '') return true;
-  if (Array.isArray(value) && value.length === 0) return true;
-  if (typeof value === 'object' && Object.keys(value).length === 0) return true;
-  return false;
-}
-
-/**
- * Merge two objects using OR strategy per field.
- * 
- * For each field, uses first non-default value.
- * Useful for settings and preference objects.
- * 
- * @param objA - First object (primary)
- * @param objB - Second object (fallback)
- * @returns Merged object
- */
-export function mergeObjectsOR<T extends Record<string, any>>(
-  objA: T,
-  objB: T
-): T {
-  const result: any = {};
-  
-  // Get all keys from both objects
-  const allKeys = new Set([...Object.keys(objA), ...Object.keys(objB)]);
-  
-  for (const key of allKeys) {
-    const valueA = objA[key];
-    const valueB = objB[key];
-    
-    // Use A if it's set, otherwise use B
-    if (!isDefaultValue(valueA)) {
-      result[key] = valueA;
-    } else {
-      result[key] = valueB;
-    }
-  }
-  
-  return result;
 }

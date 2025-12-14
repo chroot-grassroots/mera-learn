@@ -34,9 +34,9 @@ vi.mock('../registry/mera-registry.js', () => ({
   progressSchemaMap: new Map(),
   componentValidatorMap: new Map(), // No validators = components always retained if schema passes
   componentInitializerMap: new Map<string, () => any>([
-    ['text', () => ({ content: '' })],
-    ['checkbox', () => ({ checked: [] })],
-    ['quiz', () => ({ answers: [] })],
+    ['text', () => ({ content: '', lastUpdated: 0 })],
+    ['checkbox', () => ({ checked: [], lastUpdated: 0 })],
+    ['quiz', () => ({ answers: [], lastUpdated: 0 })],
   ]),
 }));
 
@@ -94,27 +94,27 @@ describe('progressIntegrity', () => {
 
     it('returns perfectly valid input for pristine data', () => {
       const pristineData = {
-        metadata: { webId: 'test-webid' },
+        metadata: { webId: 'https://test.example/webid' },
         overallProgress: {
           lessonCompletions: {},
-          domainsCompleted: [],
+          domainCompletions: {},
           currentStreak: 0,
           lastStreakCheck: Math.floor(Date.now() / 1000), // Unix timestamp in seconds
           totalLessonsCompleted: 0,
           totalDomainsCompleted: 0,
         },
         settings: {
-          weekStartDay: 'monday',
-          weekStartTimeUTC: '00:00',
-          theme: 'auto',
-          learningPace: 'standard',
-          optOutDailyPing: false,
-          optOutErrorPing: false,
-          fontSize: 'medium',
-          highContrast: false,
-          reducedMotion: false,
-          focusIndicatorStyle: 'default',
-          audioEnabled: true,
+          weekStartDay: ['monday', 0],
+          weekStartTimeUTC: ['00:00', 0],
+          theme: ['auto', 0],
+          learningPace: ['standard', 0],
+          optOutDailyPing: [false, 0],
+          optOutErrorPing: [false, 0],
+          fontSize: ['medium', 0],
+          highContrast: [false, 0],
+          reducedMotion: [false, 0],
+          focusIndicatorStyle: ['default', 0],
+          audioEnabled: [true, 0],
         },
         navigationState: {
           currentEntityId: 0,
@@ -123,12 +123,12 @@ describe('progressIntegrity', () => {
         },
         combinedComponentProgress: {
           components: {}, // Empty - will be initialized
-          },
+        },
       };
 
       const result = enforceDataIntegrity(
         JSON.stringify(pristineData),
-        'test-webid',
+        'https://test.example/webid',
         mockLessonConfigs
       );
 
@@ -152,7 +152,14 @@ describe('progressIntegrity', () => {
     it('detects webId mismatch as critical failure', () => {
       const data = {
         metadata: { webId: 'wrong-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: { components: {} },
@@ -170,7 +177,14 @@ describe('progressIntegrity', () => {
     it('defaults metadata when malformed', () => {
       const data = {
         metadata: { notWebId: 'something' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: { components: {} },
@@ -188,8 +202,10 @@ describe('progressIntegrity', () => {
       const data = {
         metadata: { webId: 'test-webid' },
         overallProgress: {
-          lessonCompletions: { '100': 123456 }, // Only 1 lesson
-          domainsCompleted: [],
+          lessonCompletions: { 
+            '100': { firstCompleted: 123456, lastUpdated: 123456 } 
+          }, // Only 1 lesson
+          domainCompletions: {},
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 5, // Claims 5 lessons
@@ -212,7 +228,9 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {},
-          domainsCompleted: [1], // Only 1 domain
+          domainCompletions: { 
+            '1': { firstCompleted: 123456, lastUpdated: 123456 } 
+          }, // Only 1 domain
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 0,
@@ -234,8 +252,14 @@ describe('progressIntegrity', () => {
       const data = {
         metadata: { webId: 'test-webid' },
         overallProgress: {
-          lessonCompletions: { '100': 123456, '200': 123457 },
-          domainsCompleted: [1, 2],
+          lessonCompletions: { 
+            '100': { firstCompleted: 123456, lastUpdated: 123456 },
+            '200': { firstCompleted: 123457, lastUpdated: 123457 }
+          },
+          domainCompletions: { 
+            '1': { firstCompleted: 123456, lastUpdated: 123456 },
+            '2': { firstCompleted: 123456, lastUpdated: 123456 }
+          },
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 2,
@@ -257,8 +281,12 @@ describe('progressIntegrity', () => {
       const data = {
         metadata: { webId: 'test-webid' },
         overallProgress: {
-          lessonCompletions: { '100': 123456 },
-          domainsCompleted: [1],
+          lessonCompletions: { 
+            '100': { firstCompleted: 123456, lastUpdated: 123456 } 
+          },
+          domainCompletions: { 
+            '1': { firstCompleted: 123456, lastUpdated: 123456 } 
+          },
           currentStreak: 0,
           lastStreakCheck: 0,
           // No counters - old format
@@ -282,11 +310,11 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {
-            '100': 123456, // Valid
-            '999': 123457, // Not in curriculum
-            '888': 123458, // Not in curriculum
+            '100': { firstCompleted: 123456, lastUpdated: 123456 }, // Valid
+            '999': { firstCompleted: 123457, lastUpdated: 123457 }, // Not in curriculum
+            '888': { firstCompleted: 123458, lastUpdated: 123458 }, // Not in curriculum
           },
-          domainsCompleted: [],
+          domainCompletions: {},
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 3,
@@ -311,7 +339,12 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {},
-          domainsCompleted: [1, 2, 99, 100], // 99 and 100 not valid
+          domainCompletions: {
+            '1': { firstCompleted: 123456, lastUpdated: 123456 },
+            '2': { firstCompleted: 123456, lastUpdated: 123456 },
+            '99': { firstCompleted: 123456, lastUpdated: 123456 },  // Not valid
+            '100': { firstCompleted: 123456, lastUpdated: 123456 }  // Not valid
+          },
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 0,
@@ -324,7 +357,10 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(result.bundle.overallProgress.domainsCompleted).toEqual([1, 2]);
+      // Check that only domains 1 and 2 remain completed
+      const completedDomains = Object.keys(result.bundle.overallProgress.domainCompletions)
+        .filter(id => result.bundle.overallProgress.domainCompletions[id].firstCompleted !== null);
+      expect(completedDomains.sort()).toEqual(['1', '2']);
       expect(result.recoveryMetrics.overallProgress.domainsDroppedRatio).toBe(0.5);
     });
 
@@ -333,10 +369,13 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {
-            '100': 123456,
-            '999': 123457, // Will be dropped
+            '100': { firstCompleted: 123456, lastUpdated: 123456 },
+            '999': { firstCompleted: 123457, lastUpdated: 123457 }, // Will be dropped
           },
-          domainsCompleted: [1, 99], // 99 will be dropped
+          domainCompletions: {
+            '1': { firstCompleted: 123456, lastUpdated: 123456 },
+            '99': { firstCompleted: 123456, lastUpdated: 123456 }  // Will be dropped
+          },
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 2,
@@ -359,10 +398,10 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {
-            '100': 123456, // Valid
-            '999': 123457, // Not in curriculum
+            '100': { firstCompleted: 123456, lastUpdated: 123456 }, // Valid
+            '999': { firstCompleted: 123457, lastUpdated: 123457 }, // Not in curriculum
           },
-          domainsCompleted: [],
+          domainCompletions: {},
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 5, // Claims 5, has 2 (3 lost to corruption)
@@ -386,19 +425,26 @@ describe('progressIntegrity', () => {
     it('keeps valid settings', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {
-          weekStartDay: 'friday',
-          weekStartTimeUTC: '08:00',
-          theme: 'dark',
-          learningPace: 'intensive',
-          optOutDailyPing: true,
-          optOutErrorPing: true,
-          fontSize: 'large',
-          highContrast: true,
-          reducedMotion: true,
-          focusIndicatorStyle: 'high-visibility',
-          audioEnabled: false,
+          weekStartDay: ['friday', 0],
+          weekStartTimeUTC: ['08:00', 0],
+          theme: ['dark', 0],
+          learningPace: ['intensive', 0],
+          optOutDailyPing: [true, 0],
+          optOutErrorPing: [true, 0],
+          fontSize: ['large', 0],
+          highContrast: [true, 0],
+          reducedMotion: [true, 0],
+          focusIndicatorStyle: ['high-visibility', 0],
+          audioEnabled: [false, 0],
         },
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: { components: {} },
@@ -406,20 +452,27 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(result.bundle.settings.theme).toBe('dark');
-      expect(result.bundle.settings.fontSize).toBe('large');
-      expect(result.bundle.settings.audioEnabled).toBe(false);
+      expect(result.bundle.settings.theme[0]).toBe('dark');
+      expect(result.bundle.settings.fontSize[0]).toBe('large');
+      expect(result.bundle.settings.audioEnabled[0]).toBe(false);
       expect(result.recoveryMetrics.settings.defaultedRatio).toBe(0);
     });
 
     it('defaults invalid settings fields', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {
-          weekStartDay: 'invalid-day',
-          theme: 'neon', // Invalid
-          fontSize: 'huge', // Invalid
+          weekStartDay: ['invalid-day', 0],
+          theme: ['neon', 0], // Invalid
+          fontSize: ['huge', 0], // Invalid
         },
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: { components: {} },
@@ -427,19 +480,26 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(result.bundle.settings.weekStartDay).toBe('monday'); // Defaulted
-      expect(result.bundle.settings.theme).toBe('auto'); // Defaulted
-      expect(result.bundle.settings.fontSize).toBe('medium'); // Defaulted
+      expect(result.bundle.settings.weekStartDay[0]).toBe('monday'); // Defaulted
+      expect(result.bundle.settings.theme[0]).toBe('auto'); // Defaulted
+      expect(result.bundle.settings.fontSize[0]).toBe('medium'); // Defaulted
       expect(result.recoveryMetrics.settings.defaultedRatio).toBeGreaterThan(0);
     });
 
     it('calculates correct defaulted ratio for settings', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {
-          theme: 'invalid', // 1 invalid
-          fontSize: 'invalid', // 2 invalid
+          theme: ['invalid', 0], // 1 invalid
+          fontSize: ['invalid', 0], // 2 invalid
           // 9 other fields missing/invalid
         },
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
@@ -458,7 +518,14 @@ describe('progressIntegrity', () => {
       const now = Date.now();
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: {
           currentEntityId: 100,
@@ -478,7 +545,14 @@ describe('progressIntegrity', () => {
     it('defaults navigation when entity does not exist in curriculum', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: {
           currentEntityId: 999, // Not in curriculum
@@ -498,7 +572,14 @@ describe('progressIntegrity', () => {
     it('defaults navigation when malformed', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: {
           wrongField: 'value',
@@ -517,7 +598,14 @@ describe('progressIntegrity', () => {
     it('initializes all curriculum components when missing', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: {
@@ -538,14 +626,21 @@ describe('progressIntegrity', () => {
     it('retains valid component progress', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: {
           components: {
-            '1001': { content: 'user data' },
-            '1002': { checked: [true, false] },
-            '2001': { answers: ['a', 'b'] },
+            '1001': { content: 'user data', lastUpdated: 123456 },
+            '1002': { checked: [true, false], lastUpdated: 123456 },
+            '2001': { answers: ['a', 'b'], lastUpdated: 123456 },
           },
         },
       };
@@ -562,12 +657,19 @@ describe('progressIntegrity', () => {
     it('calculates defaulted ratio correctly', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: {
           components: {
-            '1001': { content: 'valid' }, // Without schema validators, will be defaulted
+            '1001': { content: 'valid', lastUpdated: 123456 }, // Without schema validators, will be defaulted
             // 1002 missing - defaulted
             // 2001 missing - defaulted
           },
@@ -593,7 +695,7 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {},
-          domainsCompleted: [],
+          domainCompletions: {},
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 5, // Corruption
@@ -613,8 +715,10 @@ describe('progressIntegrity', () => {
       const data = {
         metadata: { webId: 'test-webid' },
         overallProgress: {
-          lessonCompletions: { '999': 123456 }, // Will be dropped
-          domainsCompleted: [],
+          lessonCompletions: { 
+            '999': { firstCompleted: 123456, lastUpdated: 123456 } 
+          }, // Will be dropped
+          domainCompletions: {},
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 1,
@@ -634,8 +738,15 @@ describe('progressIntegrity', () => {
     it('marks input as imperfect when settings defaulted', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
-        settings: { theme: 'invalid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: { theme: ['invalid', 0] },
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: { components: {} },
       };
@@ -648,7 +759,14 @@ describe('progressIntegrity', () => {
     it('marks input as imperfect when navigation defaulted', () => {
       const data = {
         metadata: { webId: 'test-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: { currentEntityId: 999, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: { components: {} },
@@ -662,7 +780,14 @@ describe('progressIntegrity', () => {
     it('marks input as imperfect when webId mismatches', () => {
       const data = {
         metadata: { webId: 'wrong-webid' },
-        overallProgress: { lessonCompletions: {}, domainsCompleted: [], currentStreak: 0, lastStreakCheck: 0, totalLessonsCompleted: 0, totalDomainsCompleted: 0 },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
         settings: {},
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
         combinedComponentProgress: { components: {} },
@@ -682,7 +807,7 @@ describe('progressIntegrity', () => {
 
       expect(result.bundle.metadata.webId).toBe('test-webid');
       expect(result.bundle.overallProgress.lessonCompletions).toEqual({});
-      expect(result.bundle.settings.theme).toBe('auto');
+      expect(result.bundle.settings.theme[0]).toBe('auto');
       expect(result.perfectlyValidInput).toBe(false);
     });
 
@@ -702,17 +827,17 @@ describe('progressIntegrity', () => {
     });
 
     it('handles extremely large lesson completion count', () => {
-      const manyLessons: Record<string, number> = {};
+      const manyLessons: Record<string, { firstCompleted: number; lastUpdated: number }> = {};
       // Loop creates lessons 100-199 (200 is excluded by the < 200)
       for (let i = 100; i < 200; i++) {
-        manyLessons[i.toString()] = 123456;
+        manyLessons[i.toString()] = { firstCompleted: 123456, lastUpdated: 123456 };
       }
 
       const data = {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: manyLessons, // 100 lessons (100-199)
-          domainsCompleted: [],
+          domainCompletions: {},
           currentStreak: 0,
           lastStreakCheck: 0,
           totalLessonsCompleted: 100,
@@ -727,7 +852,8 @@ describe('progressIntegrity', () => {
 
       // Mock only allows lesson 100 and 200
       // Loop creates 100-199, so only lesson 100 is valid (200 is not in the loop)
-      const keptLessons = Object.keys(result.bundle.overallProgress.lessonCompletions);
+      const keptLessons = Object.keys(result.bundle.overallProgress.lessonCompletions)
+        .filter(id => result.bundle.overallProgress.lessonCompletions[id].firstCompleted !== null);
       expect(keptLessons).toContain('100');
       expect(keptLessons.length).toBe(1);
       // 99 out of 100 dropped = 0.99

@@ -12,11 +12,12 @@ describe('OverallProgressManager', () => {
   beforeEach(() => {
     mockRegistry = {
       hasLesson: vi.fn((id: number) => id === 100 || id === 200),
+      hasDomain: vi.fn((id: number) => id === 1 || id === 2),
     };
 
     const initialProgress = {
       lessonCompletions: {},
-      domainsCompleted: [],
+      domainCompletions: {},
       currentStreak: 0,
       lastStreakCheck: Math.floor(Date.now() / 1000),
       totalLessonsCompleted: 0,
@@ -26,31 +27,83 @@ describe('OverallProgressManager', () => {
     manager = new OverallProgressManager(initialProgress, mockRegistry);
   });
 
-  describe('markLessonComplete', () => {
-    it('marks lesson as complete with timestamp', () => {
+  describe('CompletionData structure', () => {
+    it('stores firstCompleted and lastUpdated on first lesson completion', () => {
       const before = Math.floor(Date.now() / 1000);
       manager.markLessonComplete(100);
-      const progress = manager.getProgress();
+      const completion = manager.getProgress().lessonCompletions['100'];
 
-      expect(progress.lessonCompletions['100']).toBeGreaterThanOrEqual(before);
-      expect(progress.lessonCompletions['100']).toBeLessThanOrEqual(
-        Math.floor(Date.now() / 1000)
-      );
+      expect(completion.firstCompleted).toBeGreaterThanOrEqual(before);
+      expect(completion.lastUpdated).toBe(completion.firstCompleted);
     });
 
-    it('updates timestamp if already completed', () => {
+    it('preserves firstCompleted but updates lastUpdated on lesson re-completion', () => {
       manager.markLessonComplete(100);
-      const firstTimestamp = manager.getProgress().lessonCompletions['100'];
-
-      // Wait a bit
+      const firstCompletion = manager.getProgress().lessonCompletions['100'];
+      
       vi.useFakeTimers();
       vi.advanceTimersByTime(2000);
-
+      
       manager.markLessonComplete(100);
-      const secondTimestamp = manager.getProgress().lessonCompletions['100'];
-
-      expect(secondTimestamp).toBeGreaterThan(firstTimestamp);
+      const secondCompletion = manager.getProgress().lessonCompletions['100'];
+      
+      expect(secondCompletion.firstCompleted).toBe(firstCompletion.firstCompleted);
+      expect(secondCompletion.lastUpdated).toBeGreaterThan(firstCompletion.lastUpdated);
+      
       vi.useRealTimers();
+    });
+
+    it('sets firstCompleted to null but updates lastUpdated on lesson incompletion', () => {
+      manager.markLessonComplete(100);
+      const firstTimestamp = manager.getProgress().lessonCompletions['100'].firstCompleted;
+      
+      vi.useFakeTimers();
+      vi.advanceTimersByTime(2000);
+      
+      manager.markLessonIncomplete(100);
+      const completion = manager.getProgress().lessonCompletions['100'];
+      
+      expect(completion.firstCompleted).toBeNull();
+      expect(completion.lastUpdated).toBeGreaterThan(firstTimestamp!);
+      
+      vi.useRealTimers();
+    });
+
+    it('stores firstCompleted and lastUpdated on first domain completion', () => {
+      const before = Math.floor(Date.now() / 1000);
+      manager.markDomainComplete(1);
+      const completion = manager.getProgress().domainCompletions['1'];
+
+      expect(completion.firstCompleted).toBeGreaterThanOrEqual(before);
+      expect(completion.lastUpdated).toBe(completion.firstCompleted);
+    });
+
+    it('sets firstCompleted to null but updates lastUpdated on domain incompletion', () => {
+      manager.markDomainComplete(1);
+      const firstTimestamp = manager.getProgress().domainCompletions['1'].firstCompleted;
+      
+      vi.useFakeTimers();
+      vi.advanceTimersByTime(2000);
+      
+      manager.markDomainIncomplete(1);
+      const completion = manager.getProgress().domainCompletions['1'];
+      
+      expect(completion.firstCompleted).toBeNull();
+      expect(completion.lastUpdated).toBeGreaterThan(firstTimestamp!);
+      
+      vi.useRealTimers();
+    });
+  });
+
+  describe('markLessonComplete', () => {
+    it('marks lesson as complete with CompletionData', () => {
+      const before = Math.floor(Date.now() / 1000);
+      manager.markLessonComplete(100);
+      const completion = manager.getProgress().lessonCompletions['100'];
+
+      expect(completion).toBeDefined();
+      expect(completion.firstCompleted).toBeGreaterThanOrEqual(before);
+      expect(completion.lastUpdated).toBeGreaterThanOrEqual(before);
     });
 
     it('throws error for invalid lesson ID', () => {
@@ -79,12 +132,15 @@ describe('OverallProgressManager', () => {
   });
 
   describe('markLessonIncomplete', () => {
-    it('removes lesson completion', () => {
+    it('sets firstCompleted to null and updates lastUpdated', () => {
       manager.markLessonComplete(100);
       expect(manager.getProgress().lessonCompletions['100']).toBeDefined();
 
       manager.markLessonIncomplete(100);
-      expect(manager.getProgress().lessonCompletions['100']).toBeUndefined();
+      const completion = manager.getProgress().lessonCompletions['100'];
+      
+      expect(completion.firstCompleted).toBeNull();
+      expect(completion.lastUpdated).toBeGreaterThan(0);
     });
 
     it('throws error for invalid lesson ID', () => {
@@ -97,7 +153,7 @@ describe('OverallProgressManager', () => {
       expect(() => manager.markLessonIncomplete(100)).not.toThrow();
     });
 
-    it('decrements counter when removing completion', () => {
+    it('decrements counter when marking incomplete from completed state', () => {
       manager.markLessonComplete(100);
       manager.markLessonComplete(200);
       expect(manager.getProgress().totalLessonsCompleted).toBe(2);
@@ -106,12 +162,105 @@ describe('OverallProgressManager', () => {
       expect(manager.getProgress().totalLessonsCompleted).toBe(1);
     });
 
-    it('does not decrement counter if lesson was not completed', () => {
+    it('does not decrement counter if lesson was already incomplete', () => {
       manager.markLessonComplete(100);
       expect(manager.getProgress().totalLessonsCompleted).toBe(1);
       
-      manager.markLessonIncomplete(200); // Was never completed
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1); // Still 1
+      // Mark 100 incomplete
+      manager.markLessonIncomplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(0);
+      
+      // Try to mark it incomplete again
+      manager.markLessonIncomplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(0); // Still 0, no underflow
+    });
+
+    it('allows re-completion after incompletion', () => {
+      manager.markLessonComplete(100);
+      const firstTimestamp = manager.getProgress().lessonCompletions['100'].firstCompleted;
+      
+      manager.markLessonIncomplete(100);
+      expect(manager.getProgress().lessonCompletions['100'].firstCompleted).toBeNull();
+      
+      vi.useFakeTimers();
+      vi.advanceTimersByTime(3000);
+      
+      manager.markLessonComplete(100);
+      const completion = manager.getProgress().lessonCompletions['100'];
+      
+      expect(completion.firstCompleted).toBeGreaterThan(firstTimestamp!);
+      expect(completion.lastUpdated).toBe(completion.firstCompleted);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
+      
+      vi.useRealTimers();
+    });
+  });
+
+  describe('markDomainComplete', () => {
+    it('marks domain as complete with CompletionData', () => {
+      const before = Math.floor(Date.now() / 1000);
+      manager.markDomainComplete(1);
+      const completion = manager.getProgress().domainCompletions['1'];
+
+      expect(completion).toBeDefined();
+      expect(completion.firstCompleted).toBeGreaterThanOrEqual(before);
+      expect(completion.lastUpdated).toBeGreaterThanOrEqual(before);
+    });
+
+    it('throws error for invalid domain ID', () => {
+      expect(() => manager.markDomainComplete(999)).toThrow(
+        'Invalid domain ID: 999'
+      );
+    });
+
+    it('increments counter on first completion', () => {
+      expect(manager.getProgress().totalDomainsCompleted).toBe(0);
+      
+      manager.markDomainComplete(1);
+      expect(manager.getProgress().totalDomainsCompleted).toBe(1);
+      
+      manager.markDomainComplete(2);
+      expect(manager.getProgress().totalDomainsCompleted).toBe(2);
+    });
+
+    it('does not increment counter on re-completion', () => {
+      manager.markDomainComplete(1);
+      expect(manager.getProgress().totalDomainsCompleted).toBe(1);
+      
+      manager.markDomainComplete(1); // Re-complete same domain
+      expect(manager.getProgress().totalDomainsCompleted).toBe(1); // Still 1
+    });
+  });
+
+  describe('markDomainIncomplete', () => {
+    it('sets firstCompleted to null and updates lastUpdated', () => {
+      manager.markDomainComplete(1);
+      expect(manager.getProgress().domainCompletions['1']).toBeDefined();
+
+      manager.markDomainIncomplete(1);
+      const completion = manager.getProgress().domainCompletions['1'];
+      
+      expect(completion.firstCompleted).toBeNull();
+      expect(completion.lastUpdated).toBeGreaterThan(0);
+    });
+
+    it('throws error for invalid domain ID', () => {
+      expect(() => manager.markDomainIncomplete(999)).toThrow(
+        'Invalid domain ID: 999'
+      );
+    });
+
+    it('does not error if domain was not completed', () => {
+      expect(() => manager.markDomainIncomplete(1)).not.toThrow();
+    });
+
+    it('decrements counter when marking incomplete from completed state', () => {
+      manager.markDomainComplete(1);
+      manager.markDomainComplete(2);
+      expect(manager.getProgress().totalDomainsCompleted).toBe(2);
+      
+      manager.markDomainIncomplete(1);
+      expect(manager.getProgress().totalDomainsCompleted).toBe(1);
     });
   });
 
@@ -142,93 +291,66 @@ describe('OverallProgressManager', () => {
     });
   });
 
-  describe('setDefaultsIfBlank', () => {
-    it('initializes missing fields', () => {
-      const emptyProgress: any = {};
-      const emptyManager = new OverallProgressManager(
-        emptyProgress,
-        mockRegistry
-      );
-
-      emptyManager.setDefaultsIfBlank();
-      const progress = emptyManager.getProgress();
-
-      expect(progress.lessonCompletions).toEqual({});
-      expect(progress.domainsCompleted).toEqual([]);
-      expect(progress.currentStreak).toBe(0);
-      expect(progress.lastStreakCheck).toBeGreaterThan(0);
-      expect(progress.totalLessonsCompleted).toBe(0);
-      expect(progress.totalDomainsCompleted).toBe(0);
-    });
-
-    it('does not overwrite existing values', () => {
-      manager.markLessonComplete(100);
-      manager.updateStreak(5);
-
-      manager.setDefaultsIfBlank();
-      const progress = manager.getProgress();
-
-      expect(progress.lessonCompletions['100']).toBeDefined();
-      expect(progress.currentStreak).toBe(5);
-    });
-
-    it('initializes counters from existing completions when undefined', () => {
-      const progress: any = {
-        lessonCompletions: { '100': 123456, '200': 123457 },
-        domainsCompleted: [1, 2, 3],
-        currentStreak: 0,
-        lastStreakCheck: 123456,
-        // counters missing
-      };
-      const customManager = new OverallProgressManager(progress, mockRegistry);
-      customManager.setDefaultsIfBlank();
-      
-      expect(customManager.getProgress().totalLessonsCompleted).toBe(2);
-      expect(customManager.getProgress().totalDomainsCompleted).toBe(3);
-    });
-  });
-
   describe('getAllTrumpStrategies', () => {
-    it('returns correct strategies for each field', () => {
+    it('returns correct strategies (counters excluded as derived values)', () => {
       const strategies = manager.getAllTrumpStrategies();
 
-      expect(strategies.lessonCompletions).toBe('MAX');
-      expect(strategies.domainsCompleted).toBe('UNION');
+      expect(strategies.lessonCompletions).toBe('LATEST_TIMESTAMP');
+      expect(strategies.domainCompletions).toBe('LATEST_TIMESTAMP');
       expect(strategies.currentStreak).toBe('LATEST_TIMESTAMP');
       expect(strategies.lastStreakCheck).toBe('MAX');
-      expect(strategies.totalLessonsCompleted).toBe('MAX');
-      expect(strategies.totalDomainsCompleted).toBe('MAX');
+      
+      // Counters should NOT be in strategies - they're derived values
+      expect(strategies.totalLessonsCompleted).toBeUndefined();
+      expect(strategies.totalDomainsCompleted).toBeUndefined();
     });
   });
 
   describe('counter integrity', () => {
-    it('maintains counter === array length invariant', () => {
+    it('maintains counter === count of non-null firstCompleted invariant for lessons', () => {
       const progress = manager.getProgress();
       
       // Initial state
-      expect(progress.totalLessonsCompleted).toBe(
-        Object.keys(progress.lessonCompletions).length
-      );
+      const countCompleted = () => 
+        Object.values(progress.lessonCompletions)
+          .filter(c => c.firstCompleted !== null).length;
+      
+      expect(progress.totalLessonsCompleted).toBe(countCompleted());
       
       // After completing lessons
       manager.markLessonComplete(100);
       manager.markLessonComplete(200);
-      expect(progress.totalLessonsCompleted).toBe(
-        Object.keys(progress.lessonCompletions).length
-      );
+      expect(progress.totalLessonsCompleted).toBe(countCompleted());
+      expect(progress.totalLessonsCompleted).toBe(2);
       
-      // After uncompleting one
+      // After marking one incomplete (firstCompleted becomes null)
       manager.markLessonIncomplete(100);
-      expect(progress.totalLessonsCompleted).toBe(
-        Object.keys(progress.lessonCompletions).length
-      );
+      expect(progress.totalLessonsCompleted).toBe(countCompleted());
+      expect(progress.totalLessonsCompleted).toBe(1);
       
-      // After uncompleting all
+      // After marking all incomplete
       manager.markLessonIncomplete(200);
-      expect(progress.totalLessonsCompleted).toBe(
-        Object.keys(progress.lessonCompletions).length
-      );
+      expect(progress.totalLessonsCompleted).toBe(countCompleted());
       expect(progress.totalLessonsCompleted).toBe(0);
+    });
+
+    it('maintains counter === count of non-null firstCompleted invariant for domains', () => {
+      const progress = manager.getProgress();
+      
+      const countCompleted = () => 
+        Object.values(progress.domainCompletions)
+          .filter(c => c.firstCompleted !== null).length;
+      
+      expect(progress.totalDomainsCompleted).toBe(countCompleted());
+      
+      manager.markDomainComplete(1);
+      manager.markDomainComplete(2);
+      expect(progress.totalDomainsCompleted).toBe(countCompleted());
+      expect(progress.totalDomainsCompleted).toBe(2);
+      
+      manager.markDomainIncomplete(1);
+      expect(progress.totalDomainsCompleted).toBe(countCompleted());
+      expect(progress.totalDomainsCompleted).toBe(1);
     });
   });
 });
@@ -240,6 +362,7 @@ describe('OverallProgressMessageQueueManager', () => {
   beforeEach(() => {
     mockRegistry = {
       hasLesson: vi.fn((id: number) => id === 100),
+      hasDomain: vi.fn((id: number) => id === 1),
     };
 
     queueManager = new OverallProgressMessageQueueManager(mockRegistry);
@@ -275,6 +398,40 @@ describe('OverallProgressMessageQueueManager', () => {
     it('throws error for invalid lesson ID', () => {
       expect(() => queueManager.queueLessonIncomplete(999)).toThrow(
         'Invalid lesson ID: 999 does not exist in curriculum'
+      );
+    });
+  });
+
+  describe('queueDomainComplete', () => {
+    it('queues valid domain complete message', () => {
+      queueManager.queueDomainComplete(1);
+      const messages = queueManager.getMessages();
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0].method).toBe('markDomainComplete');
+      expect(messages[0].args).toEqual([1]);
+    });
+
+    it('throws error for invalid domain ID', () => {
+      expect(() => queueManager.queueDomainComplete(999)).toThrow(
+        'Invalid domain ID: 999 does not exist in curriculum'
+      );
+    });
+  });
+
+  describe('queueDomainIncomplete', () => {
+    it('queues valid domain incomplete message', () => {
+      queueManager.queueDomainIncomplete(1);
+      const messages = queueManager.getMessages();
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0].method).toBe('markDomainIncomplete');
+      expect(messages[0].args).toEqual([1]);
+    });
+
+    it('throws error for invalid domain ID', () => {
+      expect(() => queueManager.queueDomainIncomplete(999)).toThrow(
+        'Invalid domain ID: 999 does not exist in curriculum'
       );
     });
   });

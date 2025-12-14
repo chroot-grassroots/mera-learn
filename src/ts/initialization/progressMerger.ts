@@ -5,7 +5,6 @@
  * Merges two PodStorageBundles using trump strategies defined in manager classes.
  * Used for:
  * - Offline/online conflict resolution during initialization
- * - Concurrent session conflict resolution in SaveManager
  * 
  * Trump strategies ensure data preservation - they never destroy user progress
  * in favor of empty/default values. Examples:
@@ -42,15 +41,15 @@ import type { TrumpStrategy } from '../core/coreTypes.js';
  * Merge overall progress using trump strategies.
  * 
  * Applies strategies defined in OverallProgressManager:
- * - lessonCompletions: MAX timestamp per lesson
+ * - lessonCompletions: MAX timestamp per lesson (UNION of all lessons)
  * - domainsCompleted: UNION of arrays
- * - totalLessonsCompleted: MAX
- * - totalDomainsCompleted: MAX
+ * - totalLessonsCompleted: Recalculated from merged completions
+ * - totalDomainsCompleted: Recalculated from merged domains
  * - currentStreak: LATEST_TIMESTAMP (use lastStreakCheck to determine)
  * - lastStreakCheck: MAX
  * 
- * @param dataA - First progress data (typically Pod)
- * @param dataB - Second progress data (typically localStorage)
+ * @param dataA - First progress data
+ * @param dataB - Second progress data
  * @returns Merged progress data
  */
 function mergeOverallProgress(
@@ -58,8 +57,12 @@ function mergeOverallProgress(
   dataB: OverallProgressData
 ): OverallProgressData {
   
-  // Merge lessonCompletions: MAX timestamp wins per lesson
+  // Merge lessonCompletions: MAX timestamp wins per lesson (UNION of all lessons)
+  // Start by copying all completions from dataA
   const mergedCompletions: Record<string, number> = { ...dataA.lessonCompletions };
+  
+  // Go through each completion from dataB
+  // Keep it if the timestamp is newer or if the counterpart in dataA doesn't exist
   for (const [lessonId, timestamp] of Object.entries(dataB.lessonCompletions)) {
     const existingTimestamp = mergedCompletions[lessonId];
     const newTimestamp = timestamp as number;  // Type assertion - we know this is a number from OverallProgressData
@@ -73,17 +76,13 @@ function mergeOverallProgress(
     new Set([...dataA.domainsCompleted, ...dataB.domainsCompleted])
   );
   
-  // Merge counters: MAX
-  const mergedLessonsCount = Math.max(
-    dataA.totalLessonsCompleted,
-    dataB.totalLessonsCompleted
-  );
-  const mergedDomainsCount = Math.max(
-    dataA.totalDomainsCompleted,
-    dataB.totalDomainsCompleted
-  );
+  // Recalculate counters from merged data (not MAX of pre-merge counters)
+  // This ensures counters accurately reflect the UNION of completions
+  const mergedLessonsCount = Object.keys(mergedCompletions).length;
+  const mergedDomainsCount = mergedDomains.length;
   
-  // Merge streak: LATEST_TIMESTAMP (use lastStreakCheck to determine)
+  // Merge streak: LATEST_TIMESTAMP (use lastStreakCheck to determine which is newer)
+  // TODO: Revisit when motivation component is implemented
   const useDataA = dataA.lastStreakCheck >= dataB.lastStreakCheck;
   const mergedStreak = useDataA ? dataA.currentStreak : dataB.currentStreak;
   const mergedStreakCheck = Math.max(dataA.lastStreakCheck, dataB.lastStreakCheck);
@@ -110,21 +109,22 @@ function mergeOverallProgress(
  * preference changes as a cohesive set rather than mixing old and new.
  * 
  * Note: SettingsData doesn't have a lastUpdated field, so we rely on
- * the bundle-level metadata timestamp to determine which is newer.
- * The caller (mergeBundles) should pass the newer bundle as dataA.
+ * the bundle-level filename timestamp to determine which is newer.
+ * The caller (mergeBundles) passes bundleAIsNewer to indicate this.
  * 
- * @param dataA - Newer settings data (should be used)
- * @param dataB - Older settings data (fallback)
+ * @param dataA - First settings data
+ * @param dataB - Second settings data
+ * @param bundleAIsNewer - True if bundleA has more recent timestamp than bundleB
  * @returns Settings from newer source
  */
 function mergeSettings(
   dataA: SettingsData,
-  dataB: SettingsData
+  dataB: SettingsData,
+  bundleAIsNewer: boolean
 ): SettingsData {
   
   // Use LATEST_TIMESTAMP strategy: newer bundle wins entirely
-  // Since we don't have per-field timestamps, use the entire newer bundle
-  return dataA;  // Caller ensures dataA is newer
+  return bundleAIsNewer ? dataA : dataB;
 }
 
 // ============================================================================
@@ -245,21 +245,23 @@ function countNonDefaultValues(progress: any): number {
  * 
  * Merges each section independently:
  * - metadata: Use primary (bundleA)
- * - overallProgress: Merge using trump strategies
- * - settings: Merge using OR strategy
- * - navigationState: Use LATEST_TIMESTAMP
- * - combinedComponentProgress: Merge per-component using MAX
+ * - overallProgress: Merge using trump strategies (UNION + MAX per field)
+ * - settings: Use LATEST_TIMESTAMP (newer bundle)
+ * - navigationState: Use LATEST_TIMESTAMP (per navigationState.lastUpdated)
+ * - combinedComponentProgress: Merge per-component using heuristic
  * 
- * The metadata (webId, timestamps) is always taken from bundleA (primary).
+ * The metadata (webId) is always taken from bundleA (primary).
  * Only user data sections are merged.
  * 
- * @param bundleA - Primary bundle (typically Pod or better-scored backup)
- * @param bundleB - Secondary bundle (typically localStorage or older backup)
+ * @param bundleA - Primary bundle (better quality or has offline work)
+ * @param bundleB - Secondary bundle
+ * @param bundleAIsNewer - True if bundleA has more recent filename timestamp than bundleB
  * @returns Merged bundle preserving best data from both sources
  */
 export function mergeBundles(
   bundleA: PodStorageBundle,
-  bundleB: PodStorageBundle
+  bundleB: PodStorageBundle,
+  bundleAIsNewer: boolean
 ): PodStorageBundle {
   
   console.log('Merging bundles using trump strategies');
@@ -276,7 +278,8 @@ export function mergeBundles(
     
     settings: mergeSettings(
       bundleA.settings,
-      bundleB.settings
+      bundleB.settings,
+      bundleAIsNewer
     ),
     
     navigationState: mergeNavigationState(

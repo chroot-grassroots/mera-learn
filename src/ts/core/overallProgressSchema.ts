@@ -21,22 +21,46 @@ import { z } from "zod";
 import { ImmutableId, TrumpStrategy } from "./coreTypes.js";
 import { CurriculumRegistry } from "../registry/mera-registry.js";
 
+// ============================================================================
+// SCHEMAS
+// ============================================================================
+
+/**
+ * Completion tracking with first completion and last update timestamps.
+ * 
+ * - firstCompleted: null means never completed, number is Unix timestamp
+ * - lastUpdated: tracks most recent modification (completion OR incompletion)
+ * 
+ * This allows merge logic to:
+ * - Preserve incompletion (lastUpdated increases even when marking incomplete)
+ * - Track both "when first done" and "most recent change"
+ * - Use simple LATEST_TIMESTAMP strategy (newest lastUpdated wins)
+ */
+export const CompletionDataSchema = z.object({
+  firstCompleted: z.number().nullable(),
+  lastUpdated: z.number(),
+});
+
+export type CompletionData = z.infer<typeof CompletionDataSchema>;
+
 /**
  * Schema for overall curriculum progress data.
  *
- * Tracks lesson completions, domain completions, and learning streaks.
- * Validated on load (from Solid Pod) and on mutation (from messages)
- * by OverallProgressManager.
+ * Tracks lesson/domain completions with timestamps and learning streaks.
+ * Validated on load and mutation by OverallProgressManager.
  * 
- * Current-count trackers (totalLessonsCompleted, totalDomainsCompleted)
- * mirror the count of entries in lessonCompletions/domainsCompleted.
- * They increment on completion and decrement on un-completion, always
- * matching array length in valid data. Mismatch during recovery indicates
- * backup file corruption (e.g., lost entries due to incomplete write).
+ * Completion tracking uses CompletionData objects with:
+ * - firstCompleted: null for never completed, timestamp for first completion
+ * - lastUpdated: timestamp of most recent modification (completion OR incompletion)
+ * 
+ * Current-count trackers (totalLessonsCompleted, totalDomainsCompleted) mirror
+ * the number of non-null firstCompleted entries. They increment on completion
+ * and decrement on incompletion, always matching count in valid data. Mismatch
+ * indicates backup corruption (incomplete writes).
  */
 export const OverallProgressDataSchema = z.object({
-  lessonCompletions: z.record(z.string(), z.number()), // lessonId -> Unix timestamp
-  domainsCompleted: z.array(ImmutableId), // Domain Immutable IDs
+  lessonCompletions: z.record(z.string(), CompletionDataSchema), // lessonId -> CompletionData
+  domainCompletions: z.record(z.string(), CompletionDataSchema), // domainId -> CompletionData
   currentStreak: z.number().min(0).max(1000), // Completed weeks (not including current)
   lastStreakCheck: z.number().int().min(0), // Unix timestamp of last validation
   totalLessonsCompleted: z.number().int().min(0).default(0), // Current count tracker for corruption detection
@@ -70,7 +94,7 @@ export function isValidLessonId(
  * Check if a domain ID exists in the curriculum registry.
  *
  * Used by both reconcileAgainstCurriculum (recovery) and
- * future domain completion logic (runtime mutations).
+ * OverallProgressManager (runtime mutations).
  *
  * @param domainId - Domain ID to validate
  * @param curriculum - Curriculum registry to check against
@@ -127,35 +151,49 @@ export function reconcileAgainstCurriculum(
   let domainsDropped = 0;
   let domainsKept = 0;
 
-  const reconciledLessons: Record<string, number> = {};
-  const reconciledDomains: number[] = [];
+  const reconciledLessons: Record<string, CompletionData> = {};
+  const reconciledDomains: Record<string, CompletionData> = {};
 
   // Reconcile lesson completions
-  for (const [lessonId, timestamp] of Object.entries(data.lessonCompletions)) {
+  for (const [lessonId, completionData] of Object.entries(data.lessonCompletions)) {
     const lessonIdNum = parseInt(lessonId, 10);
 
     if (!isNaN(lessonIdNum) && isValidLessonId(lessonIdNum, curriculum)) {
-      reconciledLessons[lessonId] = timestamp;
-      lessonsKept++;
+      reconciledLessons[lessonId] = completionData;
+      // Count as kept only if actually completed
+      if (completionData.firstCompleted !== null) {
+        lessonsKept++;
+      }
     } else {
-      lessonsDropped++;
+      // Only count as dropped if it was actually completed
+      if (completionData.firstCompleted !== null) {
+        lessonsDropped++;
+      }
     }
   }
 
   // Reconcile domain completions
-  for (const domainId of data.domainsCompleted) {
-    if (isValidDomainId(domainId, curriculum)) {
-      reconciledDomains.push(domainId);
-      domainsKept++;
+  for (const [domainId, completionData] of Object.entries(data.domainCompletions)) {
+    const domainIdNum = parseInt(domainId, 10);
+
+    if (!isNaN(domainIdNum) && isValidDomainId(domainIdNum, curriculum)) {
+      reconciledDomains[domainId] = completionData;
+      // Count as kept only if actually completed
+      if (completionData.firstCompleted !== null) {
+        domainsKept++;
+      }
     } else {
-      domainsDropped++;
+      // Only count as dropped if it was actually completed
+      if (completionData.firstCompleted !== null) {
+        domainsDropped++;
+      }
     }
   }
 
   return {
     cleaned: {
       lessonCompletions: reconciledLessons,
-      domainsCompleted: reconciledDomains,
+      domainCompletions: reconciledDomains,
       currentStreak: data.currentStreak,
       lastStreakCheck: data.lastStreakCheck,
       // Fix counters to match cleaned data after curriculum reconciliation
@@ -194,63 +232,36 @@ export class OverallProgressManager {
   }
 
   /**
-   * Initialize missing fields with defaults.
-   *
-   * Used during initialization for new users or after migration
-   * when some fields may be missing.
-   */
-  setDefaultsIfBlank(): void {
-    if (!this.progress.lessonCompletions) {
-      this.progress.lessonCompletions = {};
-    }
-
-    if (!this.progress.domainsCompleted) {
-      this.progress.domainsCompleted = [];
-    }
-
-    if (this.progress.currentStreak === undefined) {
-      this.progress.currentStreak = 0;
-    }
-
-    if (!this.progress.lastStreakCheck) {
-      this.progress.lastStreakCheck = Math.floor(Date.now() / 1000);
-    }
-
-    if (this.progress.totalLessonsCompleted === undefined) {
-      this.progress.totalLessonsCompleted = Object.keys(this.progress.lessonCompletions).length;
-    }
-
-    if (this.progress.totalDomainsCompleted === undefined) {
-      this.progress.totalDomainsCompleted = this.progress.domainsCompleted.length;
-    }
-  }
-
-  /**
    * Define trump strategies for offline/online conflict resolution.
    *
-   * Used to reconcile inconsistent sets of progress data when
-   * merging offline and online changes.
+   * With the new CompletionData structure, merge logic is simpler:
+   * - lessonCompletions/domainCompletions: Use LATEST_TIMESTAMP on per-item basis
+   * - Counters (totalLessonsCompleted, totalDomainsCompleted) are NOT included
+   *   because they are derived values recalculated from merged completion data
+   *
+   * Note: The actual merge implementation in progressMerger.ts is hand-coded
+   * and doesn't programmatically use these strategies. These serve as
+   * documentation of merge intent.
    */
   getAllTrumpStrategies(): Record<
     keyof OverallProgressData,
     TrumpStrategy<any>
   > {
+    // Counters excluded - they're derived values recalculated after merge
     return {
-      lessonCompletions: "MAX", // Most recent completion timestamp wins
-      domainsCompleted: "UNION",
+      lessonCompletions: "LATEST_TIMESTAMP", // Per-lesson newest lastUpdated wins
+      domainCompletions: "LATEST_TIMESTAMP", // Per-domain newest lastUpdated wins
       currentStreak: "LATEST_TIMESTAMP", // Use lastStreakCheck to determine freshness
       lastStreakCheck: "MAX",
-      totalLessonsCompleted: "MAX", // Higher count indicates more progress
-      totalDomainsCompleted: "MAX", // Higher count indicates more progress
-    };
+    } as Record<keyof OverallProgressData, TrumpStrategy<any>>;
   }
 
   /**
    * Mark a lesson as complete with current timestamp.
    *
    * Validates lesson exists in curriculum using shared helper.
-   * Updates timestamp even if already completed (tracks most recent completion).
-   * Increments counter only on first completion.
+   * Updates lastUpdated even if already completed (tracks most recent interaction).
+   * Sets firstCompleted only on first completion, increments counter accordingly.
    *
    * @param lessonId - Lesson to mark complete
    * @throws Error if lesson ID not in curriculum
@@ -262,21 +273,28 @@ export class OverallProgressManager {
 
     const lessonKey = lessonId.toString();
     const timestamp = Math.floor(Date.now() / 1000);
+    const current = this.progress.lessonCompletions[lessonKey];
 
-    // Increment counter only if this is a new completion
-    if (this.progress.lessonCompletions[lessonKey] === undefined) {
+    // First completion or re-completion after being marked incomplete
+    if (!current || current.firstCompleted === null) {
+      this.progress.lessonCompletions[lessonKey] = {
+        firstCompleted: timestamp,
+        lastUpdated: timestamp
+      };
       this.progress.totalLessonsCompleted++;
+    } else {
+      // Already completed, just update lastUpdated
+      current.lastUpdated = timestamp;
     }
-
-    this.progress.lessonCompletions[lessonKey] = timestamp;
 
     // TODO: Check for domain completion
   }
 
   /**
-   * Mark a lesson as incomplete (remove completion record).
+   * Mark a lesson as incomplete (set firstCompleted to null).
    *
    * Validates lesson exists in curriculum using shared helper.
+   * Updates lastUpdated to track when incompletion happened.
    * Safe to call even if lesson was not completed.
    * Decrements counter only if lesson was actually completed.
    *
@@ -289,13 +307,92 @@ export class OverallProgressManager {
     }
 
     const lessonKey = lessonId.toString();
-    
-    // Decrement counter only if lesson was actually completed
-    if (this.progress.lessonCompletions[lessonKey] !== undefined) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const current = this.progress.lessonCompletions[lessonKey];
+
+    if (current && current.firstCompleted !== null) {
+      // Was completed, now mark incomplete
+      this.progress.lessonCompletions[lessonKey] = {
+        firstCompleted: null,
+        lastUpdated: timestamp
+      };
       this.progress.totalLessonsCompleted--;
+    } else if (current) {
+      // Already incomplete, just update timestamp
+      current.lastUpdated = timestamp;
+    } else {
+      // Doesn't exist yet, create as incomplete
+      this.progress.lessonCompletions[lessonKey] = {
+        firstCompleted: null,
+        lastUpdated: timestamp
+      };
     }
-    
-    delete this.progress.lessonCompletions[lessonKey];
+  }
+
+  /**
+   * Mark a domain as complete with current timestamp.
+   *
+   * Similar logic to markLessonComplete but for domains.
+   *
+   * @param domainId - Domain to mark complete
+   * @throws Error if domain ID not in curriculum
+   */
+  markDomainComplete(domainId: number): void {
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(`Invalid domain ID: ${domainId}`);
+    }
+
+    const domainKey = domainId.toString();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const current = this.progress.domainCompletions[domainKey];
+
+    // First completion or re-completion after being marked incomplete
+    if (!current || current.firstCompleted === null) {
+      this.progress.domainCompletions[domainKey] = {
+        firstCompleted: timestamp,
+        lastUpdated: timestamp
+      };
+      this.progress.totalDomainsCompleted++;
+    } else {
+      // Already completed, just update lastUpdated
+      current.lastUpdated = timestamp;
+    }
+  }
+
+  /**
+   * Mark a domain as incomplete (set firstCompleted to null).
+   *
+   * Similar logic to markLessonIncomplete but for domains.
+   *
+   * @param domainId - Domain to mark incomplete
+   * @throws Error if domain ID not in curriculum
+   */
+  markDomainIncomplete(domainId: number): void {
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(`Invalid domain ID: ${domainId}`);
+    }
+
+    const domainKey = domainId.toString();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const current = this.progress.domainCompletions[domainKey];
+
+    if (current && current.firstCompleted !== null) {
+      // Was completed, now mark incomplete
+      this.progress.domainCompletions[domainKey] = {
+        firstCompleted: null,
+        lastUpdated: timestamp
+      };
+      this.progress.totalDomainsCompleted--;
+    } else if (current) {
+      // Already incomplete, just update timestamp
+      current.lastUpdated = timestamp;
+    } else {
+      // Doesn't exist yet, create as incomplete
+      this.progress.domainCompletions[domainKey] = {
+        firstCompleted: null,
+        lastUpdated: timestamp
+      };
+    }
   }
 
   /**
@@ -340,6 +437,8 @@ export const OverallProgressMessageSchema = z.object({
   method: z.enum([
     "markLessonComplete",
     "markLessonIncomplete",
+    "markDomainComplete",
+    "markDomainIncomplete",
     "updateStreak",
     "resetStreak",
     "incrementStreak",
@@ -431,10 +530,78 @@ export class OverallProgressMessageQueueManager {
   }
 
   /**
+   * Queue a domain completion message.
+   *
+   * Validates domain ID using shared helper before queueing.
+   *
+   * @param domainId - Domain to mark complete
+   * @throws Error if domain ID invalid or not in curriculum
+   */
+  queueDomainComplete(domainId: number): void {
+    const message: OverallProgressMessage = {
+      method: "markDomainComplete",
+      args: [domainId],
+    };
+
+    if (message.args.length !== 1) {
+      throw new Error("markDomainComplete requires exactly 1 argument");
+    }
+
+    const parseResult = ImmutableId.safeParse(domainId);
+    if (!parseResult.success) {
+      throw new Error(
+        `domainId must be a valid immutable ID, got: ${domainId}`
+      );
+    }
+
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(
+        `Invalid domain ID: ${domainId} does not exist in curriculum`
+      );
+    }
+
+    this.messageQueue.push(message);
+  }
+
+  /**
+   * Queue a domain incomplete message.
+   *
+   * Validates domain ID using shared helper before queueing.
+   *
+   * @param domainId - Domain to mark incomplete
+   * @throws Error if domain ID invalid or not in curriculum
+   */
+  queueDomainIncomplete(domainId: number): void {
+    const message: OverallProgressMessage = {
+      method: "markDomainIncomplete",
+      args: [domainId],
+    };
+
+    if (message.args.length !== 1) {
+      throw new Error("markDomainIncomplete requires exactly 1 argument");
+    }
+
+    const parseResult = ImmutableId.safeParse(domainId);
+    if (!parseResult.success) {
+      throw new Error(
+        `domainId must be a valid immutable ID, got: ${domainId}`
+      );
+    }
+
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(
+        `Invalid domain ID: ${domainId} does not exist in curriculum`
+      );
+    }
+
+    this.messageQueue.push(message);
+  }
+
+  /**
    * Queue a streak update message.
    *
    * @param newStreak - New streak value
-   * @throws Error if newStreak is not a non-negative number
+   * @throws Error if invalid arguments
    */
   queueUpdateStreak(newStreak: number): void {
     const message: OverallProgressMessage = {
@@ -442,8 +609,12 @@ export class OverallProgressMessageQueueManager {
       args: [newStreak],
     };
 
+    if (message.args.length !== 1) {
+      throw new Error("updateStreak requires exactly 1 argument");
+    }
+
     if (typeof newStreak !== "number" || newStreak < 0) {
-      throw new Error("newStreak must be a non-negative number");
+      throw new Error(`newStreak must be a non-negative number, got: ${newStreak}`);
     }
 
     this.messageQueue.push(message);
@@ -457,6 +628,7 @@ export class OverallProgressMessageQueueManager {
       method: "resetStreak",
       args: [],
     };
+
     this.messageQueue.push(message);
   }
 
@@ -468,14 +640,14 @@ export class OverallProgressMessageQueueManager {
       method: "incrementStreak",
       args: [],
     };
+
     this.messageQueue.push(message);
   }
 
   /**
-   * Retrieve and clear all queued messages.
+   * Get all queued messages and clear the queue.
    *
-   * Core polls this method to get pending progress updates.
-   * Messages are removed from queue after retrieval.
+   * Called by Main Core polling cycle to process messages.
    *
    * @returns Array of queued messages
    */

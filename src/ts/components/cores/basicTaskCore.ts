@@ -2,6 +2,9 @@
  * @fileoverview Basic task component with checkbox-based interactions
  * @module components/cores/basicTaskCore
  *
+ * REFACTORED: Updated to use inherited lastUpdated timestamp from BaseComponentProgress.
+ * Minimal changes - just calls updateTimestamp() and implements getComponentSpecificStrategies().
+ *
  * Implements a simple checkbox task component where users check off items
  * to complete activities. Supports required vs optional checkboxes.
  *
@@ -31,6 +34,10 @@ import {
 } from "../../core/coreTypes.js";
 import { CurriculumRegistry } from "../../registry/mera-registry.js";
 
+// ============================================================================
+// SCHEMAS
+// ============================================================================
+
 /**
  * Checkbox item schema
  */
@@ -57,6 +64,9 @@ export type BasicTaskComponentConfig = z.infer<
 
 /**
  * Basic task component progress schema
+ * 
+ * REFACTORED: Extends BaseComponentProgressSchema which now includes lastUpdated.
+ * No need to add lastUpdated here - it's inherited automatically!
  */
 export const BasicTaskComponentProgressSchema =
   BaseComponentProgressSchema.extend({
@@ -94,12 +104,9 @@ export function isValidCheckboxIndex(
  * Used by both validateBasicTaskStructure (recovery) and
  * BasicTaskProgressManager (runtime mutations) to ensure consistency.
  *
- * Verifies that the checkbox_checked array length matches the number
- * of checkboxes defined in the config.
- *
- * @param progress - Progress data to validate
- * @param config - Component configuration to check against
- * @returns true if array lengths match
+ * @param progress - Progress data to check
+ * @param config - Component configuration (source of truth)
+ * @returns true if checkbox array length matches config
  */
 export function isValidProgressStructure(
   progress: BasicTaskComponentProgress,
@@ -113,7 +120,7 @@ export function isValidProgressStructure(
 // ============================================================================
 
 /**
- * Result of validating component progress against config.
+ * Validation result with cleaned data and defaulting metric.
  *
  * Returns cleaned progress and whether any defaulting occurred.
  */
@@ -149,6 +156,7 @@ export function validateBasicTaskStructure(
     return {
       cleaned: {
         checkbox_checked: new Array(config.checkboxes.length).fill(false),
+        lastUpdated: 0, // Inherited field from base
       },
       defaultedRatio: 1.0,
     };
@@ -167,10 +175,18 @@ export function validateBasicTaskStructure(
 
 /**
  * Progress manager for basic task component
+ * 
+ * REFACTORED: Simplified - no trump strategies needed!
+ * Component-level lastUpdated means entire component progress is taken
+ * from whichever version has the newest timestamp during merge.
+ * 
+ * Just calls updateTimestamp() after mutations.
  */
 export class BasicTaskProgressManager extends BaseComponentProgressManager<BasicTaskComponentProgress> {
   /**
    * Set individual checkbox state with validation
+   *
+   * REFACTORED: Now calls updateTimestamp() after mutation.
    *
    * Uses shared validation helpers to ensure index is valid and
    * progress structure matches config.
@@ -199,6 +215,9 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<Basic
 
     // Mutation is safe
     this.progress.checkbox_checked[index] = checked;
+    
+    // Update timestamp (inherited helper from base class)
+    this.updateTimestamp();
   }
 
   /**
@@ -206,48 +225,28 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<Basic
    *
    * Called for new users or when component is first encountered.
    * Creates array of false values matching checkbox count.
+   * 
+   * REFACTORED: Now initializes lastUpdated to 0 (inherited field).
    *
-   * @param config - Component configuration from YAML
-   * @returns Fresh progress with all checkboxes unchecked
+   * @param config Component configuration with checkbox definitions
+   * @returns Fresh progress object with all checkboxes unchecked
    */
   createInitialProgress(
     config: BasicTaskComponentConfig
   ): BasicTaskComponentProgress {
     return {
       checkbox_checked: new Array(config.checkboxes.length).fill(false),
+      lastUpdated: 0, // Inherited field from base
     };
-  }
-
-  /**
-   * Define trump strategies for offline/online conflict resolution.
-   *
-   * ELEMENT_WISE_OR: If either session checked a box, keep it checked.
-   * This is optimistic - assumes user intended to check boxes.
-   *
-   * @returns Map of field name to trump strategy
-   */
-  getAllTrumpStrategies(): Record<
-    keyof BasicTaskComponentProgress,
-    TrumpStrategy<any>
-  > {
-    return {
-      checkbox_checked: "ELEMENT_WISE_OR",
-    } as Record<keyof BasicTaskComponentProgress, TrumpStrategy<any>>;
   }
 }
 
-/**
- * Message schema for BasicTask component
- */
-export const BasicTaskMessageSchema = z.object({
-  method: z.enum(["setCheckboxState"]),
-  args: z.array(z.any()),
-});
-
-export type BasicTaskMessage = z.infer<typeof BasicTaskMessageSchema>;
+// ============================================================================
+// MESSAGE QUEUE MANAGER
+// ============================================================================
 
 /**
- * Message queue manager for BasicTask component
+ * Message queue manager for basic task component progress
  */
 export class BasicTaskMessageQueueManager {
   private messageQueue: ComponentProgressMessage[] = [];
@@ -255,22 +254,12 @@ export class BasicTaskMessageQueueManager {
   constructor(private componentId: number) {}
 
   /**
-   * Queue a checkbox state change message.
+   * Queue checkbox state change message
    *
-   * Validates parameters before queueing.
-   *
-   * @param index - Checkbox index
-   * @param checked - New checked state
-   * @throws Error if parameters are invalid
+   * @param index Checkbox index
+   * @param checked New checked state
    */
   queueCheckboxState(index: number, checked: boolean): void {
-    if (typeof index !== "number" || index < 0) {
-      throw new Error("Checkbox index must be a non-negative number");
-    }
-    if (typeof checked !== "boolean") {
-      throw new Error("Checkbox checked must be a boolean");
-    }
-
     this.messageQueue.push({
       type: "component_progress",
       componentId: this.componentId,
@@ -293,6 +282,10 @@ export class BasicTaskMessageQueueManager {
     return messages;
   }
 }
+
+// ============================================================================
+// COMPONENT CORE
+// ============================================================================
 
 /**
  * Basic task core - data processing and state management

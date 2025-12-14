@@ -1,12 +1,19 @@
 /**
- * @fileoverview Progress integrity checking, recovery, and migration
+ * @fileoverview Progress integrity checking, recovery, and validation
  * @module initialization/progressIntegrity
  * 
- * Transforms potentially corrupted, outdated, or malformed backup data into a valid
+ * TIMESTAMP ARCHITECTURE:
+ * - lessonCompletions use CompletionData format {firstCompleted, lastUpdated}
+ * - domainCompletions use CompletionData format {firstCompleted, lastUpdated}
+ * - Settings use tuple format [value, timestamp]
+ * - Component progress includes lastUpdated timestamp
+ * - Counters calculated from CompletionData.firstCompleted !== null
+ * 
+ * Transforms potentially corrupted or malformed backup data into a valid
  * PodStorageBundle matching current schema version. Handles:
  * 
  * - Corruption detection via current-count trackers
- * - Migration from old curriculum versions to current
+ * - Curriculum reconciliation (drops deleted content)
  * - Recovery from partial data loss
  * - Initialization of missing components with sensible defaults
  * 
@@ -22,11 +29,7 @@
  * INITIALIZATION DEPENDENCY:
  * This module requires parsed lesson configs (from YAML parsing phase) to validate
  * component progress structures. Orchestration must ensure YAML parsing completes
- * before calling migrateOrRestoreToLatest().
- * 
- * VERSIONING STRATEGY:
- * For breaking schema changes, snapshot this file into migrations/vX.Y.Z/ with its
- * imported schemas. This keeps version-specific recovery logic simple and explicit.
+ * before calling enforceDataIntegrity().
  */
 
 import { z } from 'zod';
@@ -37,12 +40,13 @@ import {
 } from '../persistence/podStorageSchema.js';
 import {
   OverallProgressData,
-  OverallProgressDataSchema
+  OverallProgressDataSchema,
+  CompletionData,
 } from '../core/overallProgressSchema.js';
 import { reconcileAgainstCurriculum } from '../core/overallProgressSchema.js';
 import {
   SettingsData,
-  SettingsDataSchema
+  SettingsDataSchema,
 } from '../core/settingsSchema.js';
 import {
   NavigationState,
@@ -96,6 +100,16 @@ interface OverallProgressExtractionResult {
 }
 
 /**
+ * Metadata extraction result with webId mismatch tracking
+ */
+interface MetadataExtractionResult extends ExtractionResult<PodMetadata> {
+  webIDMismatch?: {
+    expected: string;
+    found: string;
+  };
+}
+
+/**
  * Complete recovery result with per-section metrics
  */
 export interface EnforcementResult {
@@ -132,10 +146,14 @@ export interface EnforcementResult {
   };
 }
 
+// ============================================================================
+// MAIN ENTRY POINT
+// ============================================================================
+
 /**
  * Main entry point: Migrate/restore arbitrary JSON to current schema version.
  * 
- * NEVER THROWS - always returns valid bundle with honest metrics about
+ * NEVER THROWS - always returns valid bundle with metrics about
  * data salvage quality.
  * 
  * @param rawJson - JSON string (potentially corrupted, old version, or malformed)
@@ -228,27 +246,27 @@ export function enforceDataIntegrity(
   };
 }
 
+// ============================================================================
+// EXTRACTION FUNCTIONS
+// ============================================================================
+
 /**
  * Extract metadata with field-level defaulting.
  * 
  * Strategy: Metadata is critical (webId must match or reject backup).
  * Try each field independently with validation.
  * 
- * CRITICAL: If webId doesn't match expectedWebId, orchestration layer
- * should reject this backup and try next one.
- * 
  * @param parsed - Raw parsed JSON
- * @param expectedWebId - WebId that must match
- * @returns Metadata + defaultedRatio + potential webID mismatch
+ * @param expectedWebId - WebId that should be in backup
+ * @returns Metadata + defaultedRatio + webId mismatch info
  */
 function extractMetadata(
   parsed: any,
   expectedWebId: string
-): ExtractionResult<PodMetadata> & {
-  webIDMismatch?: { expected: string; found: string | null };
-} {
+): MetadataExtractionResult {
   // Try Zod parse first
   const zodResult = PodMetadataSchema.safeParse(parsed?.metadata);
+  
   if (zodResult.success) {
     // Check webId match
     if (zodResult.data.webId !== expectedWebId) {
@@ -261,44 +279,39 @@ function extractMetadata(
         },
       };
     }
+    
     return {
       data: zodResult.data,
       defaultedRatio: 0.0,
     };
   }
 
-  // Zod failed - try manual extraction
+  // Zod failed - extract webId or default
   const candidate = parsed?.metadata || {};
-  const webId = typeof candidate.webId === 'string' ? candidate.webId : null;
-
-  if (webId !== expectedWebId) {
-    return {
-      data: { webId: expectedWebId },
-      defaultedRatio: 1.0,
-      webIDMismatch: {
-        expected: expectedWebId,
-        found: webId,
-      },
-    };
-  }
+  const webId = typeof candidate.webId === 'string' ? candidate.webId : expectedWebId;
+  
+  const webIDMismatch = webId !== expectedWebId ? {
+    expected: expectedWebId,
+    found: webId,
+  } : undefined;
 
   return {
-    data: { webId },
-    defaultedRatio: 0.0,
+    data: { webId: expectedWebId },  // Always use expected
+    defaultedRatio: 1.0,
+    webIDMismatch,
   };
 }
 
 /**
- * Extract overall progress with registry reconciliation.
+ * Extract overall progress with corruption detection and curriculum reconciliation.
  * 
  * Strategy: Reconcile completed lessons/domains against current curriculum.
- * Only keep completions for entities that exist in registry. New lessons
- * appear as incomplete (not in record).
+ * Only keep completions for entities that exist in registry.
  * 
  * Uses shared validator from overallProgressSchema for consistency.
  * 
  * @param parsed - Raw parsed JSON
- * @returns OverallProgress + retained ratios
+ * @returns OverallProgress + retained ratios + corruption metrics
  */
 function extractOverallProgress(
   parsed: any
@@ -310,26 +323,26 @@ function extractOverallProgress(
     return reconcileOverallProgress(zodResult.data);
   }
 
-  // Zod failed - extract what we can, then reconcile
+  // Zod failed - extract what we can with defaults
   const candidate = parsed?.overallProgress || {};
   
   const overallProgress: OverallProgressData = {
     lessonCompletions: {},
-    domainsCompleted: [],
+    domainCompletions: {},
     currentStreak: 0,
     lastStreakCheck: 0,
     totalLessonsCompleted: 0,
     totalDomainsCompleted: 0,
   };
 
-  // Extract lessonCompletions
+  // Extract lessonCompletions (should be CompletionData format)
   if (typeof candidate.lessonCompletions === 'object' && candidate.lessonCompletions !== null) {
     overallProgress.lessonCompletions = candidate.lessonCompletions;
   }
 
-  // Extract domainsCompleted
-  if (Array.isArray(candidate.domainsCompleted)) {
-    overallProgress.domainsCompleted = candidate.domainsCompleted;
+  // Extract domainCompletions (should be CompletionData format)
+  if (typeof candidate.domainCompletions === 'object' && candidate.domainCompletions !== null) {
+    overallProgress.domainCompletions = candidate.domainCompletions;
   }
 
   // Extract currentStreak
@@ -355,15 +368,17 @@ function extractOverallProgress(
 }
 
 /**
- * Reconcile lesson completions and domains against current curriculum.
+ * Reconcile lesson/domain completions against current curriculum.
+ * 
+ * Counts lessons/domains with firstCompleted !== null (completed items only).
  * 
  * First detects corruption by comparing current-count trackers to actual data.
  * Then filters out deleted lessons/domains using shared validator from schema module.
  * Finally calculates dropped ratios (0.0 = none dropped, 1.0 = all dropped).
  * 
- * In valid data, the counters always equal array length (they increment on
- * completion and decrement on un-completion). Mismatch indicates backup file
- * corruption where some array entries were lost but the counter survived.
+ * In valid data, the counters match the count of completed items (firstCompleted !== null).
+ * Mismatch indicates backup file corruption where some array entries were lost but
+ * the counter survived.
  * 
  * @param progress - Progress data to reconcile
  * @returns Reconciled progress + corruption detection + dropped ratios
@@ -372,11 +387,17 @@ function reconcileOverallProgress(
   progress: OverallProgressData
 ): OverallProgressExtractionResult {
   // STEP 1: Detect corruption BEFORE curriculum reconciliation
-  // Current-count trackers should match actual array length in valid data
+  // Current-count trackers should match actual completed count in valid data
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
   const claimedDomains = progress.totalDomainsCompleted ?? 0;
-  const actualLessons = Object.keys(progress.lessonCompletions).length;
-  const actualDomains = progress.domainsCompleted.length;
+  
+  // Count items where firstCompleted !== null (not just object keys)
+  const actualLessons = Object.values(progress.lessonCompletions)
+    .filter(completion => completion.firstCompleted !== null)
+    .length;
+  const actualDomains = Object.values(progress.domainCompletions)
+    .filter(completion => completion.firstCompleted !== null)
+    .length;
   
   const lessonsLostToCorruption = Math.max(0, claimedLessons - actualLessons);
   const domainsLostToCorruption = Math.max(0, claimedDomains - actualDomains);
@@ -409,6 +430,8 @@ function reconcileOverallProgress(
 /**
  * Extract settings with field-level defaulting.
  * 
+ * Settings use [value, timestamp] tuple format.
+ * 
  * Strategy: Settings are user preferences - salvage each field independently.
  * If field invalid, default it but keep rest.
  * 
@@ -427,97 +450,110 @@ function extractSettings(
     };
   }
 
-  // Zod failed - field-level extraction
+  // Zod failed - extract field-by-field with defaults
   const candidate = parsed?.settings || {};
   const settings: Partial<SettingsData> = {};
   const totalFields = 11;
   let defaultedFields = 0;
+  const defaultTimestamp = 0;
 
   // Field 1: weekStartDay
-  if (['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].includes(candidate.weekStartDay)) {
-    settings.weekStartDay = candidate.weekStartDay;
+  if (Array.isArray(candidate.weekStartDay) && 
+      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].includes(candidate.weekStartDay[0])) {
+    settings.weekStartDay = [candidate.weekStartDay[0], candidate.weekStartDay[1] ?? defaultTimestamp];
   } else {
-    settings.weekStartDay = 'monday';
+    settings.weekStartDay = ['monday', defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 2: weekStartTimeUTC
-  if (typeof candidate.weekStartTimeUTC === 'string' && /^\d{2}:\d{2}$/.test(candidate.weekStartTimeUTC)) {
-    settings.weekStartTimeUTC = candidate.weekStartTimeUTC;
+  if (Array.isArray(candidate.weekStartTimeUTC) &&
+      typeof candidate.weekStartTimeUTC[0] === 'string' && 
+      /^\d{2}:\d{2}$/.test(candidate.weekStartTimeUTC[0])) {
+    settings.weekStartTimeUTC = [candidate.weekStartTimeUTC[0], candidate.weekStartTimeUTC[1] ?? defaultTimestamp];
   } else {
-    settings.weekStartTimeUTC = '00:00';
+    settings.weekStartTimeUTC = ['00:00', defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 3: theme
-  if (['light', 'dark', 'auto'].includes(candidate.theme)) {
-    settings.theme = candidate.theme;
+  if (Array.isArray(candidate.theme) && 
+      ['light', 'dark', 'auto'].includes(candidate.theme[0])) {
+    settings.theme = [candidate.theme[0], candidate.theme[1] ?? defaultTimestamp];
   } else {
-    settings.theme = 'auto';
+    settings.theme = ['auto', defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 4: learningPace
-  if (['relaxed', 'standard', 'intensive'].includes(candidate.learningPace)) {
-    settings.learningPace = candidate.learningPace;
+  if (Array.isArray(candidate.learningPace) && 
+      ['relaxed', 'standard', 'intensive'].includes(candidate.learningPace[0])) {
+    settings.learningPace = [candidate.learningPace[0], candidate.learningPace[1] ?? defaultTimestamp];
   } else {
-    settings.learningPace = 'standard';
+    settings.learningPace = ['standard', defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 5: optOutDailyPing
-  if (typeof candidate.optOutDailyPing === 'boolean') {
-    settings.optOutDailyPing = candidate.optOutDailyPing;
+  if (Array.isArray(candidate.optOutDailyPing) && 
+      typeof candidate.optOutDailyPing[0] === 'boolean') {
+    settings.optOutDailyPing = [candidate.optOutDailyPing[0], candidate.optOutDailyPing[1] ?? defaultTimestamp];
   } else {
-    settings.optOutDailyPing = false;
+    settings.optOutDailyPing = [false, defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 6: optOutErrorPing
-  if (typeof candidate.optOutErrorPing === 'boolean') {
-    settings.optOutErrorPing = candidate.optOutErrorPing;
+  if (Array.isArray(candidate.optOutErrorPing) && 
+      typeof candidate.optOutErrorPing[0] === 'boolean') {
+    settings.optOutErrorPing = [candidate.optOutErrorPing[0], candidate.optOutErrorPing[1] ?? defaultTimestamp];
   } else {
-    settings.optOutErrorPing = false;
+    settings.optOutErrorPing = [false, defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 7: fontSize
-  if (['small', 'medium', 'large', 'x-large'].includes(candidate.fontSize)) {
-    settings.fontSize = candidate.fontSize;
+  if (Array.isArray(candidate.fontSize) && 
+      ['small', 'medium', 'large', 'x-large'].includes(candidate.fontSize[0])) {
+    settings.fontSize = [candidate.fontSize[0], candidate.fontSize[1] ?? defaultTimestamp];
   } else {
-    settings.fontSize = 'medium';
+    settings.fontSize = ['medium', defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 8: highContrast
-  if (typeof candidate.highContrast === 'boolean') {
-    settings.highContrast = candidate.highContrast;
+  if (Array.isArray(candidate.highContrast) && 
+      typeof candidate.highContrast[0] === 'boolean') {
+    settings.highContrast = [candidate.highContrast[0], candidate.highContrast[1] ?? defaultTimestamp];
   } else {
-    settings.highContrast = false;
+    settings.highContrast = [false, defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 9: reducedMotion
-  if (typeof candidate.reducedMotion === 'boolean') {
-    settings.reducedMotion = candidate.reducedMotion;
+  if (Array.isArray(candidate.reducedMotion) && 
+      typeof candidate.reducedMotion[0] === 'boolean') {
+    settings.reducedMotion = [candidate.reducedMotion[0], candidate.reducedMotion[1] ?? defaultTimestamp];
   } else {
-    settings.reducedMotion = false;
+    settings.reducedMotion = [false, defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 10: focusIndicatorStyle
-  if (['default', 'high-visibility', 'outline'].includes(candidate.focusIndicatorStyle)) {
-    settings.focusIndicatorStyle = candidate.focusIndicatorStyle;
+  if (Array.isArray(candidate.focusIndicatorStyle) && 
+      ['default', 'high-visibility', 'outline'].includes(candidate.focusIndicatorStyle[0])) {
+    settings.focusIndicatorStyle = [candidate.focusIndicatorStyle[0], candidate.focusIndicatorStyle[1] ?? defaultTimestamp];
   } else {
-    settings.focusIndicatorStyle = 'default';
+    settings.focusIndicatorStyle = ['default', defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 11: audioEnabled
-  if (typeof candidate.audioEnabled === 'boolean') {
-    settings.audioEnabled = candidate.audioEnabled;
+  if (Array.isArray(candidate.audioEnabled) && 
+      typeof candidate.audioEnabled[0] === 'boolean') {
+    settings.audioEnabled = [candidate.audioEnabled[0], candidate.audioEnabled[1] ?? defaultTimestamp];
   } else {
-    settings.audioEnabled = true;
+    settings.audioEnabled = [true, defaultTimestamp];
     defaultedFields++;
   }
 
@@ -563,7 +599,7 @@ function extractNavigationState(
     data: {
       currentEntityId: 0,
       currentPage: 0,
-      lastUpdated: Date.now(),
+      lastUpdated: Math.floor(Date.now() / 1000),
     },
     defaultedRatio: 1.0,
     wasDefaulted: true,
@@ -584,6 +620,7 @@ function extractNavigationState(
  * Validation per component:
  * - Zod schema validation (structural correctness)
  * - Component config validation (progress structure matches current YAML)
+ * - Verify lastUpdated field exists
  * 
  * Component worth 2-3 minutes max - not worth complex field-level recovery.
  * 
@@ -622,21 +659,21 @@ function extractCombinedComponentProgress(
         if (initializer) {
           components[componentIdStr] = initializer();
         } else {
-          // No initializer registered - use empty object
-          components[componentIdStr] = {};
+          // No initializer registered - use empty object with lastUpdated
+          components[componentIdStr] = { lastUpdated: 0 };
         }
       }
       componentsDefaulted++;
       continue;
     }
 
-    // Component exists in backup - validate it
+    // Component exists in backup - validate and migrate
     const componentType = curriculumData.getComponentType(componentId);
     if (!componentType) {
       // Component type unknown - initialize with default
       componentsDefaulted++;
       const initializer = componentInitializerMap.get('unknown');
-      components[componentIdStr] = initializer ? initializer() : {};
+      components[componentIdStr] = initializer ? initializer() : { lastUpdated: 0 };
       continue;
     }
 
@@ -645,86 +682,64 @@ function extractCombinedComponentProgress(
     if (!progressSchema) {
       componentsDefaulted++;
       const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : {};
+      components[componentIdStr] = initializer ? initializer() : { lastUpdated: 0 };
       continue;
     }
 
-    const progressResult = progressSchema.safeParse(savedProgress);
-    if (!progressResult.success) {
+    const zodResult = progressSchema.safeParse(savedProgress);
+    if (!zodResult.success) {
+      // Schema validation failed - re-initialize
       componentsDefaulted++;
       const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : {};
+      components[componentIdStr] = initializer ? initializer() : { lastUpdated: 0 };
       continue;
     }
 
-    // Phase 2: Config structure validation (if component has validator)
+    // Phase 2: Component-specific validation (if available)
     const validator = componentValidatorMap.get(componentType);
-    if (!validator) {
-      // No validator registered - keep if schema passed
-      components[componentIdStr] = progressResult.data;
-      componentsRetained++;
-      continue;
+    if (validator) {
+      // Get component config for validation
+      const lessonId = curriculumData.getLessonIdForComponent(componentId);
+      const lessonConfig = lessonId ? lessonConfigs.get(lessonId) : null;
+      const componentConfig = lessonConfig?.components.find(c => c.id === componentId);
+      
+      if (componentConfig) {
+        const validationResult = validator(zodResult.data, componentConfig);
+        if (validationResult.defaultedRatio > 0) {
+          // Some fields were defaulted
+          componentsDefaulted++;
+          components[componentIdStr] = validationResult.cleaned;
+          continue;
+        }
+      }
     }
 
-    // Find component config in lesson data
-    const lessonId = curriculumData.getLessonIdForComponent(componentId);
-    if (!lessonId) {
-      componentsDefaulted++;
-      const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : {};
-      continue;
-    }
-
-    const lessonData = lessonConfigs.get(lessonId);
-    if (!lessonData) {
-      componentsDefaulted++;
-      const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : {};
-      continue;
-    }
-
-    const componentConfig = lessonData.components.find(c => c.id === componentId);
-    if (!componentConfig) {
-      componentsDefaulted++;
-      const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : {};
-      continue;
-    }
-
-    // Validate progress structure matches config
-    const validationResult = validator(progressResult.data, componentConfig);
-    
-    if (validationResult.defaultedRatio === 0) {
-      // Structure valid - keep it
-      components[componentIdStr] = validationResult.cleaned;
-      componentsRetained++;
-    } else {
-      // Structure mismatch (e.g., array length changed) - use default
-      componentsDefaulted++;
-      const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : {};
-    }
+    // All validations passed
+    components[componentIdStr] = zodResult.data;
+    componentsRetained++;
   }
 
   const totalComponents = allComponentIds.length;
+  const defaultedRatio = totalComponents > 0 ? componentsDefaulted / totalComponents : 0;
 
   return {
-    data: {
-      components,
-    },
-    defaultedRatio: totalComponents > 0 ? componentsDefaulted / totalComponents : 0.0,
+    data: { components },
+    defaultedRatio,
     componentsRetained,
     componentsDefaulted,
   };
 }
 
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
 /**
- * Initialize all components in curriculum with default progress.
+ * Initialize all components in curriculum with default values.
  * 
- * Helper for creating fully defaulted bundles. Iterates through
- * entire curriculum and creates default progress for each component.
+ * Used when creating fully defaulted result for unparseable JSON.
  * 
- * @returns Complete component mapping with all defaults
+ * @returns Record with default progress for every component
  */
 function initializeAllComponentsWithDefaults(): Record<string, any> {
   const components: Record<string, any> = {};
@@ -736,9 +751,11 @@ function initializeAllComponentsWithDefaults(): Record<string, any> {
     
     if (componentType) {
       const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : {};
-    } else {
-      components[componentIdStr] = {};
+      if (initializer) {
+        components[componentIdStr] = initializer();
+      } else {
+        components[componentIdStr] = { lastUpdated: 0 };
+      }
     }
   }
   
@@ -756,6 +773,8 @@ function createFullyDefaultedResult(
   expectedWebId: string,
   foundWebId: string | null
 ): EnforcementResult {
+  const allComponentIds = curriculumData.getAllComponentIds();
+  
   return {
     perfectlyValidInput: false,  // Fully defaulted = not valid input
     bundle: {
@@ -764,29 +783,29 @@ function createFullyDefaultedResult(
       },
       overallProgress: {
         lessonCompletions: {},
-        domainsCompleted: [],
+        domainCompletions: {},
         currentStreak: 0,
         lastStreakCheck: 0,
         totalLessonsCompleted: 0,
         totalDomainsCompleted: 0,
       },
       settings: {
-        weekStartDay: 'monday',
-        weekStartTimeUTC: '00:00',
-        theme: 'auto',
-        learningPace: 'standard',
-        optOutDailyPing: false,
-        optOutErrorPing: false,
-        fontSize: 'medium',
-        highContrast: false,
-        reducedMotion: false,
-        focusIndicatorStyle: 'default',
-        audioEnabled: true,
+        weekStartDay: ['monday', 0],
+        weekStartTimeUTC: ['00:00', 0],
+        theme: ['auto', 0],
+        learningPace: ['standard', 0],
+        optOutDailyPing: [false, 0],
+        optOutErrorPing: [false, 0],
+        fontSize: ['medium', 0],
+        highContrast: [false, 0],
+        reducedMotion: [false, 0],
+        focusIndicatorStyle: ['default', 0],
+        audioEnabled: [true, 0],
       },
       navigationState: {
         currentEntityId: 0,
         currentPage: 0,
-        lastUpdated: Date.now(),
+        lastUpdated: Math.floor(Date.now() / 1000),
       },
       combinedComponentProgress: {
         components: initializeAllComponentsWithDefaults(),
@@ -806,7 +825,7 @@ function createFullyDefaultedResult(
       combinedComponentProgress: { 
         defaultedRatio: 1.0, 
         componentsRetained: 0, 
-        componentsDefaulted: 0 
+        componentsDefaulted: allComponentIds.length 
       },
     },
     criticalFailures: {

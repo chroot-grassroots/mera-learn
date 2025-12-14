@@ -1,6 +1,9 @@
 /**
- * @fileoverview Base classes for all interactive learning components
+ * @fileoverview Base classes for all interactive learning components with timestamp support
  * @module components/cores/baseComponentCore
+ *
+ * REFACTORED: Added lastUpdated timestamp to BaseComponentProgressSchema.
+ * All component progress now inherits timestamp tracking for conflict resolution.
  *
  * Defines the Core/Interface component architecture that enables:
  * - Separation of data logic (Core) from UI rendering (Interface)
@@ -48,6 +51,10 @@ import {
 
 import { CurriculumRegistry } from "../../registry/mera-registry.js";
 
+// ============================================================================
+// BASE SCHEMAS
+// ============================================================================
+
 /**
  * Base configuration schema that all components must extend.
  *
@@ -72,22 +79,41 @@ export type BaseComponentConfig = z.infer<typeof BaseComponentConfigSchema>;
 /**
  * Base progress schema that all component progress must extend.
  *
- * No universal fields - each component type defines its own progress structure.
- * Components like Quiz track answers, Task tracks checkboxes, etc.
+ * REFACTORED: Now includes lastUpdated timestamp for all components.
+ * 
+ * MERGE STRATEGY: Component-level timestamp means during offline/online sync,
+ * the ENTIRE component progress from whichever version has the newest lastUpdated
+ * is kept. No field-level merging needed - simple and deterministic.
+ * 
+ * Example:
+ * - Offline: { checkbox_checked: [true, false], lastUpdated: 1000 }
+ * - Online:  { checkbox_checked: [false, true], lastUpdated: 2000 }
+ * - Result:  { checkbox_checked: [false, true], lastUpdated: 2000 } (online wins)
+ * 
+ * All component-specific progress schemas extend this, inheriting the timestamp.
+ * Concrete components add their own fields (checkboxes, answers, scores, etc.).
  */
-export const BaseComponentProgressSchema = z.object({});
+export const BaseComponentProgressSchema = z.object({
+  lastUpdated: z.number().int().min(0).default(0), // Unix timestamp in seconds
+});
 
-// Could be any object with key value pairs or an empty object.
-export type BaseComponentProgress = Record<string, any>;
+export type BaseComponentProgress = z.infer<typeof BaseComponentProgressSchema>;
+
+// ============================================================================
+// PROGRESS MANAGER BASE CLASS
+// ============================================================================
 
 /**
  * Abstract base class for component progress management.
+ *
+ * REFACTORED: Component-level timestamp eliminates need for field-level trump strategies.
+ * During merge, the entire component progress with newest lastUpdated wins.
  *
  * Responsibilities:
  * - Store current progress state
  * - Provide validated mutation methods
  * - Define initial progress structure based on config
- * - Specify trump strategies for conflict resolution
+ * - Update timestamps on all mutations
  *
  * Concrete implementations (BasicTaskProgressManager, QuizProgressManager, etc.)
  * extend this to provide component-specific progress logic.
@@ -101,7 +127,6 @@ export type BaseComponentProgress = Record<string, any>;
 export abstract class BaseComponentProgressManager<
   TComponentProgress extends BaseComponentProgress
 > {
-  // Constructed from a complete ComponentProgress
   constructor(protected progress: TComponentProgress) {}
 
   /**
@@ -115,11 +140,26 @@ export abstract class BaseComponentProgressManager<
   }
 
   /**
+   * Update lastUpdated timestamp to current time.
+   *
+   * IMPORTANT: All mutation methods in subclasses MUST call this
+   * after modifying progress state to maintain accurate timestamps
+   * for conflict resolution.
+   *
+   * Protected helper - only accessible to subclass mutation methods.
+   */
+  protected updateTimestamp(): void {
+    this.progress.lastUpdated = Math.floor(Date.now() / 1000);
+  }
+
+  /**
    * Create initial progress structure matching config requirements.
    *
    * Called for new users or when component is first encountered.
    * Progress structure must align with config (e.g., if config has 3 checkboxes,
    * progress must have array of 3 boolean states).
+   *
+   * Subclasses should initialize lastUpdated to 0 for new progress.
    *
    * @param config Component configuration from YAML
    * @returns Fresh progress object with all fields initialized
@@ -127,26 +167,11 @@ export abstract class BaseComponentProgressManager<
   abstract createInitialProgress(
     config: BaseComponentConfig
   ): TComponentProgress;
-
-  /**
-   * Define trump strategies for every progress field.
-   *
-   * Used during offline sync conflict resolution when multiple sessions
-   * modify the same component progress.
-   *
-   * Common strategies:
-   * - OR: Keep true if either version is true (checkboxes)
-   * - MAX: Take higher value (attempt counts)
-   * - LATEST_TIMESTAMP: Use most recent change (settings)
-   * - ELEMENT_WISE_OR: Array of booleans, OR each element
-   *
-   * @returns Map of field name to trump strategy
-   */
-  abstract getAllTrumpStrategies(): Record<
-    keyof TComponentProgress,
-    TrumpStrategy<any>
-  >;
 }
+
+// ============================================================================
+// COMPONENT CORE BASE CLASS
+// ============================================================================
 
 /**
  * Abstract base class for all interactive component cores.
@@ -258,6 +283,38 @@ export abstract class BaseComponentCore<
   abstract isComplete(): boolean;
 
   /**
+   * Retrieve component-specific progress messages.
+   *
+   * Abstract - each component implements to return queued progress updates.
+   * Main Core polls this during its update cycle.
+   *
+   * @returns Array of component progress messages
+   */
+  abstract getComponentProgressMessages(): ComponentProgressMessage[];
+
+  // ============================================================================
+  // READONLY ACCESSORS
+  // ============================================================================
+
+  /**
+   * Get component configuration (readonly)
+   */
+  get config(): Readonly<TConfig> {
+    return this._config;
+  }
+
+  /**
+   * Get component interface instance (readonly)
+   */
+  get interface(): Readonly<BaseComponentInterface<TConfig, TComponentProgress, any>> {
+    return this._interface;
+  }
+
+  // ============================================================================
+  // MESSAGE QUEUE CONVENIENCE METHODS
+  // ============================================================================
+
+  /**
    * Convenience wrapper for queueing lesson completion message.
    *
    * Components call this when they trigger lesson completion
@@ -282,122 +339,39 @@ export abstract class BaseComponentCore<
   }
 
   /**
-   * Direct access to navigation queue manager.
+   * Retrieve queued navigation messages.
    *
-   * Components use this to queue navigation requests (e.g., "next lesson" button).
-   */
-  protected get navigationQueue(): NavigationMessageQueueManager {
-    return this._navigationQueueManager;
-  }
-
-  /**
-   * Direct access to settings queue manager.
-   *
-   * Components use this to queue settings changes (e.g., accessibility toggles).
-   */
-  protected get settingsQueue(): SettingsMessageQueueManager {
-    return this._settingsQueueManager;
-  }
-
-  /**
-   * Direct access to overall progress queue manager.
-   *
-   * Components use this for streak updates and domain completion.
-   */
-  protected get overallProgressQueue(): OverallProgressMessageQueueManager {
-    return this._overallProgressQueueManager;
-  }
-
-  /**
-   * Get queued component-specific progress messages.
-   *
-   * Abstract - concrete components implement with their specific queue manager.
-   * Called by Main Core during polling cycle.
-   *
-   * @returns Array of queued progress messages (queue is cleared after retrieval)
-   */
-  abstract getComponentProgressMessages(): ComponentProgressMessage[];
-
-  /**
-   * Get queued overall progress messages.
-   *
-   * Called by Main Core during polling cycle to retrieve lesson completion
-   * and streak update messages.
-   *
-   * @returns Array of queued messages (queue is cleared after retrieval)
-   */
-  getOverallProgressMessages(): OverallProgressMessage[] {
-    return this._overallProgressQueueManager.getMessages();
-  }
-
-  /**
-   * Get queued navigation messages.
-   *
-   * Called by Main Core during polling cycle to retrieve navigation requests.
-   *
-   * @returns Array of queued messages (queue is cleared after retrieval)
+   * Main Core polls this during update cycle.
    */
   getNavigationMessages(): NavigationMessage[] {
     return this._navigationQueueManager.getMessages();
   }
 
   /**
-   * Get queued settings messages.
+   * Retrieve queued settings messages.
    *
-   * Called by Main Core during polling cycle to retrieve settings updates.
-   *
-   * @returns Array of queued messages (queue is cleared after retrieval)
+   * Main Core polls this during update cycle.
    */
-  getSettingMessages(): SettingsMessage[] {
+  getSettingsMessages(): SettingsMessage[] {
     return this._settingsQueueManager.getMessages();
   }
 
   /**
-   * Readonly access to component configuration.
+   * Retrieve queued overall progress messages.
+   *
+   * Main Core polls this during update cycle.
    */
-  get config(): Readonly<TConfig> {
-    return this._config;
+  getOverallProgressMessages(): OverallProgressMessage[] {
+    return this._overallProgressQueueManager.getMessages();
   }
 
   /**
-   * Readonly access to component progress.
+   * Destroy component and clean up resources.
    *
-   * Interface modules receive this to render current state.
-   * Mutations must go through validated Core methods.
-   */
-  get progress(): Readonly<TComponentProgress> {
-    return this._progressManager.getProgress();
-  }
-
-  /**
-   * Clean up component resources.
-   *
-   * Called when component is removed from timeline (e.g., navigation away).
-   * Interface should clean up DOM elements and event listeners.
-   *
-   * TODO: Send command to interface to clean up
+   * Called when component is removed from timeline.
+   * Delegates to interface for DOM cleanup.
    */
   destroy(): void {
-    // TODO: Send command to interface to clean up
+    this._interface.destroy();
   }
-}
-
-/**
- * Helper function to create trump field with strategy.
- *
- * Utility for defining trump strategies in a type-safe way.
- * Currently unused but reserved for future schema evolution.
- *
- * @param defaultValue Initial value for field
- * @param strategy Trump strategy for conflict resolution
- * @returns Object with default and trump strategy
- */
-export function createTrumpField<T>(
-  defaultValue: T,
-  strategy: TrumpStrategy<T>
-) {
-  return {
-    default: defaultValue,
-    trump: strategy,
-  };
 }

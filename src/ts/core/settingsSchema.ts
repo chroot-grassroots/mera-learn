@@ -1,12 +1,12 @@
 /**
- * @fileoverview User settings schemas and management
+ * @fileoverview User settings schemas and management with per-field timestamps
  * @module core/settingsSchema
  *
  * Manages user preferences for learning pace, accessibility, privacy, and appearance
- * with Solid Pod persistence. Provides two manager classes for validated mutations:
- *
- * - SettingsDataManager: Direct settings mutations (used by Main Core)
- * - SettingsMessageQueueManager: Message queue for component isolation
+ * with Solid Pod persistence and per-field lastUpdated timestamps for conflict resolution.
+ * 
+ * REFACTORED: Each setting now has an associated lastUpdated timestamp to enable
+ * granular merge conflict resolution during offline/online sync.
  *
  * Components cannot mutate settings directly. They queue validated messages
  * that Main Core processes, preventing invalid state from buggy components.
@@ -15,22 +15,24 @@
 import { z } from "zod";
 import { TrumpStrategy } from "./coreTypes";
 
+// ============================================================================
+// CORE SCHEMAS
+// ============================================================================
+
 /**
- * Settings data schema
+ * Settings data schema with per-field timestamps
  *
- * Stores user preferences across four categories:
- * - Learning: Week start timing and pace preferences for streak tracking
- * - Appearance: Theme selection for visual comfort
- * - Privacy: Opt-out flags for telemetry
- * - Accessibility: Visual, motor, and audio accommodations
- *
- * Validated on load (from Solid Pod) and on mutation (from messages)
- * by SettingsDataManager.
+ * Each setting field is now a tuple: [value, lastUpdated]
+ * This enables per-field conflict resolution during offline sync:
+ * - If user changes theme offline and learningPace online, both changes preserved
+ * - Most recent timestamp wins per field
+ * 
+ * Structure: Each field is [value, timestamp] where timestamp is Unix seconds
  */
 export const SettingsDataSchema = z.object({
-  // Week timing for streaks
-  weekStartDay: z
-    .enum([
+  // Week timing for streaks: [value, lastUpdated]
+  weekStartDay: z.tuple([
+    z.enum([
       "sunday",
       "monday",
       "tuesday",
@@ -38,138 +40,219 @@ export const SettingsDataSchema = z.object({
       "thursday",
       "friday",
       "saturday",
-    ])
-    .default("sunday"),
-  weekStartTimeUTC: z
-    .string()
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM in 24-hour format")
-    .default("00:00"),
+    ]),
+    z.number().int().min(0), // lastUpdated timestamp
+  ]).default(["sunday", 0]),
+  
+  weekStartTimeUTC: z.tuple([
+    z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM in 24-hour format"),
+    z.number().int().min(0),
+  ]).default(["00:00", 0]),
 
-  // Appearance
-  theme: z.enum(["light", "dark", "auto"]).default("auto"),
+  // Appearance: [value, lastUpdated]
+  theme: z.tuple([
+    z.enum(["light", "dark", "auto"]),
+    z.number().int().min(0),
+  ]).default(["auto", 0]),
 
-  // Learning
-  learningPace: z
-    .enum(["accelerated", "standard", "flexible"])
-    .default("standard"),
+  // Learning: [value, lastUpdated]
+  learningPace: z.tuple([
+    z.enum(["accelerated", "standard", "flexible"]),
+    z.number().int().min(0),
+  ]).default(["standard", 0]),
 
-  // Privacy/Analytics
-  optOutDailyPing: z.boolean().default(false),
-  optOutErrorPing: z.boolean().default(false),
+  // Privacy/Analytics: [value, lastUpdated]
+  optOutDailyPing: z.tuple([
+    z.boolean(),
+    z.number().int().min(0),
+  ]).default([false, 0]),
+  
+  optOutErrorPing: z.tuple([
+    z.boolean(),
+    z.number().int().min(0),
+  ]).default([false, 0]),
 
-  // Accessibility
-  fontSize: z.enum(["small", "medium", "large"]).default("medium"),
-  highContrast: z.boolean().default(false),
-  reducedMotion: z.boolean().default(false),
-  focusIndicatorStyle: z.enum(["default", "enhanced"]).default("default"),
-  audioEnabled: z.boolean().default(true),
+  // Accessibility: [value, lastUpdated]
+  fontSize: z.tuple([
+    z.enum(["small", "medium", "large"]),
+    z.number().int().min(0),
+  ]).default(["medium", 0]),
+  
+  highContrast: z.tuple([
+    z.boolean(),
+    z.number().int().min(0),
+  ]).default([false, 0]),
+  
+  reducedMotion: z.tuple([
+    z.boolean(),
+    z.number().int().min(0),
+  ]).default([false, 0]),
+  
+  focusIndicatorStyle: z.tuple([
+    z.enum(["default", "enhanced"]),
+    z.number().int().min(0),
+  ]).default(["default", 0]),
+  
+  audioEnabled: z.tuple([
+    z.boolean(),
+    z.number().int().min(0),
+  ]).default([true, 0]),
 });
 
 export type SettingsData = z.infer<typeof SettingsDataSchema>;
 
+// ============================================================================
+// MANAGER CLASS
+// ============================================================================
+
 /**
- * Manages settings data with validated mutations.
+ * Manages settings data with validated mutations and automatic timestamps.
  *
- * All mutations validate against schema to prevent corruption.
- * Provides readonly access via getter methods.
+ * All mutations validate against schema and automatically update lastUpdated timestamp.
+ * Provides readonly access via getter methods that return just the value (not timestamp).
  * Used directly by Main Core for settings updates.
  */
 export class SettingsDataManager {
   constructor(private settings: SettingsData) {}
 
-  // Readonly getters for all settings
+  // Readonly getters for all settings (return value only, not timestamp)
   getWeekStartDay(): "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" {
-    return this.settings.weekStartDay;
+    return this.settings.weekStartDay[0];
   }
 
   getWeekStartTimeUTC(): string {
-    return this.settings.weekStartTimeUTC;
+    return this.settings.weekStartTimeUTC[0];
   }
 
   getTheme(): "light" | "dark" | "auto" {
-    return this.settings.theme;
+    return this.settings.theme[0];
   }
 
   getLearningPace(): "accelerated" | "standard" | "flexible" {
-    return this.settings.learningPace;
+    return this.settings.learningPace[0];
   }
 
   getOptOutDailyPing(): boolean {
-    return this.settings.optOutDailyPing;
+    return this.settings.optOutDailyPing[0];
   }
 
   getOptOutErrorPing(): boolean {
-    return this.settings.optOutErrorPing;
+    return this.settings.optOutErrorPing[0];
   }
 
   getFontSize(): "small" | "medium" | "large" {
-    return this.settings.fontSize;
+    return this.settings.fontSize[0];
   }
 
   getHighContrast(): boolean {
-    return this.settings.highContrast;
+    return this.settings.highContrast[0];
   }
 
   getReducedMotion(): boolean {
-    return this.settings.reducedMotion;
+    return this.settings.reducedMotion[0];
   }
 
   getFocusIndicatorStyle(): "default" | "enhanced" {
-    return this.settings.focusIndicatorStyle;
+    return this.settings.focusIndicatorStyle[0];
   }
 
   getAudioEnabled(): boolean {
-    return this.settings.audioEnabled;
+    return this.settings.audioEnabled[0];
   }
 
-  // Returns all settings for saver
+  // Returns all settings for saver (includes timestamps)
   getSettings(): SettingsData {
     return this.settings;
   }
 
-  // Validated setters for all settings
+  // Validated setters for all settings (auto-update timestamps)
   setWeekStartDay(day: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"): void {
-    this.settings.weekStartDay = SettingsDataSchema.shape.weekStartDay.parse(day);
+    // Validate value
+    const validated = SettingsDataSchema.shape.weekStartDay.parse([
+      day,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.weekStartDay = validated;
   }
 
   setWeekStartTimeUTC(time: string): void {
-    this.settings.weekStartTimeUTC = SettingsDataSchema.shape.weekStartTimeUTC.parse(time);
+    const validated = SettingsDataSchema.shape.weekStartTimeUTC.parse([
+      time,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.weekStartTimeUTC = validated;
   }
 
   setTheme(theme: "light" | "dark" | "auto"): void {
-    this.settings.theme = SettingsDataSchema.shape.theme.parse(theme);
+    const validated = SettingsDataSchema.shape.theme.parse([
+      theme,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.theme = validated;
   }
 
   setLearningPace(pace: "accelerated" | "standard" | "flexible"): void {
-    this.settings.learningPace = SettingsDataSchema.shape.learningPace.parse(pace);
+    const validated = SettingsDataSchema.shape.learningPace.parse([
+      pace,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.learningPace = validated;
   }
 
   setOptOutDailyPing(optOut: boolean): void {
-    this.settings.optOutDailyPing = SettingsDataSchema.shape.optOutDailyPing.parse(optOut);
+    const validated = SettingsDataSchema.shape.optOutDailyPing.parse([
+      optOut,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.optOutDailyPing = validated;
   }
 
   setOptOutErrorPing(optOut: boolean): void {
-    this.settings.optOutErrorPing = SettingsDataSchema.shape.optOutErrorPing.parse(optOut);
+    const validated = SettingsDataSchema.shape.optOutErrorPing.parse([
+      optOut,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.optOutErrorPing = validated;
   }
 
   setFontSize(size: "small" | "medium" | "large"): void {
-    this.settings.fontSize = SettingsDataSchema.shape.fontSize.parse(size);
+    const validated = SettingsDataSchema.shape.fontSize.parse([
+      size,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.fontSize = validated;
   }
 
   setHighContrast(enabled: boolean): void {
-    this.settings.highContrast = SettingsDataSchema.shape.highContrast.parse(enabled);
+    const validated = SettingsDataSchema.shape.highContrast.parse([
+      enabled,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.highContrast = validated;
   }
 
   setReducedMotion(enabled: boolean): void {
-    this.settings.reducedMotion = SettingsDataSchema.shape.reducedMotion.parse(enabled);
+    const validated = SettingsDataSchema.shape.reducedMotion.parse([
+      enabled,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.reducedMotion = validated;
   }
 
   setFocusIndicatorStyle(style: "default" | "enhanced"): void {
-    this.settings.focusIndicatorStyle = SettingsDataSchema.shape.focusIndicatorStyle.parse(style);
+    const validated = SettingsDataSchema.shape.focusIndicatorStyle.parse([
+      style,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.focusIndicatorStyle = validated;
   }
 
   setAudioEnabled(enabled: boolean): void {
-    this.settings.audioEnabled = SettingsDataSchema.shape.audioEnabled.parse(enabled);
+    const validated = SettingsDataSchema.shape.audioEnabled.parse([
+      enabled,
+      Math.floor(Date.now() / 1000)
+    ]);
+    this.settings.audioEnabled = validated;
   }
 
   /**
@@ -206,7 +289,7 @@ export class SettingsDataManager {
       saturday: 6,
     };
 
-    const targetDay = dayMap[this.settings.weekStartDay.toLowerCase()] ?? 0;
+    const targetDay = dayMap[this.settings.weekStartDay[0].toLowerCase()] ?? 0;
 
     let daysBack = currentDay - targetDay;
     if (daysBack < 0) {
@@ -217,7 +300,7 @@ export class SettingsDataManager {
     weekStart.setUTCDate(now.getUTCDate() - daysBack);
 
     // Parse and set the time (weekStartTime format: "HH:MM")
-    const [hours, minutes] = this.settings.weekStartTimeUTC
+    const [hours, minutes] = this.settings.weekStartTimeUTC[0]
       .split(":")
       .map(Number);
     weekStart.setUTCHours(hours, minutes, 0, 0);
@@ -234,11 +317,14 @@ export class SettingsDataManager {
   /**
    * Return trump strategies for conflict resolution during offline sync.
    *
-   * All settings use LATEST_TIMESTAMP since user preferences are atomic
-   * and most recent change should always win.
+   * All settings use LATEST_TIMESTAMP - the per-field timestamp determines
+   * which value wins for each setting independently.
+   * 
+   * With the new structure, each field can be merged independently based on
+   * its own lastUpdated timestamp, enabling granular conflict resolution.
    */
   getAllTrumpStrategies(): Record<keyof SettingsData, TrumpStrategy<any>> {
-    // All fields use LATEST_TIMESTAMP since settings are atomic user preferences
+    // All fields use LATEST_TIMESTAMP (per-field comparison)
     return {
       weekStartDay: "LATEST_TIMESTAMP",
       weekStartTimeUTC: "LATEST_TIMESTAMP",
@@ -254,6 +340,10 @@ export class SettingsDataManager {
     };
   }
 }
+
+// ============================================================================
+// MESSAGE SCHEMAS
+// ============================================================================
 
 /**
  * Schema for messages updating settings from components to core.
@@ -293,6 +383,9 @@ export class SettingsMessageManager {
    *
    * Each method has specific validation requirements matching
    * the corresponding SettingsDataManager setter.
+   * 
+   * Note: We validate against the value type only, not the full tuple,
+   * since timestamps are added automatically by the manager.
    */
   validateMessage(message: SettingsMessage): void {
     // Per-method argument validation
@@ -301,86 +394,85 @@ export class SettingsMessageManager {
         if (message.args.length !== 1) {
           throw new Error("setWeekStartDay requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.weekStartDay.parse(message.args[0]);
+        // Validate just the value (manager adds timestamp)
+        z.enum(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])
+          .parse(message.args[0]);
         break;
       
       case "setWeekStartTimeUTC":
         if (message.args.length !== 1) {
           throw new Error("setWeekStartTimeUTC requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.weekStartTimeUTC.parse(message.args[0]);
+        z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).parse(message.args[0]);
         break;
       
       case "setTheme":
         if (message.args.length !== 1) {
           throw new Error("setTheme requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.theme.parse(message.args[0]);
+        z.enum(["light", "dark", "auto"]).parse(message.args[0]);
         break;
       
       case "setLearningPace":
         if (message.args.length !== 1) {
           throw new Error("setLearningPace requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.learningPace.parse(message.args[0]);
+        z.enum(["accelerated", "standard", "flexible"]).parse(message.args[0]);
         break;
       
       case "setOptOutDailyPing":
         if (message.args.length !== 1) {
           throw new Error("setOptOutDailyPing requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.optOutDailyPing.parse(message.args[0]);
+        z.boolean().parse(message.args[0]);
         break;
       
       case "setOptOutErrorPing":
         if (message.args.length !== 1) {
           throw new Error("setOptOutErrorPing requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.optOutErrorPing.parse(message.args[0]);
+        z.boolean().parse(message.args[0]);
         break;
       
       case "setFontSize":
         if (message.args.length !== 1) {
           throw new Error("setFontSize requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.fontSize.parse(message.args[0]);
+        z.enum(["small", "medium", "large"]).parse(message.args[0]);
         break;
       
       case "setHighContrast":
         if (message.args.length !== 1) {
           throw new Error("setHighContrast requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.highContrast.parse(message.args[0]);
+        z.boolean().parse(message.args[0]);
         break;
       
       case "setReducedMotion":
         if (message.args.length !== 1) {
           throw new Error("setReducedMotion requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.reducedMotion.parse(message.args[0]);
+        z.boolean().parse(message.args[0]);
         break;
       
       case "setFocusIndicatorStyle":
         if (message.args.length !== 1) {
           throw new Error("setFocusIndicatorStyle requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.focusIndicatorStyle.parse(message.args[0]);
+        z.enum(["default", "enhanced"]).parse(message.args[0]);
         break;
       
       case "setAudioEnabled":
         if (message.args.length !== 1) {
           throw new Error("setAudioEnabled requires exactly 1 argument");
         }
-        SettingsDataSchema.shape.audioEnabled.parse(message.args[0]);
+        z.boolean().parse(message.args[0]);
         break;
-      
-      default:
-        throw new Error(`Unknown method: ${message.method}`);
     }
   }
 
   /**
-   * Validate and apply settings message to manager.
+   * Handle validated message.
    *
    * Routes validated message to appropriate SettingsDataManager method.
    */
@@ -443,11 +535,12 @@ export class SettingsMessageQueueManager {
   queueWeekStartDay(day: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"): void {
     const message: SettingsMessage = { method: "setWeekStartDay", args: [day] };
     
-    // Validate before queueing - duplicate validation for component boundary
+    // Validate before queueing
     if (message.args.length !== 1) {
       throw new Error("setWeekStartDay requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.weekStartDay.parse(message.args[0]);
+    z.enum(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])
+      .parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -458,7 +551,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setWeekStartTimeUTC requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.weekStartTimeUTC.parse(message.args[0]);
+    z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -469,7 +562,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setTheme requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.theme.parse(message.args[0]);
+    z.enum(["light", "dark", "auto"]).parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -480,7 +573,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setLearningPace requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.learningPace.parse(message.args[0]);
+    z.enum(["accelerated", "standard", "flexible"]).parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -491,7 +584,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setOptOutDailyPing requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.optOutDailyPing.parse(message.args[0]);
+    z.boolean().parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -502,7 +595,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setOptOutErrorPing requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.optOutErrorPing.parse(message.args[0]);
+    z.boolean().parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -513,7 +606,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setFontSize requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.fontSize.parse(message.args[0]);
+    z.enum(["small", "medium", "large"]).parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -524,7 +617,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setHighContrast requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.highContrast.parse(message.args[0]);
+    z.boolean().parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -535,7 +628,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setReducedMotion requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.reducedMotion.parse(message.args[0]);
+    z.boolean().parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -546,7 +639,7 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setFocusIndicatorStyle requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.focusIndicatorStyle.parse(message.args[0]);
+    z.enum(["default", "enhanced"]).parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
@@ -557,16 +650,18 @@ export class SettingsMessageQueueManager {
     if (message.args.length !== 1) {
       throw new Error("setAudioEnabled requires exactly 1 argument");
     }
-    SettingsDataSchema.shape.audioEnabled.parse(message.args[0]);
+    z.boolean().parse(message.args[0]);
     
     this.messageQueue.push(message);
   }
 
   /**
-   * Core polling interface - get and clear queued messages.
+   * Retrieve and clear all queued messages.
    *
-   * Returns copy of all queued messages and clears the queue.
-   * Called by Main Core during polling cycle.
+   * Core polls this method to get pending settings updates.
+   * Messages are removed from queue after retrieval.
+   *
+   * @returns Array of queued messages
    */
   getMessages(): SettingsMessage[] {
     const messages = [...this.messageQueue];

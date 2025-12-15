@@ -14197,7 +14197,7 @@ function namedNode(iri) {
 function blankNode(name) {
   return new BlankNode(name || `n3-${_blankNodeCounter++}`);
 }
-function literal2(value, languageOrDataType) {
+function literal(value, languageOrDataType) {
   if (typeof languageOrDataType === "string")
     return new Literal(`"${value}"@${languageOrDataType.toLowerCase()}`);
   let datatype = languageOrDataType ? languageOrDataType.value : "";
@@ -14238,7 +14238,7 @@ function fromTerm(term) {
     case "DefaultGraph":
       return DEFAULTGRAPH;
     case "Literal":
-      return literal2(term.value, term.language || term.datatype);
+      return literal(term.value, term.language || term.datatype);
     case "Quad":
       return fromQuad(term);
     default:
@@ -14262,7 +14262,7 @@ var init_N3DataFactory = __esm({
       namedNode,
       blankNode,
       variable,
-      literal: literal2,
+      literal,
       defaultGraph,
       quad,
       triple: quad,
@@ -15381,7 +15381,7 @@ var init_N3Util = __esm({
 });
 
 // node_modules/n3/src/Util.js
-function escapeRegex2(regex) {
+function escapeRegex(regex) {
   return regex.replace(/[\]\/\(\)\*\+\?\.\\\$]/g, "\\$&");
 }
 var init_Util = __esm({
@@ -15416,7 +15416,7 @@ var init_BaseIRI = __esm({
         if (!_BaseIRI.supports(this.base))
           return this._baseMatcher = /.^/;
         const scheme = /^[^:]*:\/*/.exec(this.base)[0];
-        const regexHead = ["^", escapeRegex2(scheme)];
+        const regexHead = ["^", escapeRegex(scheme)];
         const regexTail = [];
         const segments = [], segmenter = /[^/?#]*([/?#])/y;
         let segment, query = 0, fragment = 0, last = segmenter.lastIndex = scheme.length;
@@ -15424,7 +15424,7 @@ var init_BaseIRI = __esm({
           if (segment[1] === FRAGMENT)
             fragment = segmenter.lastIndex - 1;
           else {
-            regexHead.push(escapeRegex2(segment[0]), "(?:");
+            regexHead.push(escapeRegex(segment[0]), "(?:");
             regexTail.push(")?");
             if (segment[1] !== QUERY)
               segments.push(last = segmenter.lastIndex);
@@ -15440,7 +15440,7 @@ var init_BaseIRI = __esm({
         this._pathReplacements[segments[segments.length - 1]] = CURRENT;
         this._baseLength = fragment > 0 ? fragment : this.base.length;
         regexHead.push(
-          escapeRegex2(this.base.substring(last, this._baseLength)),
+          escapeRegex(this.base.substring(last, this._baseLength)),
           query ? "(?:#|$)" : "(?:[?#]|$)"
         );
         return this._baseMatcher = new RegExp([...regexHead, ...regexTail].join(""));
@@ -15714,7 +15714,7 @@ var init_N3Writer = __esm({
             IRIlist += IRIlist ? `|${prefixIRI}` : prefixIRI;
             prefixList += (prefixList ? "|" : "") + this._prefixIRIs[prefixIRI];
           }
-          IRIlist = escapeRegex2(IRIlist, /[\]\/\(\)\*\+\?\.\\\$]/g, "\\$&");
+          IRIlist = escapeRegex(IRIlist, /[\]\/\(\)\*\+\?\.\\\$]/g, "\\$&");
           this._prefixRegex = new RegExp(`^(?:${prefixList})[^/]*$|^(${IRIlist})([_a-zA-Z0-9][\\-_a-zA-Z0-9]*)$`);
         }
         this._write(hasPrefixes ? "\n" : "", done);
@@ -21456,11 +21456,11 @@ var require_browser4 = __commonJS({
 });
 
 // node_modules/n3/src/N3Store.js
-function merge2(target, source, depth = 4) {
+function merge(target, source, depth = 4) {
   if (depth === 0)
     return Object.assign(target, source);
   for (const key in source)
-    target[key] = merge2(target[key] || /* @__PURE__ */ Object.create(null), source[key], depth - 1);
+    target[key] = merge(target[key] || /* @__PURE__ */ Object.create(null), source[key], depth - 1);
   return target;
 }
 function intersect(s1, s2, depth = 4) {
@@ -21483,7 +21483,7 @@ function difference(s1, s2, depth = 4) {
   for (const key in s1) {
     if (!(key in s2)) {
       target = target || /* @__PURE__ */ Object.create(null);
-      target[key] = depth === 0 ? null : merge2({}, s1[key], depth - 1);
+      target[key] = depth === 0 ? null : merge({}, s1[key], depth - 1);
     } else if (depth !== 0) {
       const diff = difference(s1[key], s2[key], depth - 1);
       if (diff !== false) {
@@ -22153,7 +22153,7 @@ var init_N3Store = __esm({
           this.addQuads(quads);
         else if (quads instanceof _N3Store && quads._entityIndex === this._entityIndex) {
           if (quads._size !== 0) {
-            this._graphs = merge2(this._graphs, quads._graphs);
+            this._graphs = merge(this._graphs, quads._graphs);
             this._size = null;
           }
         } else {
@@ -22256,7 +22256,7 @@ var init_N3Store = __esm({
           other = other.filtered;
         if (other === this) {
           const store = new _N3Store({ entityIndex: this._entityIndex });
-          store._graphs = merge2(/* @__PURE__ */ Object.create(null), this._graphs);
+          store._graphs = merge(/* @__PURE__ */ Object.create(null), this._graphs);
           store._size = this._size;
           return store;
         } else if (other instanceof _N3Store && this._entityIndex === other._entityIndex) {
@@ -22331,7 +22331,7 @@ var init_N3Store = __esm({
        */
       union(quads) {
         const store = new _N3Store({ entityIndex: this._entityIndex });
-        store._graphs = merge2(/* @__PURE__ */ Object.create(null), this._graphs);
+        store._graphs = merge(/* @__PURE__ */ Object.create(null), this._graphs);
         store._size = this._size;
         store.addAll(quads);
         return store;
@@ -23344,7 +23344,7 @@ var init_buffer_utils = __esm({
 });
 
 // node_modules/jose/dist/browser/runtime/base64url.js
-var encodeBase64, encode3, decodeBase64, decode3;
+var encodeBase64, encode, decodeBase64, decode;
 var init_base64url = __esm({
   "node_modules/jose/dist/browser/runtime/base64url.js"() {
     init_buffer_utils();
@@ -23360,7 +23360,7 @@ var init_base64url = __esm({
       }
       return btoa(arr.join(""));
     };
-    encode3 = (input) => {
+    encode = (input) => {
       return encodeBase64(input).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
     };
     decodeBase64 = (encoded) => {
@@ -23371,7 +23371,7 @@ var init_base64url = __esm({
       }
       return bytes;
     };
-    decode3 = (input) => {
+    decode = (input) => {
       let encoded = input;
       if (encoded instanceof Uint8Array) {
         encoded = decoder.decode(encoded);
@@ -23691,7 +23691,7 @@ var init_is_disjoint = __esm({
 function isObjectLike(value) {
   return typeof value === "object" && value !== null;
 }
-function isObject2(input) {
+function isObject(input) {
   if (!isObjectLike(input) || Object.prototype.toString.call(input) !== "[object Object]") {
     return false;
   }
@@ -23726,7 +23726,7 @@ var init_check_key_length = __esm({
 
 // node_modules/jose/dist/browser/lib/is_jwk.js
 function isJWK(key) {
-  return isObject2(key) && typeof key.kty === "string";
+  return isObject(key) && typeof key.kty === "string";
 }
 function isPrivateJWK(key) {
   return key.kty !== "oct" && typeof key.d === "string";
@@ -23830,12 +23830,12 @@ function subtleMapping(jwk) {
   }
   return { algorithm, keyUsages };
 }
-var parse3, jwk_to_key_default;
+var parse, jwk_to_key_default;
 var init_jwk_to_key = __esm({
   "node_modules/jose/dist/browser/runtime/jwk_to_key.js"() {
     init_webcrypto();
     init_errors();
-    parse3 = async (jwk) => {
+    parse = async (jwk) => {
       if (!jwk.alg) {
         throw new TypeError('"alg" argument is required when "jwk.alg" is not present');
       }
@@ -23850,7 +23850,7 @@ var init_jwk_to_key = __esm({
       delete keyData.use;
       return webcrypto_default.subtle.importKey("jwk", keyData, ...rest);
     };
-    jwk_to_key_default = parse3;
+    jwk_to_key_default = parse;
   }
 });
 
@@ -23861,7 +23861,7 @@ var init_normalize_key = __esm({
     init_is_jwk();
     init_base64url();
     init_jwk_to_key();
-    exportKeyValue = (k) => decode3(k);
+    exportKeyValue = (k) => decode(k);
     isKeyObject = (key) => {
       return key?.[Symbol.toStringTag] === "KeyObject";
     };
@@ -23897,7 +23897,7 @@ var init_normalize_key = __esm({
       }
       if (isJWK(key)) {
         if (key.k)
-          return decode3(key.k);
+          return decode(key.k);
         pubCache || (pubCache = /* @__PURE__ */ new WeakMap());
         const cryptoKey = importAndCache(pubCache, key, key, alg, true);
         return cryptoKey;
@@ -23915,7 +23915,7 @@ var init_normalize_key = __esm({
       }
       if (isJWK(key)) {
         if (key.k)
-          return decode3(key.k);
+          return decode(key.k);
         privCache || (privCache = /* @__PURE__ */ new WeakMap());
         const cryptoKey = importAndCache(privCache, key, key, alg, true);
         return cryptoKey;
@@ -23928,7 +23928,7 @@ var init_normalize_key = __esm({
 
 // node_modules/jose/dist/browser/key/import.js
 async function importJWK(jwk, alg) {
-  if (!isObject2(jwk)) {
+  if (!isObject(jwk)) {
     throw new TypeError("JWK must be an object");
   }
   alg || (alg = jwk.alg);
@@ -23937,7 +23937,7 @@ async function importJWK(jwk, alg) {
       if (typeof jwk.k !== "string" || !jwk.k) {
         throw new TypeError('missing "k" (Key Value) Parameter value');
       }
-      return decode3(jwk.k);
+      return decode(jwk.k);
     case "RSA":
       if ("oth" in jwk && jwk.oth !== void 0) {
         throw new JOSENotSupported('RSA JWK "oth" (Other Primes Info) Parameter value is not supported');
@@ -24105,7 +24105,7 @@ var init_key_to_jwk = __esm({
       if (key instanceof Uint8Array) {
         return {
           kty: "oct",
-          k: encode3(key)
+          k: encode(key)
         };
       }
       if (!isCryptoKey(key)) {
@@ -24219,7 +24219,7 @@ var init_verify = __esm({
 
 // node_modules/jose/dist/browser/jws/flattened/verify.js
 async function flattenedVerify(jws, key, options) {
-  if (!isObject2(jws)) {
+  if (!isObject(jws)) {
     throw new JWSInvalid("Flattened JWS must be an object");
   }
   if (jws.protected === void 0 && jws.header === void 0) {
@@ -24234,13 +24234,13 @@ async function flattenedVerify(jws, key, options) {
   if (typeof jws.signature !== "string") {
     throw new JWSInvalid("JWS Signature missing or incorrect type");
   }
-  if (jws.header !== void 0 && !isObject2(jws.header)) {
+  if (jws.header !== void 0 && !isObject(jws.header)) {
     throw new JWSInvalid("JWS Unprotected Header incorrect type");
   }
   let parsedProt = {};
   if (jws.protected) {
     try {
-      const protectedHeader = decode3(jws.protected);
+      const protectedHeader = decode(jws.protected);
       parsedProt = JSON.parse(decoder.decode(protectedHeader));
     } catch {
       throw new JWSInvalid("JWS Protected Header is invalid");
@@ -24290,7 +24290,7 @@ async function flattenedVerify(jws, key, options) {
   const data = concat(encoder.encode(jws.protected ?? ""), encoder.encode("."), typeof jws.payload === "string" ? encoder.encode(jws.payload) : jws.payload);
   let signature;
   try {
-    signature = decode3(jws.signature);
+    signature = decode(jws.signature);
   } catch {
     throw new JWSInvalid("Failed to base64url decode the signature");
   }
@@ -24301,7 +24301,7 @@ async function flattenedVerify(jws, key, options) {
   let payload;
   if (b64) {
     try {
-      payload = decode3(jws.payload);
+      payload = decode(jws.payload);
     } catch {
       throw new JWSInvalid("Failed to base64url decode the payload");
     }
@@ -24460,7 +24460,7 @@ var init_jwt_claims_set = __esm({
         payload = JSON.parse(decoder.decode(encodedPayload));
       } catch {
       }
-      if (!isObject2(payload)) {
+      if (!isObject(payload)) {
         throw new JWTInvalid("JWT Claims Set must be a top-level JSON object");
       }
       const { typ } = options;
@@ -24638,18 +24638,18 @@ var init_sign2 = __esm({
         checkKeyTypeWithJwk(alg, key, "sign");
         let payload = this._payload;
         if (b64) {
-          payload = encoder.encode(encode3(payload));
+          payload = encoder.encode(encode(payload));
         }
         let protectedHeader;
         if (this._protectedHeader) {
-          protectedHeader = encoder.encode(encode3(JSON.stringify(this._protectedHeader)));
+          protectedHeader = encoder.encode(encode(JSON.stringify(this._protectedHeader)));
         } else {
           protectedHeader = encoder.encode("");
         }
         const data = concat(protectedHeader, encoder.encode("."), payload);
         const signature = await sign_default(alg, key, data);
         const jws = {
-          signature: encode3(signature),
+          signature: encode(signature),
           payload: ""
         };
         if (b64) {
@@ -24706,7 +24706,7 @@ var init_produce = __esm({
     init_secs();
     ProduceJWT = class {
       constructor(payload = {}) {
-        if (!isObject2(payload)) {
+        if (!isObject(payload)) {
           throw new TypeError("JWT Claims Set MUST be an object");
         }
         this._payload = payload;
@@ -24809,9 +24809,9 @@ function isJWKSLike(jwks) {
   return jwks && typeof jwks === "object" && Array.isArray(jwks.keys) && jwks.keys.every(isJWKLike);
 }
 function isJWKLike(key) {
-  return isObject2(key);
+  return isObject(key);
 }
-function clone2(obj) {
+function clone(obj) {
   if (typeof structuredClone === "function") {
     return structuredClone(obj);
   }
@@ -24833,7 +24833,7 @@ function createLocalJWKSet(jwks) {
   const localJWKSet = async (protectedHeader, token) => set3.getKey(protectedHeader, token);
   Object.defineProperties(localJWKSet, {
     jwks: {
-      value: () => clone2(set3._jwks),
+      value: () => clone(set3._jwks),
       enumerable: true,
       configurable: false,
       writable: false
@@ -24853,7 +24853,7 @@ var init_local = __esm({
         if (!isJWKSLike(jwks)) {
           throw new JWKSInvalid("JSON Web Key Set malformed");
         }
-        this._jwks = clone2(jwks);
+        this._jwks = clone(jwks);
       }
       async getKey(protectedHeader, token) {
         const { alg, kid } = { ...protectedHeader, ...token?.header };
@@ -24970,7 +24970,7 @@ function isFreshJwksCache(input, cacheMaxAge) {
   if (!("uat" in input) || typeof input.uat !== "number" || Date.now() - input.uat >= cacheMaxAge) {
     return false;
   }
-  if (!("jwks" in input) || !isObject2(input.jwks) || !Array.isArray(input.jwks.keys) || !Array.prototype.every.call(input.jwks.keys, isObject2)) {
+  if (!("jwks" in input) || !isObject(input.jwks) || !Array.isArray(input.jwks.keys) || !Array.prototype.every.call(input.jwks.keys, isObject)) {
     return false;
   }
   return true;
@@ -34297,6 +34297,9 @@ var SolidConnectionErrorDisplay = class extends ErrorDisplay {
 window.ErrorDisplay = ErrorDisplay;
 window.SolidConnectionErrorDisplay = SolidConnectionErrorDisplay;
 
+// src/ts/initialization/bootstrap.ts
+init_meraBridge();
+
 // node_modules/zod/v4/classic/external.js
 var external_exports = {};
 __export(external_exports, {
@@ -34391,7 +34394,7 @@ __export(external_exports, {
   check: () => check,
   cidrv4: () => cidrv42,
   cidrv6: () => cidrv62,
-  clone: () => clone,
+  clone: () => clone2,
   codec: () => codec,
   coerce: () => coerce_exports,
   config: () => config,
@@ -34400,13 +34403,13 @@ __export(external_exports, {
   cuid2: () => cuid22,
   custom: () => custom,
   date: () => date3,
-  decode: () => decode2,
+  decode: () => decode3,
   decodeAsync: () => decodeAsync2,
   discriminatedUnion: () => discriminatedUnion,
   e164: () => e1642,
   email: () => email2,
   emoji: () => emoji2,
-  encode: () => encode2,
+  encode: () => encode3,
   encodeAsync: () => encodeAsync2,
   endsWith: () => _endsWith,
   enum: () => _enum2,
@@ -34440,7 +34443,7 @@ __export(external_exports, {
   ksuid: () => ksuid2,
   lazy: () => lazy,
   length: () => _length,
-  literal: () => literal,
+  literal: () => literal2,
   locales: () => locales_exports,
   looseObject: () => looseObject,
   lowercase: () => _lowercase,
@@ -34469,7 +34472,7 @@ __export(external_exports, {
   object: () => object,
   optional: () => optional,
   overwrite: () => _overwrite,
-  parse: () => parse2,
+  parse: () => parse3,
   parseAsync: () => parseAsync2,
   partialRecord: () => partialRecord,
   pipe: () => pipe,
@@ -34759,11 +34762,11 @@ __export(core_exports2, {
   _uuidv7: () => _uuidv7,
   _void: () => _void,
   _xid: () => _xid,
-  clone: () => clone,
+  clone: () => clone2,
   config: () => config,
-  decode: () => decode,
+  decode: () => decode2,
   decodeAsync: () => decodeAsync,
-  encode: () => encode,
+  encode: () => encode2,
   encodeAsync: () => encodeAsync,
   flattenError: () => flattenError,
   formatError: () => formatError,
@@ -34773,7 +34776,7 @@ __export(core_exports2, {
   isValidBase64URL: () => isValidBase64URL,
   isValidJWT: () => isValidJWT,
   locales: () => locales_exports,
-  parse: () => parse,
+  parse: () => parse2,
   parseAsync: () => parseAsync,
   prettifyError: () => prettifyError,
   regexes: () => regexes_exports,
@@ -34877,12 +34880,12 @@ __export(util_exports, {
   captureStackTrace: () => captureStackTrace,
   cleanEnum: () => cleanEnum,
   cleanRegex: () => cleanRegex,
-  clone: () => clone,
+  clone: () => clone2,
   cloneDef: () => cloneDef,
   createTransparentProxy: () => createTransparentProxy,
   defineLazy: () => defineLazy,
   esc: () => esc,
-  escapeRegex: () => escapeRegex,
+  escapeRegex: () => escapeRegex2,
   extend: () => extend,
   finalizeIssue: () => finalizeIssue,
   floatSafeRemainder: () => floatSafeRemainder,
@@ -34892,12 +34895,12 @@ __export(util_exports, {
   getParsedType: () => getParsedType,
   getSizableOrigin: () => getSizableOrigin,
   hexToUint8Array: () => hexToUint8Array,
-  isObject: () => isObject,
+  isObject: () => isObject2,
   isPlainObject: () => isPlainObject,
   issue: () => issue,
   joinValues: () => joinValues,
   jsonStringifyReplacer: () => jsonStringifyReplacer,
-  merge: () => merge,
+  merge: () => merge2,
   mergeDefs: () => mergeDefs,
   normalizeParams: () => normalizeParams,
   nullish: () => nullish,
@@ -35057,7 +35060,7 @@ function esc(str2) {
 }
 var captureStackTrace = "captureStackTrace" in Error ? Error.captureStackTrace : (..._args) => {
 };
-function isObject(data) {
+function isObject2(data) {
   return typeof data === "object" && data !== null && !Array.isArray(data);
 }
 var allowsEval = cached(() => {
@@ -35073,13 +35076,13 @@ var allowsEval = cached(() => {
   }
 });
 function isPlainObject(o) {
-  if (isObject(o) === false)
+  if (isObject2(o) === false)
     return false;
   const ctor = o.constructor;
   if (ctor === void 0)
     return true;
   const prot = ctor.prototype;
-  if (isObject(prot) === false)
+  if (isObject2(prot) === false)
     return false;
   if (Object.prototype.hasOwnProperty.call(prot, "isPrototypeOf") === false) {
     return false;
@@ -35148,10 +35151,10 @@ var getParsedType = (data) => {
 };
 var propertyKeyTypes = /* @__PURE__ */ new Set(["string", "number", "symbol"]);
 var primitiveTypes = /* @__PURE__ */ new Set(["string", "number", "bigint", "boolean", "symbol", "undefined"]);
-function escapeRegex(str2) {
+function escapeRegex2(str2) {
   return str2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function clone(inst, def, params) {
+function clone2(inst, def, params) {
   const cl = new inst._zod.constr(def ?? inst._zod.def);
   if (!def || params?.parent)
     cl._zod.parent = inst;
@@ -35247,7 +35250,7 @@ function pick(schema2, mask) {
     },
     checks: []
   });
-  return clone(schema2, def);
+  return clone2(schema2, def);
 }
 function omit(schema2, mask) {
   const currDef = schema2._zod.def;
@@ -35267,7 +35270,7 @@ function omit(schema2, mask) {
     },
     checks: []
   });
-  return clone(schema2, def);
+  return clone2(schema2, def);
 }
 function extend(schema2, shape) {
   if (!isPlainObject(shape)) {
@@ -35286,7 +35289,7 @@ function extend(schema2, shape) {
     },
     checks: []
   });
-  return clone(schema2, def);
+  return clone2(schema2, def);
 }
 function safeExtend(schema2, shape) {
   if (!isPlainObject(shape)) {
@@ -35301,9 +35304,9 @@ function safeExtend(schema2, shape) {
     },
     checks: schema2._zod.def.checks
   };
-  return clone(schema2, def);
+  return clone2(schema2, def);
 }
-function merge(a, b) {
+function merge2(a, b) {
   const def = mergeDefs(a._zod.def, {
     get shape() {
       const _shape = { ...a._zod.def.shape, ...b._zod.def.shape };
@@ -35316,7 +35319,7 @@ function merge(a, b) {
     checks: []
     // delete existing checks
   });
-  return clone(a, def);
+  return clone2(a, def);
 }
 function partial(Class2, schema2, mask) {
   const def = mergeDefs(schema2._zod.def, {
@@ -35348,7 +35351,7 @@ function partial(Class2, schema2, mask) {
     },
     checks: []
   });
-  return clone(schema2, def);
+  return clone2(schema2, def);
 }
 function required(Class2, schema2, mask) {
   const def = mergeDefs(schema2._zod.def, {
@@ -35380,7 +35383,7 @@ function required(Class2, schema2, mask) {
     },
     checks: []
   });
-  return clone(schema2, def);
+  return clone2(schema2, def);
 }
 function aborted(x, startIndex = 0) {
   if (x.aborted === true)
@@ -35641,7 +35644,7 @@ var _parse = (_Err) => (schema2, value, _ctx, _params) => {
   }
   return result.value;
 };
-var parse = /* @__PURE__ */ _parse($ZodRealError);
+var parse2 = /* @__PURE__ */ _parse($ZodRealError);
 var _parseAsync = (_Err) => async (schema2, value, _ctx, params) => {
   const ctx = _ctx ? Object.assign(_ctx, { async: true }) : { async: true };
   let result = schema2._zod.run({ value, issues: [] }, ctx);
@@ -35682,11 +35685,11 @@ var _encode = (_Err) => (schema2, value, _ctx) => {
   const ctx = _ctx ? Object.assign(_ctx, { direction: "backward" }) : { direction: "backward" };
   return _parse(_Err)(schema2, value, ctx);
 };
-var encode = /* @__PURE__ */ _encode($ZodRealError);
+var encode2 = /* @__PURE__ */ _encode($ZodRealError);
 var _decode = (_Err) => (schema2, value, _ctx) => {
   return _parse(_Err)(schema2, value, _ctx);
 };
-var decode = /* @__PURE__ */ _decode($ZodRealError);
+var decode2 = /* @__PURE__ */ _decode($ZodRealError);
 var _encodeAsync = (_Err) => async (schema2, value, _ctx) => {
   const ctx = _ctx ? Object.assign(_ctx, { direction: "backward" }) : { direction: "backward" };
   return _parseAsync(_Err)(schema2, value, ctx);
@@ -36297,7 +36300,7 @@ var $ZodCheckUpperCase = /* @__PURE__ */ $constructor("$ZodCheckUpperCase", (ins
 });
 var $ZodCheckIncludes = /* @__PURE__ */ $constructor("$ZodCheckIncludes", (inst, def) => {
   $ZodCheck.init(inst, def);
-  const escapedRegex = escapeRegex(def.includes);
+  const escapedRegex = escapeRegex2(def.includes);
   const pattern = new RegExp(typeof def.position === "number" ? `^.{${def.position}}${escapedRegex}` : escapedRegex);
   def.pattern = pattern;
   inst._zod.onattach.push((inst2) => {
@@ -36321,7 +36324,7 @@ var $ZodCheckIncludes = /* @__PURE__ */ $constructor("$ZodCheckIncludes", (inst,
 });
 var $ZodCheckStartsWith = /* @__PURE__ */ $constructor("$ZodCheckStartsWith", (inst, def) => {
   $ZodCheck.init(inst, def);
-  const pattern = new RegExp(`^${escapeRegex(def.prefix)}.*`);
+  const pattern = new RegExp(`^${escapeRegex2(def.prefix)}.*`);
   def.pattern ?? (def.pattern = pattern);
   inst._zod.onattach.push((inst2) => {
     const bag = inst2._zod.bag;
@@ -36344,7 +36347,7 @@ var $ZodCheckStartsWith = /* @__PURE__ */ $constructor("$ZodCheckStartsWith", (i
 });
 var $ZodCheckEndsWith = /* @__PURE__ */ $constructor("$ZodCheckEndsWith", (inst, def) => {
   $ZodCheck.init(inst, def);
-  const pattern = new RegExp(`.*${escapeRegex(def.suffix)}$`);
+  const pattern = new RegExp(`.*${escapeRegex2(def.suffix)}$`);
   def.pattern ?? (def.pattern = pattern);
   inst._zod.onattach.push((inst2) => {
     const bag = inst2._zod.bag;
@@ -37189,7 +37192,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     }
     return propValues;
   });
-  const isObject4 = isObject;
+  const isObject4 = isObject2;
   const catchall = def.catchall;
   let value;
   inst._zod.parse = (payload, ctx) => {
@@ -37269,7 +37272,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
     return (payload, ctx) => fn(shape, payload, ctx);
   };
   let fastpass;
-  const isObject4 = isObject;
+  const isObject4 = isObject2;
   const jit = !globalConfig.jitless;
   const allowsEval2 = allowsEval;
   const fastEnabled = jit && allowsEval2.value;
@@ -37401,7 +37404,7 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
   });
   inst._zod.parse = (payload, ctx) => {
     const input = payload.value;
-    if (!isObject(input)) {
+    if (!isObject2(input)) {
       payload.issues.push({
         code: "invalid_type",
         expected: "object",
@@ -37769,7 +37772,7 @@ var $ZodEnum = /* @__PURE__ */ $constructor("$ZodEnum", (inst, def) => {
   const values = getEnumValues(def.entries);
   const valuesSet = new Set(values);
   inst._zod.values = valuesSet;
-  inst._zod.pattern = new RegExp(`^(${values.filter((k) => propertyKeyTypes.has(typeof k)).map((o) => typeof o === "string" ? escapeRegex(o) : o.toString()).join("|")})$`);
+  inst._zod.pattern = new RegExp(`^(${values.filter((k) => propertyKeyTypes.has(typeof k)).map((o) => typeof o === "string" ? escapeRegex2(o) : o.toString()).join("|")})$`);
   inst._zod.parse = (payload, _ctx) => {
     const input = payload.value;
     if (valuesSet.has(input)) {
@@ -37790,7 +37793,7 @@ var $ZodLiteral = /* @__PURE__ */ $constructor("$ZodLiteral", (inst, def) => {
     throw new Error("Cannot create literal schema with no valid values");
   }
   inst._zod.values = new Set(def.values);
-  inst._zod.pattern = new RegExp(`^(${def.values.map((o) => typeof o === "string" ? escapeRegex(o) : o ? escapeRegex(o.toString()) : String(o)).join("|")})$`);
+  inst._zod.pattern = new RegExp(`^(${def.values.map((o) => typeof o === "string" ? escapeRegex2(o) : o ? escapeRegex2(o.toString()) : String(o)).join("|")})$`);
   inst._zod.parse = (payload, _ctx) => {
     const input = payload.value;
     if (inst._zod.values.has(input)) {
@@ -38138,7 +38141,7 @@ var $ZodTemplateLiteral = /* @__PURE__ */ $constructor("$ZodTemplateLiteral", (i
       const end = source.endsWith("$") ? source.length - 1 : source.length;
       regexParts.push(source.slice(start, end));
     } else if (part === null || primitiveTypes.has(typeof part)) {
-      regexParts.push(escapeRegex(`${part}`));
+      regexParts.push(escapeRegex2(`${part}`));
     } else {
       throw new Error(`Invalid template literal part: ${part}`);
     }
@@ -38177,10 +38180,10 @@ var $ZodFunction = /* @__PURE__ */ $constructor("$ZodFunction", (inst, def) => {
       throw new Error("implement() must be called with a function");
     }
     return function(...args) {
-      const parsedArgs = inst._def.input ? parse(inst._def.input, args) : args;
+      const parsedArgs = inst._def.input ? parse2(inst._def.input, args) : args;
       const result = Reflect.apply(func, this, parsedArgs);
       if (inst._def.output) {
-        return parse(inst._def.output, result);
+        return parse2(inst._def.output, result);
       }
       return result;
     };
@@ -45802,12 +45805,12 @@ var ZodRealError = $constructor("ZodError", initializer2, {
 });
 
 // node_modules/zod/v4/classic/parse.js
-var parse2 = /* @__PURE__ */ _parse(ZodRealError);
+var parse3 = /* @__PURE__ */ _parse(ZodRealError);
 var parseAsync2 = /* @__PURE__ */ _parseAsync(ZodRealError);
 var safeParse2 = /* @__PURE__ */ _safeParse(ZodRealError);
 var safeParseAsync2 = /* @__PURE__ */ _safeParseAsync(ZodRealError);
-var encode2 = /* @__PURE__ */ _encode(ZodRealError);
-var decode2 = /* @__PURE__ */ _decode(ZodRealError);
+var encode3 = /* @__PURE__ */ _encode(ZodRealError);
+var decode3 = /* @__PURE__ */ _decode(ZodRealError);
 var encodeAsync2 = /* @__PURE__ */ _encodeAsync(ZodRealError);
 var decodeAsync2 = /* @__PURE__ */ _decodeAsync(ZodRealError);
 var safeEncode2 = /* @__PURE__ */ _safeEncode(ZodRealError);
@@ -45829,19 +45832,19 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
       ]
     }));
   };
-  inst.clone = (def2, params) => clone(inst, def2, params);
+  inst.clone = (def2, params) => clone2(inst, def2, params);
   inst.brand = () => inst;
   inst.register = ((reg, meta) => {
     reg.add(inst, meta);
     return inst;
   });
-  inst.parse = (data, params) => parse2(inst, data, params, { callee: inst.parse });
+  inst.parse = (data, params) => parse3(inst, data, params, { callee: inst.parse });
   inst.safeParse = (data, params) => safeParse2(inst, data, params);
   inst.parseAsync = async (data, params) => parseAsync2(inst, data, params, { callee: inst.parseAsync });
   inst.safeParseAsync = async (data, params) => safeParseAsync2(inst, data, params);
   inst.spa = inst.safeParseAsync;
-  inst.encode = (data, params) => encode2(inst, data, params);
-  inst.decode = (data, params) => decode2(inst, data, params);
+  inst.encode = (data, params) => encode3(inst, data, params);
+  inst.decode = (data, params) => decode3(inst, data, params);
   inst.encodeAsync = async (data, params) => encodeAsync2(inst, data, params);
   inst.decodeAsync = async (data, params) => decodeAsync2(inst, data, params);
   inst.safeEncode = (data, params) => safeEncode2(inst, data, params);
@@ -46400,7 +46403,7 @@ function record(keyType, valueType, params) {
   });
 }
 function partialRecord(keyType, valueType, params) {
-  const k = clone(keyType);
+  const k = clone2(keyType);
   k._zod.values = void 0;
   return new ZodRecord({
     type: "record",
@@ -46503,7 +46506,7 @@ var ZodLiteral = /* @__PURE__ */ $constructor("ZodLiteral", (inst, def) => {
     }
   });
 });
-function literal(value, params) {
+function literal2(value, params) {
   return new ZodLiteral({
     type: "literal",
     values: Array.isArray(value) ? value : [value],
@@ -46843,11 +46846,15 @@ config(en_default());
 var ImmutableId = external_exports.number().int().min(1).max(999999999999);
 
 // src/ts/core/overallProgressSchema.ts
+var CompletionDataSchema = external_exports.object({
+  firstCompleted: external_exports.number().nullable(),
+  lastUpdated: external_exports.number()
+});
 var OverallProgressDataSchema = external_exports.object({
-  lessonCompletions: external_exports.record(external_exports.string(), external_exports.number()),
-  // lessonId -> Unix timestamp
-  domainsCompleted: external_exports.array(ImmutableId),
-  // Domain Immutable IDs
+  lessonCompletions: external_exports.record(external_exports.string(), CompletionDataSchema),
+  // lessonId -> CompletionData
+  domainCompletions: external_exports.record(external_exports.string(), CompletionDataSchema),
+  // domainId -> CompletionData
   currentStreak: external_exports.number().min(0).max(1e3),
   // Completed weeks (not including current)
   lastStreakCheck: external_exports.number().int().min(0),
@@ -46863,50 +46870,12 @@ function isValidLessonId(lessonId, curriculum) {
 function isValidDomainId(domainId, curriculum) {
   return curriculum.hasDomain(domainId);
 }
-function reconcileAgainstCurriculum(data, curriculum) {
-  let lessonsDropped = 0;
-  let lessonsKept = 0;
-  let domainsDropped = 0;
-  let domainsKept = 0;
-  const reconciledLessons = {};
-  const reconciledDomains = [];
-  for (const [lessonId, timestamp2] of Object.entries(data.lessonCompletions)) {
-    const lessonIdNum = parseInt(lessonId, 10);
-    if (!isNaN(lessonIdNum) && isValidLessonId(lessonIdNum, curriculum)) {
-      reconciledLessons[lessonId] = timestamp2;
-      lessonsKept++;
-    } else {
-      lessonsDropped++;
-    }
-  }
-  for (const domainId of data.domainsCompleted) {
-    if (isValidDomainId(domainId, curriculum)) {
-      reconciledDomains.push(domainId);
-      domainsKept++;
-    } else {
-      domainsDropped++;
-    }
-  }
-  return {
-    cleaned: {
-      lessonCompletions: reconciledLessons,
-      domainsCompleted: reconciledDomains,
-      currentStreak: data.currentStreak,
-      lastStreakCheck: data.lastStreakCheck,
-      // Fix counters to match cleaned data after curriculum reconciliation
-      totalLessonsCompleted: lessonsKept,
-      totalDomainsCompleted: domainsKept
-    },
-    lessonsDropped,
-    domainsDropped,
-    lessonsKept,
-    domainsKept
-  };
-}
 var OverallProgressMessageSchema = external_exports.object({
   method: external_exports.enum([
     "markLessonComplete",
     "markLessonIncomplete",
+    "markDomainComplete",
+    "markDomainIncomplete",
     "updateStreak",
     "resetStreak",
     "incrementStreak"
@@ -46916,30 +46885,64 @@ var OverallProgressMessageSchema = external_exports.object({
 
 // src/ts/core/settingsSchema.ts
 var SettingsDataSchema = external_exports.object({
-  // Week timing for streaks
-  weekStartDay: external_exports.enum([
-    "sunday",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday"
-  ]).default("sunday"),
-  weekStartTimeUTC: external_exports.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM in 24-hour format").default("00:00"),
-  // Appearance
-  theme: external_exports.enum(["light", "dark", "auto"]).default("auto"),
-  // Learning
-  learningPace: external_exports.enum(["accelerated", "standard", "flexible"]).default("standard"),
-  // Privacy/Analytics
-  optOutDailyPing: external_exports.boolean().default(false),
-  optOutErrorPing: external_exports.boolean().default(false),
-  // Accessibility
-  fontSize: external_exports.enum(["small", "medium", "large"]).default("medium"),
-  highContrast: external_exports.boolean().default(false),
-  reducedMotion: external_exports.boolean().default(false),
-  focusIndicatorStyle: external_exports.enum(["default", "enhanced"]).default("default"),
-  audioEnabled: external_exports.boolean().default(true)
+  // Week timing for streaks: [value, lastUpdated]
+  weekStartDay: external_exports.tuple([
+    external_exports.enum([
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday"
+    ]),
+    external_exports.number().int().min(0)
+    // lastUpdated timestamp
+  ]).default(["sunday", 0]),
+  weekStartTimeUTC: external_exports.tuple([
+    external_exports.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM in 24-hour format"),
+    external_exports.number().int().min(0)
+  ]).default(["00:00", 0]),
+  // Appearance: [value, lastUpdated]
+  theme: external_exports.tuple([
+    external_exports.enum(["light", "dark", "auto"]),
+    external_exports.number().int().min(0)
+  ]).default(["auto", 0]),
+  // Learning: [value, lastUpdated]
+  learningPace: external_exports.tuple([
+    external_exports.enum(["accelerated", "standard", "flexible"]),
+    external_exports.number().int().min(0)
+  ]).default(["standard", 0]),
+  // Privacy/Analytics: [value, lastUpdated]
+  optOutDailyPing: external_exports.tuple([
+    external_exports.boolean(),
+    external_exports.number().int().min(0)
+  ]).default([false, 0]),
+  optOutErrorPing: external_exports.tuple([
+    external_exports.boolean(),
+    external_exports.number().int().min(0)
+  ]).default([false, 0]),
+  // Accessibility: [value, lastUpdated]
+  fontSize: external_exports.tuple([
+    external_exports.enum(["small", "medium", "large"]),
+    external_exports.number().int().min(0)
+  ]).default(["medium", 0]),
+  highContrast: external_exports.tuple([
+    external_exports.boolean(),
+    external_exports.number().int().min(0)
+  ]).default([false, 0]),
+  reducedMotion: external_exports.tuple([
+    external_exports.boolean(),
+    external_exports.number().int().min(0)
+  ]).default([false, 0]),
+  focusIndicatorStyle: external_exports.tuple([
+    external_exports.enum(["default", "enhanced"]),
+    external_exports.number().int().min(0)
+  ]).default(["default", 0]),
+  audioEnabled: external_exports.tuple([
+    external_exports.boolean(),
+    external_exports.number().int().min(0)
+  ]).default([true, 0])
 });
 var SettingsMessageSchema = external_exports.object({
   method: external_exports.enum([
@@ -47086,6 +47089,12 @@ var CurriculumRegistry = class {
   getAllComponentIds() {
     return Array.from(this.componentIdToType.keys());
   }
+  getAllLessonIds() {
+    return Array.from(this.lessonIds);
+  }
+  getAllDomainIds() {
+    return Array.from(this.domainMap.keys());
+  }
   getLessonIdForComponent(componentId) {
     return this.componentToLesson.get(componentId);
   }
@@ -47196,20 +47205,16 @@ function extractMetadata(parsed, expectedWebId) {
     };
   }
   const candidate = parsed?.metadata || {};
-  const webId = typeof candidate.webId === "string" ? candidate.webId : null;
-  if (webId !== expectedWebId) {
-    return {
-      data: { webId: expectedWebId },
-      defaultedRatio: 1,
-      webIDMismatch: {
-        expected: expectedWebId,
-        found: webId
-      }
-    };
-  }
+  const webId = typeof candidate.webId === "string" ? candidate.webId : expectedWebId;
+  const webIDMismatch = webId !== expectedWebId ? {
+    expected: expectedWebId,
+    found: webId
+  } : void 0;
   return {
-    data: { webId },
-    defaultedRatio: 0
+    data: { webId: expectedWebId },
+    // Always use expected
+    defaultedRatio: 1,
+    webIDMismatch
   };
 }
 function extractOverallProgress(parsed) {
@@ -47220,7 +47225,7 @@ function extractOverallProgress(parsed) {
   const candidate = parsed?.overallProgress || {};
   const overallProgress = {
     lessonCompletions: {},
-    domainsCompleted: [],
+    domainCompletions: {},
     currentStreak: 0,
     lastStreakCheck: 0,
     totalLessonsCompleted: 0,
@@ -47229,8 +47234,8 @@ function extractOverallProgress(parsed) {
   if (typeof candidate.lessonCompletions === "object" && candidate.lessonCompletions !== null) {
     overallProgress.lessonCompletions = candidate.lessonCompletions;
   }
-  if (Array.isArray(candidate.domainsCompleted)) {
-    overallProgress.domainsCompleted = candidate.domainsCompleted;
+  if (typeof candidate.domainCompletions === "object" && candidate.domainCompletions !== null) {
+    overallProgress.domainCompletions = candidate.domainCompletions;
   }
   if (typeof candidate.currentStreak === "number" && candidate.currentStreak >= 0) {
     overallProgress.currentStreak = candidate.currentStreak;
@@ -47249,19 +47254,77 @@ function extractOverallProgress(parsed) {
 function reconcileOverallProgress(progress) {
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
   const claimedDomains = progress.totalDomainsCompleted ?? 0;
-  const actualLessons = Object.keys(progress.lessonCompletions).length;
-  const actualDomains = progress.domainsCompleted.length;
+  const actualLessons = Object.values(progress.lessonCompletions).filter((completion) => completion.firstCompleted !== null).length;
+  const actualDomains = Object.values(progress.domainCompletions).filter((completion) => completion.firstCompleted !== null).length;
   const lessonsLostToCorruption = Math.max(0, claimedLessons - actualLessons);
   const domainsLostToCorruption = Math.max(0, claimedDomains - actualDomains);
   const corruptionDetected = lessonsLostToCorruption > 0 || domainsLostToCorruption > 0;
-  const reconciled = reconcileAgainstCurriculum(progress, curriculumData);
+  const allLessonIds2 = curriculumData.getAllLessonIds();
+  const allDomainIds = curriculumData.getAllDomainIds();
+  const reconciledLessons = {};
+  const reconciledDomains = {};
+  let lessonsKept = 0;
+  let lessonsDropped = 0;
+  let domainsKept = 0;
+  let domainsDropped = 0;
+  for (const lessonId of allLessonIds2) {
+    const key = lessonId.toString();
+    const existing = progress.lessonCompletions[key];
+    if (existing) {
+      if (typeof existing === "object" && existing !== null && "firstCompleted" in existing && "lastUpdated" in existing) {
+        reconciledLessons[key] = existing;
+        if (existing.firstCompleted !== null) {
+          lessonsKept++;
+        }
+      } else {
+        reconciledLessons[key] = { firstCompleted: null, lastUpdated: 0 };
+      }
+    } else {
+      reconciledLessons[key] = { firstCompleted: null, lastUpdated: 0 };
+    }
+  }
+  for (const [lessonId, completionData] of Object.entries(progress.lessonCompletions)) {
+    const lessonIdNum = parseInt(lessonId, 10);
+    if (!isNaN(lessonIdNum) && !isValidLessonId(lessonIdNum, curriculumData) && completionData.firstCompleted !== null) {
+      lessonsDropped++;
+    }
+  }
+  for (const domainId of allDomainIds) {
+    const key = domainId.toString();
+    const existing = progress.domainCompletions[key];
+    if (existing) {
+      if (typeof existing === "object" && existing !== null && "firstCompleted" in existing && "lastUpdated" in existing) {
+        reconciledDomains[key] = existing;
+        if (existing.firstCompleted !== null) {
+          domainsKept++;
+        }
+      } else {
+        reconciledDomains[key] = { firstCompleted: null, lastUpdated: 0 };
+      }
+    } else {
+      reconciledDomains[key] = { firstCompleted: null, lastUpdated: 0 };
+    }
+  }
+  for (const [domainId, completionData] of Object.entries(progress.domainCompletions)) {
+    const domainIdNum = parseInt(domainId, 10);
+    if (!isNaN(domainIdNum) && !isValidDomainId(domainIdNum, curriculumData) && completionData.firstCompleted !== null) {
+      domainsDropped++;
+    }
+  }
   const originalLessonCount = actualLessons;
   const originalDomainCount = actualDomains;
   return {
-    data: reconciled.cleaned,
-    lessonsDroppedRatio: originalLessonCount > 0 ? reconciled.lessonsDropped / originalLessonCount : 0,
+    data: {
+      lessonCompletions: reconciledLessons,
+      domainCompletions: reconciledDomains,
+      currentStreak: progress.currentStreak,
+      lastStreakCheck: progress.lastStreakCheck,
+      totalLessonsCompleted: lessonsKept,
+      totalDomainsCompleted: domainsKept
+    },
+    lessonsDroppedRatio: originalLessonCount > 0 ? lessonsDropped / originalLessonCount : 0,
     // No lessons = nothing to drop
-    domainsDroppedRatio: originalDomainCount > 0 ? reconciled.domainsDropped / originalDomainCount : 0,
+    domainsDroppedRatio: originalDomainCount > 0 ? domainsDropped / originalDomainCount : 0,
     // No domains = nothing to drop
     corruptionDetected,
     lessonsLostToCorruption,
@@ -47280,70 +47343,71 @@ function extractSettings(parsed) {
   const settings = {};
   const totalFields = 11;
   let defaultedFields = 0;
-  if (["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].includes(candidate.weekStartDay)) {
-    settings.weekStartDay = candidate.weekStartDay;
+  const defaultTimestamp = 0;
+  if (Array.isArray(candidate.weekStartDay) && ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].includes(candidate.weekStartDay[0])) {
+    settings.weekStartDay = [candidate.weekStartDay[0], candidate.weekStartDay[1] ?? defaultTimestamp];
   } else {
-    settings.weekStartDay = "monday";
+    settings.weekStartDay = ["monday", defaultTimestamp];
     defaultedFields++;
   }
-  if (typeof candidate.weekStartTimeUTC === "string" && /^\d{2}:\d{2}$/.test(candidate.weekStartTimeUTC)) {
-    settings.weekStartTimeUTC = candidate.weekStartTimeUTC;
+  if (Array.isArray(candidate.weekStartTimeUTC) && typeof candidate.weekStartTimeUTC[0] === "string" && /^\d{2}:\d{2}$/.test(candidate.weekStartTimeUTC[0])) {
+    settings.weekStartTimeUTC = [candidate.weekStartTimeUTC[0], candidate.weekStartTimeUTC[1] ?? defaultTimestamp];
   } else {
-    settings.weekStartTimeUTC = "00:00";
+    settings.weekStartTimeUTC = ["00:00", defaultTimestamp];
     defaultedFields++;
   }
-  if (["light", "dark", "auto"].includes(candidate.theme)) {
-    settings.theme = candidate.theme;
+  if (Array.isArray(candidate.theme) && ["light", "dark", "auto"].includes(candidate.theme[0])) {
+    settings.theme = [candidate.theme[0], candidate.theme[1] ?? defaultTimestamp];
   } else {
-    settings.theme = "auto";
+    settings.theme = ["auto", defaultTimestamp];
     defaultedFields++;
   }
-  if (["relaxed", "standard", "intensive"].includes(candidate.learningPace)) {
-    settings.learningPace = candidate.learningPace;
+  if (Array.isArray(candidate.learningPace) && ["relaxed", "standard", "intensive"].includes(candidate.learningPace[0])) {
+    settings.learningPace = [candidate.learningPace[0], candidate.learningPace[1] ?? defaultTimestamp];
   } else {
-    settings.learningPace = "standard";
+    settings.learningPace = ["standard", defaultTimestamp];
     defaultedFields++;
   }
-  if (typeof candidate.optOutDailyPing === "boolean") {
-    settings.optOutDailyPing = candidate.optOutDailyPing;
+  if (Array.isArray(candidate.optOutDailyPing) && typeof candidate.optOutDailyPing[0] === "boolean") {
+    settings.optOutDailyPing = [candidate.optOutDailyPing[0], candidate.optOutDailyPing[1] ?? defaultTimestamp];
   } else {
-    settings.optOutDailyPing = false;
+    settings.optOutDailyPing = [false, defaultTimestamp];
     defaultedFields++;
   }
-  if (typeof candidate.optOutErrorPing === "boolean") {
-    settings.optOutErrorPing = candidate.optOutErrorPing;
+  if (Array.isArray(candidate.optOutErrorPing) && typeof candidate.optOutErrorPing[0] === "boolean") {
+    settings.optOutErrorPing = [candidate.optOutErrorPing[0], candidate.optOutErrorPing[1] ?? defaultTimestamp];
   } else {
-    settings.optOutErrorPing = false;
+    settings.optOutErrorPing = [false, defaultTimestamp];
     defaultedFields++;
   }
-  if (["small", "medium", "large", "x-large"].includes(candidate.fontSize)) {
-    settings.fontSize = candidate.fontSize;
+  if (Array.isArray(candidate.fontSize) && ["small", "medium", "large", "x-large"].includes(candidate.fontSize[0])) {
+    settings.fontSize = [candidate.fontSize[0], candidate.fontSize[1] ?? defaultTimestamp];
   } else {
-    settings.fontSize = "medium";
+    settings.fontSize = ["medium", defaultTimestamp];
     defaultedFields++;
   }
-  if (typeof candidate.highContrast === "boolean") {
-    settings.highContrast = candidate.highContrast;
+  if (Array.isArray(candidate.highContrast) && typeof candidate.highContrast[0] === "boolean") {
+    settings.highContrast = [candidate.highContrast[0], candidate.highContrast[1] ?? defaultTimestamp];
   } else {
-    settings.highContrast = false;
+    settings.highContrast = [false, defaultTimestamp];
     defaultedFields++;
   }
-  if (typeof candidate.reducedMotion === "boolean") {
-    settings.reducedMotion = candidate.reducedMotion;
+  if (Array.isArray(candidate.reducedMotion) && typeof candidate.reducedMotion[0] === "boolean") {
+    settings.reducedMotion = [candidate.reducedMotion[0], candidate.reducedMotion[1] ?? defaultTimestamp];
   } else {
-    settings.reducedMotion = false;
+    settings.reducedMotion = [false, defaultTimestamp];
     defaultedFields++;
   }
-  if (["default", "high-visibility", "outline"].includes(candidate.focusIndicatorStyle)) {
-    settings.focusIndicatorStyle = candidate.focusIndicatorStyle;
+  if (Array.isArray(candidate.focusIndicatorStyle) && ["default", "high-visibility", "outline"].includes(candidate.focusIndicatorStyle[0])) {
+    settings.focusIndicatorStyle = [candidate.focusIndicatorStyle[0], candidate.focusIndicatorStyle[1] ?? defaultTimestamp];
   } else {
-    settings.focusIndicatorStyle = "default";
+    settings.focusIndicatorStyle = ["default", defaultTimestamp];
     defaultedFields++;
   }
-  if (typeof candidate.audioEnabled === "boolean") {
-    settings.audioEnabled = candidate.audioEnabled;
+  if (Array.isArray(candidate.audioEnabled) && typeof candidate.audioEnabled[0] === "boolean") {
+    settings.audioEnabled = [candidate.audioEnabled[0], candidate.audioEnabled[1] ?? defaultTimestamp];
   } else {
-    settings.audioEnabled = true;
+    settings.audioEnabled = [true, defaultTimestamp];
     defaultedFields++;
   }
   return {
@@ -47368,7 +47432,7 @@ function extractNavigationState(parsed) {
     data: {
       currentEntityId: 0,
       currentPage: 0,
-      lastUpdated: Date.now()
+      lastUpdated: Math.floor(Date.now() / 1e3)
     },
     defaultedRatio: 1,
     wasDefaulted: true
@@ -47391,7 +47455,7 @@ function extractCombinedComponentProgress(parsed, lessonConfigs) {
         if (initializer3) {
           components[componentIdStr] = initializer3();
         } else {
-          components[componentIdStr] = {};
+          components[componentIdStr] = { lastUpdated: 0 };
         }
       }
       componentsDefaulted++;
@@ -47401,69 +47465,67 @@ function extractCombinedComponentProgress(parsed, lessonConfigs) {
     if (!componentType) {
       componentsDefaulted++;
       const initializer3 = componentInitializerMap.get("unknown");
-      components[componentIdStr] = initializer3 ? initializer3() : {};
+      components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
       continue;
     }
     const progressSchema = progressSchemaMap.get(componentType);
     if (!progressSchema) {
       componentsDefaulted++;
       const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : {};
+      components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
       continue;
     }
-    const progressResult = progressSchema.safeParse(savedProgress);
-    if (!progressResult.success) {
+    const zodResult = progressSchema.safeParse(savedProgress);
+    if (!zodResult.success) {
       componentsDefaulted++;
       const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : {};
+      components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
       continue;
     }
     const validator = componentValidatorMap.get(componentType);
-    if (!validator) {
-      components[componentIdStr] = progressResult.data;
-      componentsRetained++;
-      continue;
+    if (validator) {
+      const lessonId = curriculumData.getLessonIdForComponent(componentId);
+      const lessonConfig = lessonId ? lessonConfigs.get(lessonId) : null;
+      const componentConfig = lessonConfig?.components.find((c) => c.id === componentId);
+      if (componentConfig) {
+        const validationResult = validator(zodResult.data, componentConfig);
+        if (validationResult.defaultedRatio > 0) {
+          componentsDefaulted++;
+          components[componentIdStr] = validationResult.cleaned;
+          continue;
+        }
+      }
     }
-    const lessonId = curriculumData.getLessonIdForComponent(componentId);
-    if (!lessonId) {
-      componentsDefaulted++;
-      const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : {};
-      continue;
-    }
-    const lessonData = lessonConfigs.get(lessonId);
-    if (!lessonData) {
-      componentsDefaulted++;
-      const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : {};
-      continue;
-    }
-    const componentConfig = lessonData.components.find((c) => c.id === componentId);
-    if (!componentConfig) {
-      componentsDefaulted++;
-      const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : {};
-      continue;
-    }
-    const validationResult = validator(progressResult.data, componentConfig);
-    if (validationResult.defaultedRatio === 0) {
-      components[componentIdStr] = validationResult.cleaned;
-      componentsRetained++;
-    } else {
-      componentsDefaulted++;
-      const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : {};
-    }
+    components[componentIdStr] = zodResult.data;
+    componentsRetained++;
   }
   const totalComponents = allComponentIds2.length;
+  const defaultedRatio = totalComponents > 0 ? componentsDefaulted / totalComponents : 0;
   return {
-    data: {
-      components
-    },
-    defaultedRatio: totalComponents > 0 ? componentsDefaulted / totalComponents : 0,
+    data: { components },
+    defaultedRatio,
     componentsRetained,
     componentsDefaulted
   };
+}
+function initializeAllLessonsAndDomainsWithDefaults() {
+  const lessonCompletions = {};
+  const domainCompletions = {};
+  const allLessonIds2 = curriculumData.getAllLessonIds();
+  for (const lessonId of allLessonIds2) {
+    lessonCompletions[lessonId.toString()] = {
+      firstCompleted: null,
+      lastUpdated: 0
+    };
+  }
+  const allDomainIds = curriculumData.getAllDomainIds();
+  for (const domainId of allDomainIds) {
+    domainCompletions[domainId.toString()] = {
+      firstCompleted: null,
+      lastUpdated: 0
+    };
+  }
+  return { lessonCompletions, domainCompletions };
 }
 function initializeAllComponentsWithDefaults() {
   const components = {};
@@ -47473,14 +47535,18 @@ function initializeAllComponentsWithDefaults() {
     const componentType = curriculumData.getComponentType(componentId);
     if (componentType) {
       const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : {};
-    } else {
-      components[componentIdStr] = {};
+      if (initializer3) {
+        components[componentIdStr] = initializer3();
+      } else {
+        components[componentIdStr] = { lastUpdated: 0 };
+      }
     }
   }
   return components;
 }
 function createFullyDefaultedResult(expectedWebId, foundWebId) {
+  const allComponentIds2 = curriculumData.getAllComponentIds();
+  const { lessonCompletions, domainCompletions } = initializeAllLessonsAndDomainsWithDefaults();
   return {
     perfectlyValidInput: false,
     // Fully defaulted = not valid input
@@ -47489,30 +47555,30 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
         webId: expectedWebId
       },
       overallProgress: {
-        lessonCompletions: {},
-        domainsCompleted: [],
+        lessonCompletions,
+        domainCompletions,
         currentStreak: 0,
         lastStreakCheck: 0,
         totalLessonsCompleted: 0,
         totalDomainsCompleted: 0
       },
       settings: {
-        weekStartDay: "monday",
-        weekStartTimeUTC: "00:00",
-        theme: "auto",
-        learningPace: "standard",
-        optOutDailyPing: false,
-        optOutErrorPing: false,
-        fontSize: "medium",
-        highContrast: false,
-        reducedMotion: false,
-        focusIndicatorStyle: "default",
-        audioEnabled: true
+        weekStartDay: ["monday", 0],
+        weekStartTimeUTC: ["00:00", 0],
+        theme: ["auto", 0],
+        learningPace: ["standard", 0],
+        optOutDailyPing: [false, 0],
+        optOutErrorPing: [false, 0],
+        fontSize: ["medium", 0],
+        highContrast: [false, 0],
+        reducedMotion: [false, 0],
+        focusIndicatorStyle: ["default", 0],
+        audioEnabled: [true, 0]
       },
       navigationState: {
         currentEntityId: 0,
         currentPage: 0,
-        lastUpdated: Date.now()
+        lastUpdated: Math.floor(Date.now() / 1e3)
       },
       combinedComponentProgress: {
         components: initializeAllComponentsWithDefaults()
@@ -47533,7 +47599,7 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
       combinedComponentProgress: {
         defaultedRatio: 1,
         componentsRetained: 0,
-        componentsDefaulted: 0
+        componentsDefaulted: allComponentIds2.length
       }
     },
     criticalFailures: {
@@ -47547,80 +47613,62 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
 
 // src/ts/initialization/progressMerger.ts
 function mergeOverallProgress(dataA, dataB) {
-  const mergedCompletions = { ...dataA.lessonCompletions };
-  for (const [lessonId, timestamp2] of Object.entries(dataB.lessonCompletions)) {
-    const existingTimestamp = mergedCompletions[lessonId];
-    const newTimestamp = timestamp2;
-    if (!existingTimestamp || newTimestamp > existingTimestamp) {
-      mergedCompletions[lessonId] = newTimestamp;
-    }
+  const mergedLessons = {};
+  for (const [lessonId, compA] of Object.entries(dataA.lessonCompletions)) {
+    const compB = dataB.lessonCompletions[lessonId];
+    mergedLessons[lessonId] = compA.lastUpdated >= compB.lastUpdated ? compA : compB;
   }
-  const mergedDomains = Array.from(
-    /* @__PURE__ */ new Set([...dataA.domainsCompleted, ...dataB.domainsCompleted])
-  );
-  const mergedLessonsCount = Math.max(
-    dataA.totalLessonsCompleted,
-    dataB.totalLessonsCompleted
-  );
-  const mergedDomainsCount = Math.max(
-    dataA.totalDomainsCompleted,
-    dataB.totalDomainsCompleted
-  );
+  const mergedDomains = {};
+  for (const [domainId, compA] of Object.entries(dataA.domainCompletions)) {
+    const compB = dataB.domainCompletions[domainId];
+    mergedDomains[domainId] = compA.lastUpdated >= compB.lastUpdated ? compA : compB;
+  }
+  const totalLessonsCompleted = Object.values(mergedLessons).filter((c) => c.firstCompleted !== null).length;
+  const totalDomainsCompleted = Object.values(mergedDomains).filter((c) => c.firstCompleted !== null).length;
   const useDataA = dataA.lastStreakCheck >= dataB.lastStreakCheck;
   const mergedStreak = useDataA ? dataA.currentStreak : dataB.currentStreak;
   const mergedStreakCheck = Math.max(dataA.lastStreakCheck, dataB.lastStreakCheck);
   return {
-    lessonCompletions: mergedCompletions,
-    domainsCompleted: mergedDomains,
-    totalLessonsCompleted: mergedLessonsCount,
-    totalDomainsCompleted: mergedDomainsCount,
+    lessonCompletions: mergedLessons,
+    domainCompletions: mergedDomains,
+    totalLessonsCompleted,
+    totalDomainsCompleted,
     currentStreak: mergedStreak,
     lastStreakCheck: mergedStreakCheck
   };
 }
 function mergeSettings(dataA, dataB) {
-  return dataA;
+  return {
+    weekStartDay: dataA.weekStartDay[1] >= dataB.weekStartDay[1] ? dataA.weekStartDay : dataB.weekStartDay,
+    weekStartTimeUTC: dataA.weekStartTimeUTC[1] >= dataB.weekStartTimeUTC[1] ? dataA.weekStartTimeUTC : dataB.weekStartTimeUTC,
+    theme: dataA.theme[1] >= dataB.theme[1] ? dataA.theme : dataB.theme,
+    learningPace: dataA.learningPace[1] >= dataB.learningPace[1] ? dataA.learningPace : dataB.learningPace,
+    optOutDailyPing: dataA.optOutDailyPing[1] >= dataB.optOutDailyPing[1] ? dataA.optOutDailyPing : dataB.optOutDailyPing,
+    optOutErrorPing: dataA.optOutErrorPing[1] >= dataB.optOutErrorPing[1] ? dataA.optOutErrorPing : dataB.optOutErrorPing,
+    fontSize: dataA.fontSize[1] >= dataB.fontSize[1] ? dataA.fontSize : dataB.fontSize,
+    highContrast: dataA.highContrast[1] >= dataB.highContrast[1] ? dataA.highContrast : dataB.highContrast,
+    reducedMotion: dataA.reducedMotion[1] >= dataB.reducedMotion[1] ? dataA.reducedMotion : dataB.reducedMotion,
+    focusIndicatorStyle: dataA.focusIndicatorStyle[1] >= dataB.focusIndicatorStyle[1] ? dataA.focusIndicatorStyle : dataB.focusIndicatorStyle,
+    audioEnabled: dataA.audioEnabled[1] >= dataB.audioEnabled[1] ? dataA.audioEnabled : dataB.audioEnabled
+  };
 }
 function mergeNavigationState(dataA, dataB) {
   return dataA.lastUpdated >= dataB.lastUpdated ? dataA : dataB;
 }
 function mergeCombinedComponentProgress(dataA, dataB) {
-  const mergedComponents = { ...dataA.components };
-  for (const [componentId, progressB] of Object.entries(dataB.components)) {
-    const progressA = mergedComponents[componentId];
-    if (!progressA) {
-      mergedComponents[componentId] = progressB;
-      continue;
-    }
-    const scoreA = countNonDefaultValues(progressA);
-    const scoreB = countNonDefaultValues(progressB);
-    mergedComponents[componentId] = scoreA >= scoreB ? progressA : progressB;
+  const mergedComponents = {};
+  for (const [componentId, progA] of Object.entries(dataA.components)) {
+    const progB = dataB.components[componentId];
+    mergedComponents[componentId] = progA.lastUpdated >= progB.lastUpdated ? progA : progB;
   }
-  return {
-    components: mergedComponents
-  };
-}
-function countNonDefaultValues(progress) {
-  let score = 0;
-  for (const value of Object.values(progress)) {
-    if (Array.isArray(value)) {
-      score += value.filter((v) => v === true).length;
-    } else if (typeof value === "number" && value > 0) {
-      score += value;
-    } else if (typeof value === "boolean" && value) {
-      score += 1;
-    } else if (typeof value === "string" && value.length > 0) {
-      score += 1;
-    }
-  }
-  return score;
+  return { components: mergedComponents };
 }
 function mergeBundles(bundleA, bundleB) {
-  console.log("Merging bundles using trump strategies");
+  console.log("Merging bundles using timestamp-based conflict resolution");
   return {
-    // Metadata from primary bundle
+    // Metadata from primary bundle (webId should be identical in both)
     metadata: bundleA.metadata,
-    // Merge user data sections
+    // Merge user data sections using timestamps
     overallProgress: mergeOverallProgress(
       bundleA.overallProgress,
       bundleB.overallProgress
@@ -50492,7 +50540,10 @@ var BaseComponentConfigSchema = external_exports.object({
   order: external_exports.number().int().min(-1e6).max(1e6)
   // Display order: 100, 200, 300, etc.
 });
-var BaseComponentProgressSchema = external_exports.object({});
+var BaseComponentProgressSchema = external_exports.object({
+  lastUpdated: external_exports.number().int().min(0).default(0)
+  // Unix timestamp in seconds
+});
 
 // src/ts/components/cores/basicTaskCore.ts
 var CheckboxItemSchema = external_exports.object({
@@ -50507,10 +50558,6 @@ var BasicTaskComponentConfigSchema = BaseComponentConfigSchema.extend({
 });
 var BasicTaskComponentProgressSchema = BaseComponentProgressSchema.extend({
   checkbox_checked: external_exports.array(external_exports.boolean()).default([])
-});
-var BasicTaskMessageSchema = external_exports.object({
-  method: external_exports.enum(["setCheckboxState"]),
-  args: external_exports.array(external_exports.any())
 });
 
 // src/ts/core/lessonSchemas.ts
@@ -50796,41 +50843,30 @@ async function initializeNewUser(lessonConfigs) {
 }
 
 // src/ts/initialization/bootstrap.ts
-init_meraBridge();
+var CLOCK_SKEW_THRESHOLD_MS = 6e4;
 var MAX_ATTEMPTS = 50;
 var POLL_INTERVAL_MS = 100;
-var CLOCK_SKEW_THRESHOLD_MS = 6e4;
 var timeline = null;
 var errorDisplay = null;
-function initializeWhenReady() {
-  console.log("\u{1F680} Starting initialization...");
-  window.bootstrapInstance = bootstrapInstance;
-  try {
-    setupUI();
-    console.log("\u2705 UI setup successfully!");
-  } catch (uiError) {
-    console.error("\u{1F4A5} UI setup failed:", uiError);
-    console.error("Cannot continue - refresh the page");
-    return;
-  }
-  startBootstrap().catch((error46) => {
-    console.error("\u{1F4A5} Bootstrap startup failed:", error46);
-    showBootstrapError(error46);
-  });
-}
 function setupUI() {
-  console.log("\u{1F3A8} Setting up UI components...");
-  const authStatus = document.getElementById("auth-status");
-  if (authStatus) {
-    authStatus.classList.add("hidden");
+  try {
+    console.log("\u{1F3A8} Setting up UI components...");
+    const authStatus = document.getElementById("auth-status");
+    if (authStatus) {
+      authStatus.classList.add("hidden");
+    }
+    const lessonContainer = document.getElementById("lesson-container");
+    if (lessonContainer) {
+      lessonContainer.classList.remove("hidden");
+    }
+    timeline = new TimelineContainer("lesson-container");
+    errorDisplay = new SolidConnectionErrorDisplay(timeline);
+    console.log("\u2705 UI components initialized");
+    return true;
+  } catch (error46) {
+    console.error("\u{1F4A5} UI setup failed:", error46);
+    return false;
   }
-  const lessonContainer = document.getElementById("lesson-container");
-  if (lessonContainer) {
-    lessonContainer.classList.remove("hidden");
-  }
-  timeline = new TimelineContainer("lesson-container");
-  errorDisplay = new SolidConnectionErrorDisplay(timeline);
-  console.log("\u2705 UI components initialized");
 }
 function showBootstrapError(error46) {
   const errorMessage = error46 instanceof Error ? error46.message : "Unknown error occurred";
@@ -50858,52 +50894,23 @@ function showBootstrapError(error46) {
     `;
   }
 }
-async function startBootstrap() {
-  console.log("\u{1F680} BOOTSTRAP: start_bootstrap() function called!");
-  const bridge = MeraBridge.getInstance();
-  let solidSessionReady = false;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    try {
-      if (await bridge.check()) {
-        solidSessionReady = true;
-        console.log(`\u2705 Bridge ready on attempt ${attempt + 1}`);
-        break;
-      } else {
-        console.log(`\u{1F504} Attempt ${attempt + 1}/${MAX_ATTEMPTS} - Bridge not ready`);
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-      }
-    } catch (error46) {
-      console.log(`\u274C Attempt ${attempt + 1}/${MAX_ATTEMPTS} - Error: ${error46}`);
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    }
-  }
-  if (solidSessionReady) {
-    await checkClockSkew();
-    continueToNextModule();
-  } else {
-    console.log("\u274C Solid pod not connected. Authentication required.");
-    noSolidConnection();
-  }
-}
 async function checkClockSkew() {
   try {
-    const response = await fetch("/static/web/update-home-journey.js", {
-      method: "HEAD",
-      cache: "no-store"
-      // Ensure fresh response with current Date header
-    });
+    const clientTime = Date.now();
+    const response = await fetch("/", { method: "HEAD" });
     if (!response.ok) {
-      throw new Error(`Server returned ${response.status} - cannot verify clock`);
+      throw new Error(
+        `Server returned ${response.status} - cannot verify clock`
+      );
     }
     const serverDateHeader = response.headers.get("Date");
     if (!serverDateHeader) {
       throw new Error("No Date header in server response - cannot verify clock");
     }
     const serverTime = new Date(serverDateHeader).getTime();
-    const clientTime = Date.now();
-    const skewMs = Math.abs(serverTime - clientTime);
+    const skewMs = Math.abs(clientTime - serverTime);
     if (skewMs > CLOCK_SKEW_THRESHOLD_MS) {
-      const skewSeconds = Math.round(skewMs / 1e3);
+      const skewSeconds = Math.floor(skewMs / 1e3);
       throw new Error(
         `Clock skew detected: ${skewSeconds} seconds. Please check your device time settings.`
       );
@@ -50916,18 +50923,21 @@ async function checkClockSkew() {
 }
 function continueToNextModule() {
   console.log("\u{1F517} Solid Pod connected - starting initialization");
-  initializationOrchestrator().then(() => {
-    console.log("\u2705 Initialization completed successfully");
-  }).catch((error46) => {
-    console.error("\u274C Initialization failed:", error46);
-    if (errorDisplay) {
-      errorDisplay.showSystemError(
-        "initialization-failed",
-        "Failed to load user progress",
-        error46 instanceof Error ? error46.message : "Unknown initialization error"
-      );
+  initializationOrchestrator().then(
+    () => {
+      console.log("\u2705 Initialization completed successfully");
+    },
+    (error46) => {
+      console.error("\u274C Initialization failed:", error46);
+      if (errorDisplay) {
+        errorDisplay.showSystemError(
+          "initialization-failed",
+          "Failed to load user progress",
+          error46 instanceof Error ? error46.message : "Unknown error"
+        );
+      }
     }
-  });
+  );
   console.log("\u2705 Bootstrap complete - initialization running independently");
 }
 function noSolidConnection() {
@@ -50936,31 +50946,42 @@ function noSolidConnection() {
     errorDisplay.showSolidConnectionError();
   }
 }
-var BootstrapManager = class {
-  /**
-   * Retry Solid Pod connection after error.
-   * 
-   * Called by "Retry" button in authentication error display.
-   * Clears error UI and restarts bootstrap sequence.
-   * 
-   * @returns Promise that resolves when bootstrap completes or rejects on failure
-   */
-  async retrySolidConnection() {
-    console.log("\u{1F504} Retrying Solid Pod connection...");
-    if (errorDisplay) {
-      errorDisplay.clearError("solid-connection");
+async function startBootstrap() {
+  try {
+    if (!setupUI()) {
+      console.error("Cannot continue - UI setup failed");
+      return;
     }
-    return startBootstrap();
+    console.log("\u{1F50D} Checking for Solid Pod authentication...");
+    const bridge = MeraBridge.getInstance();
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (bridge.check()) {
+        console.log(`\u2705 Solid Pod connected (attempt ${attempt})`);
+        await checkClockSkew();
+        continueToNextModule();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    console.log(
+      `\u274C No Solid Pod connection after ${MAX_ATTEMPTS} attempts. Authentication required.`
+    );
+    noSolidConnection();
+  } catch (error46) {
+    console.error("\u{1F4A5} Bootstrap error:", error46);
+    showBootstrapError(error46);
   }
-};
-var bootstrapInstance = new BootstrapManager();
+}
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeWhenReady);
+  document.addEventListener("DOMContentLoaded", () => {
+    console.log("\u{1F680} Starting initialization...");
+    startBootstrap();
+  });
 } else {
-  initializeWhenReady();
+  console.log("\u{1F680} Starting initialization...");
+  startBootstrap();
 }
 export {
-  BootstrapManager,
   startBootstrap
 };
 /*! Bundled license information:

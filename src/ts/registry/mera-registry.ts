@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2025-12-13T22:30:25.016550
+ * Generated on: 2025-12-14T09:18:27.688041
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -182,6 +182,14 @@ export class CurriculumRegistry {
 
     getAllComponentIds(): number[] {
         return Array.from(this.componentIdToType.keys());
+    }
+
+    getAllLessonIds(): number[] {
+        return Array.from(this.lessonIds);
+    }
+
+    getAllDomainIds(): number[] {
+        return Array.from(this.domainMap.keys());
     }
 
     getLessonIdForComponent(componentId: number): number | undefined {

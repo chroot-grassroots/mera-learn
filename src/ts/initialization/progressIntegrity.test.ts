@@ -30,6 +30,8 @@ vi.mock('../registry/mera-registry.js', () => ({
       return null;
     },
     getAllComponentIds: () => [1001, 1002, 2001],
+    getAllLessonIds: () => [100, 200],
+    getAllDomainIds: () => [1, 2],
   },
   progressSchemaMap: new Map(),
   componentValidatorMap: new Map(), // No validators = components always retained if schema passes
@@ -85,8 +87,16 @@ describe('progressIntegrity', () => {
       const result = enforceDataIntegrity(invalidJson, 'test-webid', mockLessonConfigs);
 
       expect(result.perfectlyValidInput).toBe(false);
-      expect(result.bundle.metadata.webId).toBe('test-webid');
-      expect(result.bundle.overallProgress.lessonCompletions).toEqual({});
+      expect(result.bundle.metadata.webId).toBe('WEBID_MISMATCH_ERROR');
+      // All curriculum lessons should be initialized as incomplete
+      expect(result.bundle.overallProgress.lessonCompletions).toEqual({
+        '100': { firstCompleted: null, lastUpdated: 0 },
+        '200': { firstCompleted: null, lastUpdated: 0 },
+      });
+      expect(result.bundle.overallProgress.domainCompletions).toEqual({
+        '1': { firstCompleted: null, lastUpdated: 0 },
+        '2': { firstCompleted: null, lastUpdated: 0 },
+      });
       expect(result.recoveryMetrics.metadata.defaultedRatio).toBe(1.0);
       expect(result.criticalFailures.webIdMismatch).toBeDefined();
       expect(result.criticalFailures.webIdMismatch?.found).toBe(null);
@@ -171,7 +181,7 @@ describe('progressIntegrity', () => {
       expect(result.criticalFailures.webIdMismatch).toBeDefined();
       expect(result.criticalFailures.webIdMismatch?.expected).toBe('expected-webid');
       expect(result.criticalFailures.webIdMismatch?.found).toBe('wrong-webid');
-      expect(result.bundle.metadata.webId).toBe('expected-webid');
+      expect(result.bundle.metadata.webId).toBe('WEBID_MISMATCH_ERROR');
     });
 
     it('defaults metadata when malformed', () => {
@@ -192,7 +202,7 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(result.bundle.metadata.webId).toBe('test-webid');
+      expect(result.bundle.metadata.webId).toBe('WEBID_MISMATCH_ERROR');
       expect(result.recoveryMetrics.metadata.defaultedRatio).toBe(1.0);
     });
   });
@@ -805,8 +815,16 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(result.bundle.metadata.webId).toBe('test-webid');
-      expect(result.bundle.overallProgress.lessonCompletions).toEqual({});
+      expect(result.bundle.metadata.webId).toBe('WEBID_MISMATCH_ERROR');
+      // All curriculum lessons should be initialized as incomplete
+      expect(result.bundle.overallProgress.lessonCompletions).toEqual({
+        '100': { firstCompleted: null, lastUpdated: 0 },
+        '200': { firstCompleted: null, lastUpdated: 0 },
+      });
+      expect(result.bundle.overallProgress.domainCompletions).toEqual({
+        '1': { firstCompleted: null, lastUpdated: 0 },
+        '2': { firstCompleted: null, lastUpdated: 0 },
+      });
       expect(result.bundle.settings.theme[0]).toBe('auto');
       expect(result.perfectlyValidInput).toBe(false);
     });

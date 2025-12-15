@@ -35,6 +35,7 @@
 import { z } from 'zod';
 import { 
   PodStorageBundle, 
+  PodStorageBundleSchema,
   PodMetadata,
   PodMetadataSchema 
 } from '../persistence/podStorageSchema.js';
@@ -42,8 +43,9 @@ import {
   OverallProgressData,
   OverallProgressDataSchema,
   CompletionData,
+  isValidLessonId,
+  isValidDomainId,
 } from '../core/overallProgressSchema.js';
-import { reconcileAgainstCurriculum } from '../core/overallProgressSchema.js';
 import {
   SettingsData,
   SettingsDataSchema,
@@ -193,13 +195,25 @@ export function enforceDataIntegrity(
   const componentProgressResult = extractCombinedComponentProgress(parsed, lessonConfigs);
 
   // Phase 3: Assemble valid bundle
-  const bundle: PodStorageBundle = {
+  let bundle: PodStorageBundle = {
     metadata: metadataResult.data,
     overallProgress: overallProgressResult.data,
     settings: settingsResult.data,
     navigationState: navigationResult.data,
     combinedComponentProgress: componentProgressResult.data,
   };
+
+  // Phase 3.5: Final validation - ensure assembled bundle conforms to schema
+  // This catches any inconsistencies from manual construction
+  // Should never fail if extraction functions are correct, but provides safety net
+  try {
+    bundle = PodStorageBundleSchema.parse(bundle);
+  } catch (validationError) {
+    // This should never happen - indicates bug in extraction logic
+    console.error('CRITICAL: Assembled bundle failed schema validation:', validationError);
+    // Re-throw because this means our extraction logic has a bug
+    throw new Error('Bundle validation failed - this is a bug in progressIntegrity.ts');
+  }
 
   // Phase 4: Calculate if input was perfectly valid (needed no fixes)
   const hasCriticalFailures = metadataResult.webIDMismatch !== undefined;
@@ -256,6 +270,10 @@ export function enforceDataIntegrity(
  * Strategy: Metadata is critical (webId must match or reject backup).
  * Try each field independently with validation.
  * 
+ * SECURITY: If webId doesn't match expectedWebId, returns "WEBID_MISMATCH_ERROR"
+ * placeholder to prevent accidentally loading another user's data. The initialization
+ * orchestrator must check for this and handle it as a critical failure.
+ * 
  * @param parsed - Raw parsed JSON
  * @param expectedWebId - WebId that should be in backup
  * @returns Metadata + defaultedRatio + webId mismatch info
@@ -271,7 +289,7 @@ function extractMetadata(
     // Check webId match
     if (zodResult.data.webId !== expectedWebId) {
       return {
-        data: { webId: expectedWebId },
+        data: { webId: "WEBID_MISMATCH_ERROR" },  // Security: Never use mismatched webId
         defaultedRatio: 1.0,
         webIDMismatch: {
           expected: expectedWebId,
@@ -296,7 +314,7 @@ function extractMetadata(
   } : undefined;
 
   return {
-    data: { webId: expectedWebId },  // Always use expected
+    data: { webId: "WEBID_MISMATCH_ERROR" },  // Security: Never use mismatched webId
     defaultedRatio: 1.0,
     webIDMismatch,
   };
@@ -370,15 +388,20 @@ function extractOverallProgress(
 /**
  * Reconcile lesson/domain completions against current curriculum.
  * 
- * Counts lessons/domains with firstCompleted !== null (completed items only).
+ * Starts with valid schema defaults, then selectively copies validated fields.
+ * This ensures the result always conforms to OverallProgressDataSchema.
  * 
- * First detects corruption by comparing current-count trackers to actual data.
- * Then filters out deleted lessons/domains using shared validator from schema module.
- * Finally calculates dropped ratios (0.0 = none dropped, 1.0 = all dropped).
+ * Uses shared validation helpers (isValidLessonId, isValidDomainId) from
+ * overallProgressSchema to maintain single source of truth for validation logic.
  * 
- * In valid data, the counters match the count of completed items (firstCompleted !== null).
- * Mismatch indicates backup file corruption where some array entries were lost but
- * the counter survived.
+ * Process:
+ * 1. Detect corruption by comparing counters to actual completion data
+ * 2. Initialize result with valid schema defaults
+ * 3. For each curriculum lesson/domain:
+ *    - If exists in backup and valid → copy it
+ *    - Otherwise → leave as default (incomplete)
+ * 4. Selectively copy other fields only if they pass validation
+ * 5. Track how many completed items were dropped (curriculum reconciliation)
  * 
  * @param progress - Progress data to reconcile
  * @returns Reconciled progress + corruption detection + dropped ratios
@@ -386,6 +409,16 @@ function extractOverallProgress(
 function reconcileOverallProgress(
   progress: OverallProgressData
 ): OverallProgressExtractionResult {
+  // STEP 0: Start with valid schema defaults
+  const result: OverallProgressData = {
+    lessonCompletions: {},
+    domainCompletions: {},
+    currentStreak: 0,
+    lastStreakCheck: 0,
+    totalLessonsCompleted: 0,
+    totalDomainsCompleted: 0,
+  };
+
   // STEP 1: Detect corruption BEFORE curriculum reconciliation
   // Current-count trackers should match actual completed count in valid data
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
@@ -403,24 +436,95 @@ function reconcileOverallProgress(
   const domainsLostToCorruption = Math.max(0, claimedDomains - actualDomains);
   const corruptionDetected = lessonsLostToCorruption > 0 || domainsLostToCorruption > 0;
 
-  // STEP 2: Reconcile against curriculum (filters out deleted content)
-  const reconciled = reconcileAgainstCurriculum(progress, curriculumData);
+  // STEP 2: Build lesson completions by iterating curriculum
+  const allLessonIds = curriculumData.getAllLessonIds();
+  let lessonsKept = 0;
   
-  // STEP 3: Calculate dropped ratios from curriculum reconciliation
-  // Note: This is SEPARATE from corruption detection
-  // Corruption = data loss from backup corruption
-  // Dropping = valid data for deleted curriculum content
-  const originalLessonCount = actualLessons;  // Use actual, not claimed
+  for (const lessonId of allLessonIds) {
+    const key = lessonId.toString();
+    const existing = progress.lessonCompletions[key];
+    
+    // Validate structure before copying
+    if (existing && 
+        typeof existing === 'object' && 
+        existing !== null &&
+        'firstCompleted' in existing &&
+        'lastUpdated' in existing &&
+        (existing.firstCompleted === null || typeof existing.firstCompleted === 'number') &&
+        typeof existing.lastUpdated === 'number') {
+      // Valid - copy it
+      result.lessonCompletions[key] = existing;
+      if (existing.firstCompleted !== null) {
+        lessonsKept++;
+      }
+    } else {
+      // Invalid or missing - use default
+      result.lessonCompletions[key] = { firstCompleted: null, lastUpdated: 0 };
+    }
+  }
+  
+  // STEP 3: Build domain completions by iterating curriculum
+  const allDomainIds = curriculumData.getAllDomainIds();
+  let domainsKept = 0;
+  
+  for (const domainId of allDomainIds) {
+    const key = domainId.toString();
+    const existing = progress.domainCompletions[key];
+    
+    // Validate structure before copying
+    if (existing && 
+        typeof existing === 'object' && 
+        existing !== null &&
+        'firstCompleted' in existing &&
+        'lastUpdated' in existing &&
+        (existing.firstCompleted === null || typeof existing.firstCompleted === 'number') &&
+        typeof existing.lastUpdated === 'number') {
+      // Valid - copy it
+      result.domainCompletions[key] = existing;
+      if (existing.firstCompleted !== null) {
+        domainsKept++;
+      }
+    } else {
+      // Invalid or missing - use default
+      result.domainCompletions[key] = { firstCompleted: null, lastUpdated: 0 };
+    }
+  }
+  
+  // STEP 4: Selectively copy other fields only if valid
+  // currentStreak: must be number between 0 and 1000
+  if (typeof progress.currentStreak === 'number' && 
+      progress.currentStreak >= 0 && 
+      progress.currentStreak <= 1000) {
+    result.currentStreak = progress.currentStreak;
+  }
+  // else: stays at default 0
+  
+  // lastStreakCheck: must be non-negative integer
+  if (typeof progress.lastStreakCheck === 'number' && 
+      Number.isInteger(progress.lastStreakCheck) &&
+      progress.lastStreakCheck >= 0) {
+    result.lastStreakCheck = progress.lastStreakCheck;
+  }
+  // else: stays at default 0
+  
+  // totalLessonsCompleted and totalDomainsCompleted are recalculated from kept counts
+  result.totalLessonsCompleted = lessonsKept;
+  result.totalDomainsCompleted = domainsKept;
+  
+  // STEP 5: Calculate dropped ratios
+  const lessonsDropped = Math.max(0, actualLessons - lessonsKept);
+  const domainsDropped = Math.max(0, actualDomains - domainsKept);
+  const originalLessonCount = actualLessons;
   const originalDomainCount = actualDomains;
   
   return {
-    data: reconciled.cleaned,
+    data: result,
     lessonsDroppedRatio: originalLessonCount > 0 
-      ? reconciled.lessonsDropped / originalLessonCount 
-      : 0.0,  // No lessons = nothing to drop
+      ? lessonsDropped / originalLessonCount 
+      : 0.0,
     domainsDroppedRatio: originalDomainCount > 0 
-      ? reconciled.domainsDropped / originalDomainCount 
-      : 0.0,  // No domains = nothing to drop
+      ? domainsDropped / originalDomainCount 
+      : 0.0,
     corruptionDetected,
     lessonsLostToCorruption,
     domainsLostToCorruption,
@@ -735,6 +839,43 @@ function extractCombinedComponentProgress(
 // ============================================================================
 
 /**
+ * Initialize all lessons and domains in curriculum with default incomplete values.
+ * 
+ * Creates a complete structure with all curriculum entities initialized to their
+ * default incomplete state. Used when creating fully defaulted result for 
+ * unparseable JSON or catastrophic recovery scenarios.
+ * 
+ * @returns Object with lessonCompletions and domainCompletions fully initialized
+ */
+function initializeAllLessonsAndDomainsWithDefaults(): {
+  lessonCompletions: Record<string, CompletionData>;
+  domainCompletions: Record<string, CompletionData>;
+} {
+  const lessonCompletions: Record<string, CompletionData> = {};
+  const domainCompletions: Record<string, CompletionData> = {};
+  
+  // Initialize all curriculum lessons as incomplete
+  const allLessonIds = curriculumData.getAllLessonIds();
+  for (const lessonId of allLessonIds) {
+    lessonCompletions[lessonId.toString()] = {
+      firstCompleted: null,
+      lastUpdated: 0,
+    };
+  }
+  
+  // Initialize all curriculum domains as incomplete
+  const allDomainIds = curriculumData.getAllDomainIds();
+  for (const domainId of allDomainIds) {
+    domainCompletions[domainId.toString()] = {
+      firstCompleted: null,
+      lastUpdated: 0,
+    };
+  }
+  
+  return { lessonCompletions, domainCompletions };
+}
+
+/**
  * Initialize all components in curriculum with default values.
  * 
  * Used when creating fully defaulted result for unparseable JSON.
@@ -774,43 +915,55 @@ function createFullyDefaultedResult(
   foundWebId: string | null
 ): EnforcementResult {
   const allComponentIds = curriculumData.getAllComponentIds();
+  const { lessonCompletions, domainCompletions } = initializeAllLessonsAndDomainsWithDefaults();
+  
+  let bundle: PodStorageBundle = {
+    metadata: {
+      webId: "WEBID_MISMATCH_ERROR",  // Security: Unparseable = treat as mismatch
+    },
+    overallProgress: {
+      lessonCompletions,
+      domainCompletions,
+      currentStreak: 0,
+      lastStreakCheck: 0,
+      totalLessonsCompleted: 0,
+      totalDomainsCompleted: 0,
+    },
+    settings: {
+      weekStartDay: ['monday', 0],
+      weekStartTimeUTC: ['00:00', 0],
+      theme: ['auto', 0],
+      learningPace: ['standard', 0],
+      optOutDailyPing: [false, 0],
+      optOutErrorPing: [false, 0],
+      fontSize: ['medium', 0],
+      highContrast: [false, 0],
+      reducedMotion: [false, 0],
+      focusIndicatorStyle: ['default', 0],
+      audioEnabled: [true, 0],
+    },
+    navigationState: {
+      currentEntityId: 0,
+      currentPage: 0,
+      lastUpdated: Math.floor(Date.now() / 1000),
+    },
+    combinedComponentProgress: {
+      components: initializeAllComponentsWithDefaults(),
+    },
+  };
+
+  // Validate the fully defaulted bundle
+  try {
+    bundle = PodStorageBundleSchema.parse(bundle);
+  } catch (validationError) {
+    // This should never happen - our defaults should always be valid
+    console.error('CRITICAL: Default bundle failed schema validation:', validationError);
+    throw new Error('Default bundle validation failed - this is a bug in progressIntegrity.ts');
+  }
   
   return {
     perfectlyValidInput: false,  // Fully defaulted = not valid input
-    bundle: {
-      metadata: {
-        webId: expectedWebId,
-      },
-      overallProgress: {
-        lessonCompletions: {},
-        domainCompletions: {},
-        currentStreak: 0,
-        lastStreakCheck: 0,
-        totalLessonsCompleted: 0,
-        totalDomainsCompleted: 0,
-      },
-      settings: {
-        weekStartDay: ['monday', 0],
-        weekStartTimeUTC: ['00:00', 0],
-        theme: ['auto', 0],
-        learningPace: ['standard', 0],
-        optOutDailyPing: [false, 0],
-        optOutErrorPing: [false, 0],
-        fontSize: ['medium', 0],
-        highContrast: [false, 0],
-        reducedMotion: [false, 0],
-        focusIndicatorStyle: ['default', 0],
-        audioEnabled: [true, 0],
-      },
-      navigationState: {
-        currentEntityId: 0,
-        currentPage: 0,
-        lastUpdated: Math.floor(Date.now() / 1000),
-      },
-      combinedComponentProgress: {
-        components: initializeAllComponentsWithDefaults(),
-      },
-    },
+    bundle,
     recoveryMetrics: {
       metadata: { defaultedRatio: 1.0 },
       overallProgress: { 

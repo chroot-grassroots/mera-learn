@@ -654,6 +654,14 @@ export class CurriculumRegistry {{
         return Array.from(this.componentIdToType.keys());
     }}
 
+    getAllLessonIds(): number[] {{
+        return Array.from(this.lessonIds);
+    }}
+
+    getAllDomainIds(): number[] {{
+        return Array.from(this.domainMap.keys());
+    }}
+
     getLessonIdForComponent(componentId: number): number | undefined {{
         return this.componentToLesson.get(componentId);
     }}

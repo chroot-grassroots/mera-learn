@@ -6,7 +6,7 @@ import { OverallProgressDataSchema } from "./overallProgressSchema.js";
 /**
  * Immutable ID - used for all entities (lessons, components, domains, etc.)
  */
-export const ImmutableId = z.number().int().min(1).max(999999999999);
+export const ImmutableId = z.number().int().min(0).max(999999999999);
 
 /**
  * Trump strategies for resolving conflicts during data merging

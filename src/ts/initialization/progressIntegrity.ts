@@ -270,9 +270,10 @@ export function enforceDataIntegrity(
  * Strategy: Metadata is critical (webId must match or reject backup).
  * Try each field independently with validation.
  * 
- * SECURITY: If webId doesn't match expectedWebId, returns "WEBID_MISMATCH_ERROR"
- * placeholder to prevent accidentally loading another user's data. The initialization
- * orchestrator must check for this and handle it as a critical failure.
+ * SECURITY: If webId doesn't match expectedWebId, returns invalid placeholder URL
+ * "https://error.mera.invalid/webid-mismatch" to prevent accidentally loading 
+ * another user's data. The initialization orchestrator must check for this and 
+ * handle it as a critical failure.
  * 
  * @param parsed - Raw parsed JSON
  * @param expectedWebId - WebId that should be in backup
@@ -289,7 +290,7 @@ function extractMetadata(
     // Check webId match
     if (zodResult.data.webId !== expectedWebId) {
       return {
-        data: { webId: "WEBID_MISMATCH_ERROR" },  // Security: Never use mismatched webId
+        data: { webId: "https://error.mera.invalid/webid-mismatch" },  // Security: Never use mismatched webId
         defaultedRatio: 1.0,
         webIDMismatch: {
           expected: expectedWebId,
@@ -314,7 +315,7 @@ function extractMetadata(
   } : undefined;
 
   return {
-    data: { webId: "WEBID_MISMATCH_ERROR" },  // Security: Never use mismatched webId
+    data: { webId: "https://error.mera.invalid/webid-mismatch" },  // Security: Never use mismatched webId
     defaultedRatio: 1.0,
     webIDMismatch,
   };
@@ -701,7 +702,7 @@ function extractNavigationState(
   // Zod validation failed - return defaults
   return {
     data: {
-      currentEntityId: 0,
+      currentEntityId: 0,  // Main menu
       currentPage: 0,
       lastUpdated: Math.floor(Date.now() / 1000),
     },
@@ -919,7 +920,7 @@ function createFullyDefaultedResult(
   
   let bundle: PodStorageBundle = {
     metadata: {
-      webId: "WEBID_MISMATCH_ERROR",  // Security: Unparseable = treat as mismatch
+      webId: "https://error.mera.invalid/unparseable-json",  // Security: Unparseable = treat as mismatch
     },
     overallProgress: {
       lessonCompletions,
@@ -943,7 +944,7 @@ function createFullyDefaultedResult(
       audioEnabled: [true, 0],
     },
     navigationState: {
-      currentEntityId: 0,
+      currentEntityId: 0,  // Main menu
       currentPage: 0,
       lastUpdated: Math.floor(Date.now() / 1000),
     },

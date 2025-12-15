@@ -87,7 +87,7 @@ describe('progressIntegrity', () => {
       const result = enforceDataIntegrity(invalidJson, 'test-webid', mockLessonConfigs);
 
       expect(result.perfectlyValidInput).toBe(false);
-      expect(result.bundle.metadata.webId).toBe('WEBID_MISMATCH_ERROR');
+      expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/unparseable-json');
       // All curriculum lessons should be initialized as incomplete
       expect(result.bundle.overallProgress.lessonCompletions).toEqual({
         '100': { firstCompleted: null, lastUpdated: 0 },
@@ -181,7 +181,7 @@ describe('progressIntegrity', () => {
       expect(result.criticalFailures.webIdMismatch).toBeDefined();
       expect(result.criticalFailures.webIdMismatch?.expected).toBe('expected-webid');
       expect(result.criticalFailures.webIdMismatch?.found).toBe('wrong-webid');
-      expect(result.bundle.metadata.webId).toBe('WEBID_MISMATCH_ERROR');
+      expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/webid-mismatch');
     });
 
     it('defaults metadata when malformed', () => {
@@ -202,7 +202,7 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(result.bundle.metadata.webId).toBe('WEBID_MISMATCH_ERROR');
+      expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/webid-mismatch');
       expect(result.recoveryMetrics.metadata.defaultedRatio).toBe(1.0);
     });
   });
@@ -447,13 +447,13 @@ describe('progressIntegrity', () => {
           weekStartDay: ['friday', 0],
           weekStartTimeUTC: ['08:00', 0],
           theme: ['dark', 0],
-          learningPace: ['intensive', 0],
+          learningPace: ['flexible', 0],  // Changed from 'intensive' to 'flexible'
           optOutDailyPing: [true, 0],
           optOutErrorPing: [true, 0],
           fontSize: ['large', 0],
           highContrast: [true, 0],
           reducedMotion: [true, 0],
-          focusIndicatorStyle: ['high-visibility', 0],
+          focusIndicatorStyle: ['enhanced', 0],  // Changed from 'high-visibility' to 'enhanced'
           audioEnabled: [false, 0],
         },
         navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
@@ -815,7 +815,7 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(result.bundle.metadata.webId).toBe('WEBID_MISMATCH_ERROR');
+      expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/webid-mismatch');
       // All curriculum lessons should be initialized as incomplete
       expect(result.bundle.overallProgress.lessonCompletions).toEqual({
         '100': { firstCompleted: null, lastUpdated: 0 },

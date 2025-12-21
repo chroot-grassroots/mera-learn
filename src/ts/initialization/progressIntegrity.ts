@@ -3,11 +3,11 @@
  * @module initialization/progressIntegrity
  * 
  * TIMESTAMP ARCHITECTURE:
- * - lessonCompletions use CompletionData format {firstCompleted, lastUpdated}
- * - domainCompletions use CompletionData format {firstCompleted, lastUpdated}
+ * - lessonCompletions use CompletionData format {timeCompleted, lastUpdated}
+ * - domainCompletions use CompletionData format {timeCompleted, lastUpdated}
  * - Settings use tuple format [value, timestamp]
  * - Component progress includes lastUpdated timestamp
- * - Counters calculated from CompletionData.firstCompleted !== null
+ * - Counters calculated from CompletionData.timeCompleted !== null
  * 
  * Transforms potentially corrupted or malformed backup data into a valid
  * PodStorageBundle matching current schema version. Handles:
@@ -96,6 +96,8 @@ interface OverallProgressExtractionResult {
   data: OverallProgressData;
   lessonsDroppedRatio: number;  // 0.0 = none dropped, 1.0 = all dropped
   domainsDroppedRatio: number;  // 0.0 = none dropped, 1.0 = all dropped
+  lessonsDroppedCount: number;  // Absolute count of lessons dropped
+  domainsDroppedCount: number;  // Absolute count of domains dropped
   corruptionDetected: boolean;    // Mismatch between counters and actual data
   lessonsLostToCorruption: number; // Lessons missing due to corruption
   domainsLostToCorruption: number; // Domains missing due to corruption
@@ -124,6 +126,8 @@ export interface EnforcementResult {
     overallProgress: {
       lessonsDroppedRatio: number;
       domainsDroppedRatio: number;
+      lessonsDroppedCount: number;
+      domainsDroppedCount: number;
       corruptionDetected: boolean;
       lessonsLostToCorruption: number;
       domainsLostToCorruption: number;
@@ -238,6 +242,8 @@ export function enforceDataIntegrity(
       overallProgress: {
         lessonsDroppedRatio: overallProgressResult.lessonsDroppedRatio,
         domainsDroppedRatio: overallProgressResult.domainsDroppedRatio,
+        lessonsDroppedCount: overallProgressResult.lessonsDroppedCount,
+        domainsDroppedCount: overallProgressResult.domainsDroppedCount,
         corruptionDetected: overallProgressResult.corruptionDetected,
         lessonsLostToCorruption: overallProgressResult.lessonsLostToCorruption,
         domainsLostToCorruption: overallProgressResult.domainsLostToCorruption,
@@ -425,12 +431,12 @@ function reconcileOverallProgress(
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
   const claimedDomains = progress.totalDomainsCompleted ?? 0;
   
-  // Count items where firstCompleted !== null (not just object keys)
+  // Count items where timeCompleted !== null (not just object keys)
   const actualLessons = Object.values(progress.lessonCompletions)
-    .filter(completion => completion.firstCompleted !== null)
+    .filter(completion => completion.timeCompleted !== null)
     .length;
   const actualDomains = Object.values(progress.domainCompletions)
-    .filter(completion => completion.firstCompleted !== null)
+    .filter(completion => completion.timeCompleted !== null)
     .length;
   
   const lessonsLostToCorruption = Math.max(0, claimedLessons - actualLessons);
@@ -449,18 +455,18 @@ function reconcileOverallProgress(
     if (existing && 
         typeof existing === 'object' && 
         existing !== null &&
-        'firstCompleted' in existing &&
+        'timeCompleted' in existing &&
         'lastUpdated' in existing &&
-        (existing.firstCompleted === null || typeof existing.firstCompleted === 'number') &&
+        (existing.timeCompleted === null || typeof existing.timeCompleted === 'number') &&
         typeof existing.lastUpdated === 'number') {
       // Valid - copy it
       result.lessonCompletions[key] = existing;
-      if (existing.firstCompleted !== null) {
+      if (existing.timeCompleted !== null) {
         lessonsKept++;
       }
     } else {
       // Invalid or missing - use default
-      result.lessonCompletions[key] = { firstCompleted: null, lastUpdated: 0 };
+      result.lessonCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
     }
   }
   
@@ -476,18 +482,18 @@ function reconcileOverallProgress(
     if (existing && 
         typeof existing === 'object' && 
         existing !== null &&
-        'firstCompleted' in existing &&
+        'timeCompleted' in existing &&
         'lastUpdated' in existing &&
-        (existing.firstCompleted === null || typeof existing.firstCompleted === 'number') &&
+        (existing.timeCompleted === null || typeof existing.timeCompleted === 'number') &&
         typeof existing.lastUpdated === 'number') {
       // Valid - copy it
       result.domainCompletions[key] = existing;
-      if (existing.firstCompleted !== null) {
+      if (existing.timeCompleted !== null) {
         domainsKept++;
       }
     } else {
       // Invalid or missing - use default
-      result.domainCompletions[key] = { firstCompleted: null, lastUpdated: 0 };
+      result.domainCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
     }
   }
   
@@ -526,6 +532,8 @@ function reconcileOverallProgress(
     domainsDroppedRatio: originalDomainCount > 0 
       ? domainsDropped / originalDomainCount 
       : 0.0,
+    lessonsDroppedCount: lessonsDropped,
+    domainsDroppedCount: domainsDropped,
     corruptionDetected,
     lessonsLostToCorruption,
     domainsLostToCorruption,
@@ -859,7 +867,7 @@ function initializeAllLessonsAndDomainsWithDefaults(): {
   const allLessonIds = curriculumData.getAllLessonIds();
   for (const lessonId of allLessonIds) {
     lessonCompletions[lessonId.toString()] = {
-      firstCompleted: null,
+      timeCompleted: null,
       lastUpdated: 0,
     };
   }
@@ -868,7 +876,7 @@ function initializeAllLessonsAndDomainsWithDefaults(): {
   const allDomainIds = curriculumData.getAllDomainIds();
   for (const domainId of allDomainIds) {
     domainCompletions[domainId.toString()] = {
-      firstCompleted: null,
+      timeCompleted: null,
       lastUpdated: 0,
     };
   }
@@ -970,6 +978,8 @@ function createFullyDefaultedResult(
       overallProgress: { 
         lessonsDroppedRatio: 1.0, 
         domainsDroppedRatio: 1.0,
+        lessonsDroppedCount: 0,  // Nothing to drop - fully defaulted
+        domainsDroppedCount: 0,  // Nothing to drop - fully defaulted
         corruptionDetected: false,  // Fully defaulted = no corruption, just empty
         lessonsLostToCorruption: 0,
         domainsLostToCorruption: 0,

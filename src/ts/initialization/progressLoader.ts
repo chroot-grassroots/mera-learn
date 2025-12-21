@@ -9,9 +9,9 @@
  * Selection strategy:
  * - Perfect same-version backup wins immediately
  * - Score backups by data quality (corruption, defaulting, recency)
- * - When Pod quality is poor (score >= 1000), check localStorage as backup source
+ * - When Pod quality is poor (score >= 1000), always merge with localStorage
  * - Merge Pod + localStorage when offline work exists
- * - Validate merged results to catch counter mismatches
+ * - Validate merged results - throws if merge creates corruption (fail-fast)
  * 
  * Scoring weights prioritize:
  * 1. Lesson completions (precious user achievements)
@@ -29,7 +29,7 @@ import { mergeBundles } from './progressMerger.js';
 type RecoveryResult = EnforcementResult;
 
 // ============================================================================
-// PUBLIC API
+// MODULE EXPORTS
 // ============================================================================
 
 /**
@@ -41,6 +41,7 @@ type RecoveryResult = EnforcementResult;
  * and returns validated bundle ready for use.
  * 
  * @returns Recovery result with validated bundle, or null if no valid backups
+ * @throws Error if merge creates corruption (bug in progressMerger)
  */
 export async function orchestrateProgressLoading(
   lessonConfigs: Map<number, any>
@@ -50,8 +51,7 @@ export async function orchestrateProgressLoading(
   // Get webId from meraBridge session
   const { MeraBridge } = await import('../solid/meraBridge.js');
   const bridge = MeraBridge.getInstance();
-  const debugInfo = bridge.getDebugInfo();
-  const webId = debugInfo.webId;
+  const webId = bridge.getWebId();
   
   if (!webId) {
     console.error('No webId available - user not authenticated');
@@ -116,7 +116,7 @@ interface ScoredResult {
   /** Quality score (lower = better) */
   score: number;
   
-  /** Original backup metadata */
+  /** Backup including timestamp, data, source, and filename */
   backup: Backup;
 }
 
@@ -137,14 +137,17 @@ const SCORING = {
   /** Per lesson removed from curriculum (reconciliation) */
   LESSON_DEFAULTED: 1_000,
   
-  /** All settings defaulted (binary penalty) */
-  SETTINGS_DEFAULTED: 1_000,
+  /** Baseline penalty for any settings defaulted */
+  SETTINGS_BASELINE: 1_000,
+  
+  /** Additional proportional penalty for settings (scaled by ratio) */
+  SETTINGS_PROPORTIONAL: 4_000,
   
   /** Per component defaulted (migration or corruption) */
   COMPONENT_DEFAULTED: 5,
   
   /** Per backup step back in time (recency tie-breaker) */
-  BACKUP_STEP: 300,
+  BACKUP_STEP: 500,
   
   /** Quality threshold - above this, check localStorage as backup source */
   QUALITY_THRESHOLD: 1000,
@@ -212,8 +215,10 @@ async function loadBackupData(backup: Backup): Promise<unknown | null> {
 /**
  * List all backup files from Solid Pod.
  * 
- * Enumerates primary backup files from Pod using meraBridge.
- * Filename format: mera.{version}.sp.{timestamp}.json
+ * Enumerates both primary and duplicate backup files from Pod using meraBridge.
+ * Filename formats:
+ * - mera.{version}.sp.{timestamp}.json (primary)
+ * - mera.{version}.sd.{timestamp}.json (duplicate)
  * 
  * @returns Array of backup metadata, sorted newest first
  */
@@ -221,28 +226,47 @@ async function listPodBackups(): Promise<Backup[]> {
   const { MeraBridge } = await import('../solid/meraBridge.js');
   const bridge = MeraBridge.getInstance();
   
-  // List primary Solid Pod backups (*.sp.* = Solid Primary)
-  const result = await bridge.solidList('mera.*.*.*.sp.*.json');
+  // List Solid Primary backups (*.sp.* = Solid Primary)
+  const primaryResult = await bridge.solidList('mera.*.*.*.sp.*.json');
   
-  if (!result.success || !result.data) {
-    console.error('Failed to list Pod backups:', result.error);
-    return [];
+  // List Solid Duplicate backups (*.sd.* = Solid Duplicate)
+  const duplicateResult = await bridge.solidList('mera.*.*.*.sd.*.json');
+  
+  const allBackups: Backup[] = [];
+  
+  if (primaryResult.success && primaryResult.data) {
+    const primaryBackups = primaryResult.data.map(filename => 
+      parseBackupFilename(filename, 'pod')
+    );
+    allBackups.push(...primaryBackups);
+  } else if (!primaryResult.success) {
+    console.error('Failed to list Pod primary backups:', primaryResult.error);
   }
   
-  // Parse and sort backups
-  const backups = result.data.map(filename => parseBackupFilename(filename, 'pod'));
-  backups.sort((a, b) => b.timestamp - a.timestamp); // Newest first
+  if (duplicateResult.success && duplicateResult.data) {
+    const duplicateBackups = duplicateResult.data.map(filename => 
+      parseBackupFilename(filename, 'pod')
+    );
+    allBackups.push(...duplicateBackups);
+  } else if (!duplicateResult.success) {
+    console.error('Failed to list Pod duplicate backups:', duplicateResult.error);
+  }
   
-  return backups;
+  // Sort newest first
+  allBackups.sort((a, b) => b.timestamp - a.timestamp);
+  
+  return allBackups;
 }
 
 /**
  * List all backup files from localStorage.
  * 
- * Enumerates both offline and online primary localStorage backups.
+ * Enumerates both primary and duplicate backups, both offline and online.
  * Filename formats:
  * - mera.{version}.lofp.{timestamp}.json (offline primary)
+ * - mera.{version}.lofd.{timestamp}.json (offline duplicate)
  * - mera.{version}.lonp.{timestamp}.json (online primary)
+ * - mera.{version}.lond.{timestamp}.json (online duplicate)
  * 
  * @returns Array of backup metadata, sorted newest first
  */
@@ -250,30 +274,52 @@ async function listLocalStorageBackups(): Promise<Backup[]> {
   const { MeraBridge } = await import('../solid/meraBridge.js');
   const bridge = MeraBridge.getInstance();
   
-  // List offline primary backups (*.lofp.* = Local Offline Primary)
-  const offlineResult = await bridge.localList('mera.*.*.*.lofp.*.json');
-  
-  // List online primary backups (*.lonp.* = Local Online Primary)
-  const onlineResult = await bridge.localList('mera.*.*.*.lonp.*.json');
+  // List all four types of localStorage backups
+  const offlinePrimaryResult = await bridge.localList('mera.*.*.*.lofp.*.json');
+  const offlineDuplicateResult = await bridge.localList('mera.*.*.*.lofd.*.json');
+  const onlinePrimaryResult = await bridge.localList('mera.*.*.*.lonp.*.json');
+  const onlineDuplicateResult = await bridge.localList('mera.*.*.*.lond.*.json');
   
   const allBackups: Backup[] = [];
   
-  if (offlineResult.success && offlineResult.data) {
-    const offlineBackups = offlineResult.data.map(filename => 
+  // Collect offline primary backups
+  if (offlinePrimaryResult.success && offlinePrimaryResult.data) {
+    const backups = offlinePrimaryResult.data.map(filename => 
       parseBackupFilename(filename, 'localStorage')
     );
-    allBackups.push(...offlineBackups);
-  } else if (!offlineResult.success) {
-    console.error('Failed to list offline localStorage backups:', offlineResult.error);
+    allBackups.push(...backups);
+  } else if (!offlinePrimaryResult.success) {
+    console.error('Failed to list offline primary localStorage backups:', offlinePrimaryResult.error);
   }
   
-  if (onlineResult.success && onlineResult.data) {
-    const onlineBackups = onlineResult.data.map(filename => 
+  // Collect offline duplicate backups
+  if (offlineDuplicateResult.success && offlineDuplicateResult.data) {
+    const backups = offlineDuplicateResult.data.map(filename => 
       parseBackupFilename(filename, 'localStorage')
     );
-    allBackups.push(...onlineBackups);
-  } else if (!onlineResult.success) {
-    console.error('Failed to list online localStorage backups:', onlineResult.error);
+    allBackups.push(...backups);
+  } else if (!offlineDuplicateResult.success) {
+    console.error('Failed to list offline duplicate localStorage backups:', offlineDuplicateResult.error);
+  }
+  
+  // Collect online primary backups
+  if (onlinePrimaryResult.success && onlinePrimaryResult.data) {
+    const backups = onlinePrimaryResult.data.map(filename => 
+      parseBackupFilename(filename, 'localStorage')
+    );
+    allBackups.push(...backups);
+  } else if (!onlinePrimaryResult.success) {
+    console.error('Failed to list online primary localStorage backups:', onlinePrimaryResult.error);
+  }
+  
+  // Collect online duplicate backups
+  if (onlineDuplicateResult.success && onlineDuplicateResult.data) {
+    const backups = onlineDuplicateResult.data.map(filename => 
+      parseBackupFilename(filename, 'localStorage')
+    );
+    allBackups.push(...backups);
+  } else if (!onlineDuplicateResult.success) {
+    console.error('Failed to list online duplicate localStorage backups:', onlineDuplicateResult.error);
   }
   
   // Sort newest first
@@ -293,10 +339,11 @@ async function listLocalStorageBackups(): Promise<Backup[]> {
  * 
  * Scoring factors:
  * - Data loss (lesson corruption): 20,000 per lesson
- * - Curriculum changes (defaulted lessons): 1,000 per lesson  
- * - Settings loss: 1,000 flat penalty
- * - Component defaulting: 5 per component
- * - Recency: 300 per backup step back
+ * - Curriculum changes (defaulted lessons): 600 per lesson  
+ * - Settings loss: 1,000 baseline + up to 4,000 proportional
+ *   (10% → 1,400 pts, 50% → 3,000 pts, 100% → 5,000 pts)
+ * - Component defaulting: 2 per component
+ * - Recency: 600 per backup step back
  * 
  * @param result - Recovery result from enforceDataIntegrity
  * @param backupIndex - Position in sorted backup list (0 = newest)
@@ -316,15 +363,17 @@ function scoreBackup(result: RecoveryResult, backupIndex: number): number {
   // Data corruption (lesson loss via counter mismatch)
   score += result.recoveryMetrics.overallProgress.lessonsLostToCorruption * SCORING.LESSON_LOST;
   
-  // Curriculum reconciliation (lessons dropped from curriculum via lessonsDroppedRatio)
-  const lessonsDropped = Math.round(
-    result.recoveryMetrics.overallProgress.lessonsDroppedRatio * 100
-  );
-  score += lessonsDropped * SCORING.LESSON_DEFAULTED;
+  // Curriculum reconciliation (lessons dropped from curriculum)
+  score += result.recoveryMetrics.overallProgress.lessonsDroppedCount * SCORING.LESSON_DEFAULTED;
   
-  // Settings defaulting (binary penalty)
+  // Settings defaulting (baseline + proportional penalty)
+  // Ensures ANY settings loss is noticed, with scaling for severity
   if (result.recoveryMetrics.settings.defaultedRatio > 0) {
-    score += SCORING.SETTINGS_DEFAULTED;
+    const settingsBaseline = SCORING.SETTINGS_BASELINE;
+    const settingsProportional = Math.round(
+      result.recoveryMetrics.settings.defaultedRatio * SCORING.SETTINGS_PROPORTIONAL
+    );
+    score += settingsBaseline + settingsProportional;
   }
   
   // Component defaulting (expected in migrations, still a minor penalty)
@@ -436,13 +485,15 @@ function hasOfflineTag(backup: Backup): boolean {
  * Merge and validate two backup results.
  * 
  * Merges bundles using trump strategies from progressMerger, then validates
- * the merged result. Falls back to primary if merge creates counter mismatches.
+ * the merged result. Both inputs are already sanitized by enforceDataIntegrity,
+ * so any corruption detected after merge indicates a bug in progressMerger.
  * 
  * @param primary - Primary scored result (better quality or has offline tag)
  * @param secondary - Secondary scored result
  * @param webId - Expected user WebID
  * @param lessonConfigs - Parsed lesson configs for component validation
- * @returns Validated merged result, or primary on validation failure
+ * @returns Validated merged result
+ * @throws Error if merge creates counter mismatches (bug in progressMerger)
  */
 async function validateAndMerge(
   primary: ScoredResult,
@@ -464,11 +515,13 @@ async function validateAndMerge(
   
   // Check for merge-induced problems
   if (finalResult.recoveryMetrics.overallProgress.corruptionDetected) {
-    console.warn(
-      'Merge created corruption (counter mismatch), falling back to primary source',
-      {primary: primary.backup.filename, secondary: secondary.backup.filename }
+    // This should NEVER happen - both inputs are sanitized bundles
+    // If merge creates corruption, this is a bug in progressMerger
+    throw new Error(
+      `Merge created corruption (counter mismatch). This is a bug in progressMerger.ts. ` +
+      `Primary: ${primary.backup.filename}, Secondary: ${secondary.backup.filename}, ` +
+      `Corruption: ${finalResult.recoveryMetrics.overallProgress.lessonsLostToCorruption} lessons lost`
     );
-    return primary.result;
   }
   
   console.log('Merge successful');
@@ -539,21 +592,8 @@ async function selectBestBackup(
     return bestPod.result;
   }
   
-  // CASE 2: Pod backup has issues (score >= 1000)
-  console.log('Pod backup has quality issues, checking localStorage as backup source');
-  
-  if (bestLocal.score < bestPod.score) {
-    // localStorage is better quality
-    if (hasOfflineTag(bestLocal.backup)) {
-      console.log('localStorage is better AND has offline work, merging');
-      return validateAndMerge(bestLocal, bestPod, webId, lessonConfigs);
-    } else {
-      console.log('localStorage is better but stale, using as backup source');
-      return bestLocal.result;  // Just use localStorage, don't merge with worse Pod
-    }
-  }
-  
-  // localStorage isn't better, use Pod despite issues
-  console.log('Pod is best option despite quality issues');
-  return bestPod.result;
+  // CASE 2: Pod backup has quality issues (score >= 1000)
+  // Always merge - localStorage might have better data that Pod is missing
+  console.log('Pod backup has quality issues, merging with localStorage');
+  return validateAndMerge(bestLocal, bestPod, webId, lessonConfigs);
 }

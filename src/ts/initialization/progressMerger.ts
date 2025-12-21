@@ -84,9 +84,9 @@ function mergeOverallProgress(
   // Recalculate counters from merged completion data
   // Count entries where firstCompleted is not null
   const totalLessonsCompleted = Object.values(mergedLessons)
-    .filter(c => c.firstCompleted !== null).length;
+    .filter(c => c.timeCompleted !== null).length;
   const totalDomainsCompleted = Object.values(mergedDomains)
-    .filter(c => c.firstCompleted !== null).length;
+    .filter(c => c.timeCompleted !== null).length;
   
   // Merge streak data: use lastStreakCheck to determine which is newer
   const useDataA = dataA.lastStreakCheck >= dataB.lastStreakCheck;

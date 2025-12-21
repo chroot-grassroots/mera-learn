@@ -32778,6 +32778,13 @@ var _MeraBridge = class _MeraBridge {
     return this.initialized && this.session?.info.isLoggedIn === true;
   }
   /**
+   * Get authenticated user's WebID
+   * Returns null if not authenticated
+   */
+  getWebId() {
+    return this.session?.info?.webId || null;
+  }
+  /**
    * Logout user
    * Solid Client handles clearing its own localStorage
    */
@@ -32861,17 +32868,20 @@ var _MeraBridge = class _MeraBridge {
       const filenames = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key?.startsWith("mera_")) {
-          const filename = key.substring(5);
-          if (pattern) {
-            if (this._matchesPattern(filename, pattern)) {
-              filenames.push(filename);
-            }
-          } else {
-            filenames.push(filename);
-          }
+        if (!key || !key.startsWith("mera_")) {
+          continue;
         }
+        const filename = key.substring(5);
+        if (pattern && !this._matchesPattern(filename, pattern)) {
+          continue;
+        }
+        filenames.push(filename);
       }
+      filenames.sort((a, b) => {
+        const timestampA = this._extractTimestamp(a);
+        const timestampB = this._extractTimestamp(b);
+        return timestampB - timestampA;
+      });
       console.log("\u{1F4CB} Listed localStorage files:", filenames.length);
       return { success: true, data: filenames, error: null };
     } catch (error) {
@@ -32884,19 +32894,11 @@ var _MeraBridge = class _MeraBridge {
     }
   }
   /**
-   * Clear all Mera data from localStorage
-   * Does NOT touch Solid Client's authentication data
+   * Extract timestamp from filename (expects format: *.{timestamp}.json)
    */
-  clearLocalData() {
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith("mera_")) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach((key) => localStorage.removeItem(key));
-    console.log("\u{1F9F9} Cleared local data:", keysToRemove.length, "files");
+  _extractTimestamp(filename) {
+    const match = filename.match(/\.(\d+)\.json$/);
+    return match ? parseInt(match[1], 10) : 0;
   }
   // ==========================================================================
   // Solid Pod Operations

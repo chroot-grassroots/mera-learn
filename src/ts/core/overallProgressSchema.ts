@@ -37,7 +37,7 @@ import { CurriculumRegistry } from "../registry/mera-registry.js";
  * - Use simple LATEST_TIMESTAMP strategy (newest lastUpdated wins)
  */
 export const CompletionDataSchema = z.object({
-  firstCompleted: z.number().nullable(),
+  timeCompleted: z.number().nullable(),
   lastUpdated: z.number(),
 });
 
@@ -161,12 +161,12 @@ export function reconcileAgainstCurriculum(
     if (!isNaN(lessonIdNum) && isValidLessonId(lessonIdNum, curriculum)) {
       reconciledLessons[lessonId] = completionData;
       // Count as kept only if actually completed
-      if (completionData.firstCompleted !== null) {
+      if (completionData.timeCompleted !== null) {
         lessonsKept++;
       }
     } else {
       // Only count as dropped if it was actually completed
-      if (completionData.firstCompleted !== null) {
+      if (completionData.timeCompleted !== null) {
         lessonsDropped++;
       }
     }
@@ -179,12 +179,12 @@ export function reconcileAgainstCurriculum(
     if (!isNaN(domainIdNum) && isValidDomainId(domainIdNum, curriculum)) {
       reconciledDomains[domainId] = completionData;
       // Count as kept only if actually completed
-      if (completionData.firstCompleted !== null) {
+      if (completionData.timeCompleted !== null) {
         domainsKept++;
       }
     } else {
       // Only count as dropped if it was actually completed
-      if (completionData.firstCompleted !== null) {
+      if (completionData.timeCompleted !== null) {
         domainsDropped++;
       }
     }
@@ -276,16 +276,16 @@ export class OverallProgressManager {
     const current = this.progress.lessonCompletions[lessonKey];
 
     // First completion or re-completion after being marked incomplete
-    if (!current || current.firstCompleted === null) {
+    if (!current || current.timeCompleted === null) {
       this.progress.lessonCompletions[lessonKey] = {
-        firstCompleted: timestamp,
+        timeCompleted: timestamp,
         lastUpdated: timestamp
       };
       this.progress.totalLessonsCompleted++;
     } else {
       // Already completed, create new object with updated lastUpdated
       this.progress.lessonCompletions[lessonKey] = {
-        firstCompleted: current.firstCompleted,
+        timeCompleted: current.timeCompleted,
         lastUpdated: timestamp
       };
     }
@@ -313,23 +313,23 @@ export class OverallProgressManager {
     const timestamp = Math.floor(Date.now() / 1000);
     const current = this.progress.lessonCompletions[lessonKey];
 
-    if (current && current.firstCompleted !== null) {
+    if (current && current.timeCompleted !== null) {
       // Was completed, now mark incomplete
       this.progress.lessonCompletions[lessonKey] = {
-        firstCompleted: null,
+        timeCompleted: null,
         lastUpdated: timestamp
       };
       this.progress.totalLessonsCompleted--;
     } else if (current) {
       // Already incomplete, create new object with updated timestamp
       this.progress.lessonCompletions[lessonKey] = {
-        firstCompleted: null,
+        timeCompleted: null,
         lastUpdated: timestamp
       };
     } else {
       // Doesn't exist yet, create as incomplete
       this.progress.lessonCompletions[lessonKey] = {
-        firstCompleted: null,
+        timeCompleted: null,
         lastUpdated: timestamp
       };
     }
@@ -353,16 +353,16 @@ export class OverallProgressManager {
     const current = this.progress.domainCompletions[domainKey];
 
     // First completion or re-completion after being marked incomplete
-    if (!current || current.firstCompleted === null) {
+    if (!current || current.timeCompleted === null) {
       this.progress.domainCompletions[domainKey] = {
-        firstCompleted: timestamp,
+        timeCompleted: timestamp,
         lastUpdated: timestamp
       };
       this.progress.totalDomainsCompleted++;
     } else {
       // Already completed, create new object with updated lastUpdated
       this.progress.domainCompletions[domainKey] = {
-        firstCompleted: current.firstCompleted,
+        timeCompleted: current.timeCompleted,
         lastUpdated: timestamp
       };
     }
@@ -385,23 +385,23 @@ export class OverallProgressManager {
     const timestamp = Math.floor(Date.now() / 1000);
     const current = this.progress.domainCompletions[domainKey];
 
-    if (current && current.firstCompleted !== null) {
+    if (current && current.timeCompleted !== null) {
       // Was completed, now mark incomplete
       this.progress.domainCompletions[domainKey] = {
-        firstCompleted: null,
+        timeCompleted: null,
         lastUpdated: timestamp
       };
       this.progress.totalDomainsCompleted--;
     } else if (current) {
       // Already incomplete, create new object with updated timestamp
       this.progress.domainCompletions[domainKey] = {
-        firstCompleted: null,
+        timeCompleted: null,
         lastUpdated: timestamp
       };
     } else {
       // Doesn't exist yet, create as incomplete
       this.progress.domainCompletions[domainKey] = {
-        firstCompleted: null,
+        timeCompleted: null,
         lastUpdated: timestamp
       };
     }

@@ -57,7 +57,7 @@ function createTestBundle(overrides?: Partial<PodStorageBundle>): PodStorageBund
  * Create CompletionData for testing
  */
 function completion(firstCompleted: number | null, lastUpdated: number): CompletionData {
-  return { firstCompleted, lastUpdated };
+  return { timeCompleted: firstCompleted, lastUpdated };
 }
 
 // ============================================================================

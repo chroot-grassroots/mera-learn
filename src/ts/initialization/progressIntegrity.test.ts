@@ -90,12 +90,12 @@ describe('progressIntegrity', () => {
       expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/unparseable-json');
       // All curriculum lessons should be initialized as incomplete
       expect(result.bundle.overallProgress.lessonCompletions).toEqual({
-        '100': { firstCompleted: null, lastUpdated: 0 },
-        '200': { firstCompleted: null, lastUpdated: 0 },
+        '100': { timeCompleted: null, lastUpdated: 0 },
+        '200': { timeCompleted: null, lastUpdated: 0 },
       });
       expect(result.bundle.overallProgress.domainCompletions).toEqual({
-        '1': { firstCompleted: null, lastUpdated: 0 },
-        '2': { firstCompleted: null, lastUpdated: 0 },
+        '1': { timeCompleted: null, lastUpdated: 0 },
+        '2': { timeCompleted: null, lastUpdated: 0 },
       });
       expect(result.recoveryMetrics.metadata.defaultedRatio).toBe(1.0);
       expect(result.criticalFailures.webIdMismatch).toBeDefined();
@@ -213,7 +213,7 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: { 
-            '100': { firstCompleted: 123456, lastUpdated: 123456 } 
+            '100': { timeCompleted: 123456, lastUpdated: 123456 } 
           }, // Only 1 lesson
           domainCompletions: {},
           currentStreak: 0,
@@ -239,7 +239,7 @@ describe('progressIntegrity', () => {
         overallProgress: {
           lessonCompletions: {},
           domainCompletions: { 
-            '1': { firstCompleted: 123456, lastUpdated: 123456 } 
+            '1': { timeCompleted: 123456, lastUpdated: 123456 } 
           }, // Only 1 domain
           currentStreak: 0,
           lastStreakCheck: 0,
@@ -263,12 +263,12 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: { 
-            '100': { firstCompleted: 123456, lastUpdated: 123456 },
-            '200': { firstCompleted: 123457, lastUpdated: 123457 }
+            '100': { timeCompleted: 123456, lastUpdated: 123456 },
+            '200': { timeCompleted: 123457, lastUpdated: 123457 }
           },
           domainCompletions: { 
-            '1': { firstCompleted: 123456, lastUpdated: 123456 },
-            '2': { firstCompleted: 123456, lastUpdated: 123456 }
+            '1': { timeCompleted: 123456, lastUpdated: 123456 },
+            '2': { timeCompleted: 123456, lastUpdated: 123456 }
           },
           currentStreak: 0,
           lastStreakCheck: 0,
@@ -292,10 +292,10 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: { 
-            '100': { firstCompleted: 123456, lastUpdated: 123456 } 
+            '100': { timeCompleted: 123456, lastUpdated: 123456 } 
           },
           domainCompletions: { 
-            '1': { firstCompleted: 123456, lastUpdated: 123456 } 
+            '1': { timeCompleted: 123456, lastUpdated: 123456 } 
           },
           currentStreak: 0,
           lastStreakCheck: 0,
@@ -320,9 +320,9 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {
-            '100': { firstCompleted: 123456, lastUpdated: 123456 }, // Valid
-            '999': { firstCompleted: 123457, lastUpdated: 123457 }, // Not in curriculum
-            '888': { firstCompleted: 123458, lastUpdated: 123458 }, // Not in curriculum
+            '100': { timeCompleted: 123456, lastUpdated: 123456 }, // Valid
+            '999': { timeCompleted: 123457, lastUpdated: 123457 }, // Not in curriculum
+            '888': { timeCompleted: 123458, lastUpdated: 123458 }, // Not in curriculum
           },
           domainCompletions: {},
           currentStreak: 0,
@@ -350,10 +350,10 @@ describe('progressIntegrity', () => {
         overallProgress: {
           lessonCompletions: {},
           domainCompletions: {
-            '1': { firstCompleted: 123456, lastUpdated: 123456 },
-            '2': { firstCompleted: 123456, lastUpdated: 123456 },
-            '99': { firstCompleted: 123456, lastUpdated: 123456 },  // Not valid
-            '100': { firstCompleted: 123456, lastUpdated: 123456 }  // Not valid
+            '1': { timeCompleted: 123456, lastUpdated: 123456 },
+            '2': { timeCompleted: 123456, lastUpdated: 123456 },
+            '99': { timeCompleted: 123456, lastUpdated: 123456 },  // Not valid
+            '100': { timeCompleted: 123456, lastUpdated: 123456 }  // Not valid
           },
           currentStreak: 0,
           lastStreakCheck: 0,
@@ -369,7 +369,7 @@ describe('progressIntegrity', () => {
 
       // Check that only domains 1 and 2 remain completed
       const completedDomains = Object.keys(result.bundle.overallProgress.domainCompletions)
-        .filter(id => result.bundle.overallProgress.domainCompletions[id].firstCompleted !== null);
+        .filter(id => result.bundle.overallProgress.domainCompletions[id].timeCompleted !== null);
       expect(completedDomains.sort()).toEqual(['1', '2']);
       expect(result.recoveryMetrics.overallProgress.domainsDroppedRatio).toBe(0.5);
     });
@@ -379,12 +379,12 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {
-            '100': { firstCompleted: 123456, lastUpdated: 123456 },
-            '999': { firstCompleted: 123457, lastUpdated: 123457 }, // Will be dropped
+            '100': { timeCompleted: 123456, lastUpdated: 123456 },
+            '999': { timeCompleted: 123457, lastUpdated: 123457 }, // Will be dropped
           },
           domainCompletions: {
-            '1': { firstCompleted: 123456, lastUpdated: 123456 },
-            '99': { firstCompleted: 123456, lastUpdated: 123456 }  // Will be dropped
+            '1': { timeCompleted: 123456, lastUpdated: 123456 },
+            '99': { timeCompleted: 123456, lastUpdated: 123456 }  // Will be dropped
           },
           currentStreak: 0,
           lastStreakCheck: 0,
@@ -408,8 +408,8 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: {
-            '100': { firstCompleted: 123456, lastUpdated: 123456 }, // Valid
-            '999': { firstCompleted: 123457, lastUpdated: 123457 }, // Not in curriculum
+            '100': { timeCompleted: 123456, lastUpdated: 123456 }, // Valid
+            '999': { timeCompleted: 123457, lastUpdated: 123457 }, // Not in curriculum
           },
           domainCompletions: {},
           currentStreak: 0,
@@ -726,7 +726,7 @@ describe('progressIntegrity', () => {
         metadata: { webId: 'test-webid' },
         overallProgress: {
           lessonCompletions: { 
-            '999': { firstCompleted: 123456, lastUpdated: 123456 } 
+            '999': { timeCompleted: 123456, lastUpdated: 123456 } 
           }, // Will be dropped
           domainCompletions: {},
           currentStreak: 0,
@@ -818,12 +818,12 @@ describe('progressIntegrity', () => {
       expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/webid-mismatch');
       // All curriculum lessons should be initialized as incomplete
       expect(result.bundle.overallProgress.lessonCompletions).toEqual({
-        '100': { firstCompleted: null, lastUpdated: 0 },
-        '200': { firstCompleted: null, lastUpdated: 0 },
+        '100': { timeCompleted: null, lastUpdated: 0 },
+        '200': { timeCompleted: null, lastUpdated: 0 },
       });
       expect(result.bundle.overallProgress.domainCompletions).toEqual({
-        '1': { firstCompleted: null, lastUpdated: 0 },
-        '2': { firstCompleted: null, lastUpdated: 0 },
+        '1': { timeCompleted: null, lastUpdated: 0 },
+        '2': { timeCompleted: null, lastUpdated: 0 },
       });
       expect(result.bundle.settings.theme[0]).toBe('auto');
       expect(result.perfectlyValidInput).toBe(false);
@@ -845,10 +845,10 @@ describe('progressIntegrity', () => {
     });
 
     it('handles extremely large lesson completion count', () => {
-      const manyLessons: Record<string, { firstCompleted: number; lastUpdated: number }> = {};
+      const manyLessons: Record<string, { timeCompleted: number; lastUpdated: number }> = {};
       // Loop creates lessons 100-199 (200 is excluded by the < 200)
       for (let i = 100; i < 200; i++) {
-        manyLessons[i.toString()] = { firstCompleted: 123456, lastUpdated: 123456 };
+        manyLessons[i.toString()] = { timeCompleted: 123456, lastUpdated: 123456 };
       }
 
       const data = {
@@ -871,7 +871,7 @@ describe('progressIntegrity', () => {
       // Mock only allows lesson 100 and 200
       // Loop creates 100-199, so only lesson 100 is valid (200 is not in the loop)
       const keptLessons = Object.keys(result.bundle.overallProgress.lessonCompletions)
-        .filter(id => result.bundle.overallProgress.lessonCompletions[id].firstCompleted !== null);
+        .filter(id => result.bundle.overallProgress.lessonCompletions[id].timeCompleted !== null);
       expect(keptLessons).toContain('100');
       expect(keptLessons.length).toBe(1);
       // 99 out of 100 dropped = 0.99

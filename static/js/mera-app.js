@@ -33480,6 +33480,13 @@ var init_meraBridge = __esm({
         return this.initialized && this.session?.info.isLoggedIn === true;
       }
       /**
+       * Get authenticated user's WebID
+       * Returns null if not authenticated
+       */
+      getWebId() {
+        return this.session?.info?.webId || null;
+      }
+      /**
        * Logout user
        * Solid Client handles clearing its own localStorage
        */
@@ -33563,17 +33570,20 @@ var init_meraBridge = __esm({
           const filenames = [];
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key?.startsWith("mera_")) {
-              const filename = key.substring(5);
-              if (pattern) {
-                if (this._matchesPattern(filename, pattern)) {
-                  filenames.push(filename);
-                }
-              } else {
-                filenames.push(filename);
-              }
+            if (!key || !key.startsWith("mera_")) {
+              continue;
             }
+            const filename = key.substring(5);
+            if (pattern && !this._matchesPattern(filename, pattern)) {
+              continue;
+            }
+            filenames.push(filename);
           }
+          filenames.sort((a, b) => {
+            const timestampA = this._extractTimestamp(a);
+            const timestampB = this._extractTimestamp(b);
+            return timestampB - timestampA;
+          });
           console.log("\u{1F4CB} Listed localStorage files:", filenames.length);
           return { success: true, data: filenames, error: null };
         } catch (error46) {
@@ -33586,19 +33596,11 @@ var init_meraBridge = __esm({
         }
       }
       /**
-       * Clear all Mera data from localStorage
-       * Does NOT touch Solid Client's authentication data
+       * Extract timestamp from filename (expects format: *.{timestamp}.json)
        */
-      clearLocalData() {
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key?.startsWith("mera_")) {
-            keysToRemove.push(key);
-          }
-        }
-        keysToRemove.forEach((key) => localStorage.removeItem(key));
-        console.log("\u{1F9F9} Cleared local data:", keysToRemove.length, "files");
+      _extractTimestamp(filename) {
+        const match = filename.match(/\.(\d+)\.json$/);
+        return match ? parseInt(match[1], 10) : 0;
       }
       // ==========================================================================
       // Solid Pod Operations
@@ -46864,12 +46866,6 @@ var OverallProgressDataSchema = external_exports.object({
   totalDomainsCompleted: external_exports.number().int().min(0).default(0)
   // Current count tracker for corruption detection
 });
-function isValidLessonId(lessonId, curriculum) {
-  return curriculum.hasLesson(lessonId);
-}
-function isValidDomainId(domainId, curriculum) {
-  return curriculum.hasDomain(domainId);
-}
 var OverallProgressMessageSchema = external_exports.object({
   method: external_exports.enum([
     "markLessonComplete",
@@ -47146,13 +47142,19 @@ function enforceDataIntegrity(rawJson, expectedWebId, lessonConfigs) {
   const settingsResult = extractSettings(parsed);
   const navigationResult = extractNavigationState(parsed);
   const componentProgressResult = extractCombinedComponentProgress(parsed, lessonConfigs);
-  const bundle = {
+  let bundle = {
     metadata: metadataResult.data,
     overallProgress: overallProgressResult.data,
     settings: settingsResult.data,
     navigationState: navigationResult.data,
     combinedComponentProgress: componentProgressResult.data
   };
+  try {
+    bundle = PodStorageBundleSchema.parse(bundle);
+  } catch (validationError) {
+    console.error("CRITICAL: Assembled bundle failed schema validation:", validationError);
+    throw new Error("Bundle validation failed - this is a bug in progressIntegrity.ts");
+  }
   const hasCriticalFailures = metadataResult.webIDMismatch !== void 0;
   const perfectlyValidInput = !hasCriticalFailures && !overallProgressResult.corruptionDetected && metadataResult.defaultedRatio === 0 && overallProgressResult.lessonsDroppedRatio === 0 && overallProgressResult.domainsDroppedRatio === 0 && settingsResult.defaultedRatio === 0 && !navigationResult.wasDefaulted && componentProgressResult.defaultedRatio === 0;
   return {
@@ -47191,7 +47193,8 @@ function extractMetadata(parsed, expectedWebId) {
   if (zodResult.success) {
     if (zodResult.data.webId !== expectedWebId) {
       return {
-        data: { webId: expectedWebId },
+        data: { webId: "WEBID_MISMATCH_ERROR" },
+        // Security: Never use mismatched webId
         defaultedRatio: 1,
         webIDMismatch: {
           expected: expectedWebId,
@@ -47211,8 +47214,8 @@ function extractMetadata(parsed, expectedWebId) {
     found: webId
   } : void 0;
   return {
-    data: { webId: expectedWebId },
-    // Always use expected
+    data: { webId: "WEBID_MISMATCH_ERROR" },
+    // Security: Never use mismatched webId
     defaultedRatio: 1,
     webIDMismatch
   };
@@ -47252,6 +47255,14 @@ function extractOverallProgress(parsed) {
   return reconcileOverallProgress(overallProgress);
 }
 function reconcileOverallProgress(progress) {
+  const result = {
+    lessonCompletions: {},
+    domainCompletions: {},
+    currentStreak: 0,
+    lastStreakCheck: 0,
+    totalLessonsCompleted: 0,
+    totalDomainsCompleted: 0
+  };
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
   const claimedDomains = progress.totalDomainsCompleted ?? 0;
   const actualLessons = Object.values(progress.lessonCompletions).filter((completion) => completion.firstCompleted !== null).length;
@@ -47260,72 +47271,49 @@ function reconcileOverallProgress(progress) {
   const domainsLostToCorruption = Math.max(0, claimedDomains - actualDomains);
   const corruptionDetected = lessonsLostToCorruption > 0 || domainsLostToCorruption > 0;
   const allLessonIds2 = curriculumData.getAllLessonIds();
-  const allDomainIds = curriculumData.getAllDomainIds();
-  const reconciledLessons = {};
-  const reconciledDomains = {};
   let lessonsKept = 0;
-  let lessonsDropped = 0;
-  let domainsKept = 0;
-  let domainsDropped = 0;
   for (const lessonId of allLessonIds2) {
     const key = lessonId.toString();
     const existing = progress.lessonCompletions[key];
-    if (existing) {
-      if (typeof existing === "object" && existing !== null && "firstCompleted" in existing && "lastUpdated" in existing) {
-        reconciledLessons[key] = existing;
-        if (existing.firstCompleted !== null) {
-          lessonsKept++;
-        }
-      } else {
-        reconciledLessons[key] = { firstCompleted: null, lastUpdated: 0 };
+    if (existing && typeof existing === "object" && existing !== null && "firstCompleted" in existing && "lastUpdated" in existing && (existing.firstCompleted === null || typeof existing.firstCompleted === "number") && typeof existing.lastUpdated === "number") {
+      result.lessonCompletions[key] = existing;
+      if (existing.firstCompleted !== null) {
+        lessonsKept++;
       }
     } else {
-      reconciledLessons[key] = { firstCompleted: null, lastUpdated: 0 };
+      result.lessonCompletions[key] = { firstCompleted: null, lastUpdated: 0 };
     }
   }
-  for (const [lessonId, completionData] of Object.entries(progress.lessonCompletions)) {
-    const lessonIdNum = parseInt(lessonId, 10);
-    if (!isNaN(lessonIdNum) && !isValidLessonId(lessonIdNum, curriculumData) && completionData.firstCompleted !== null) {
-      lessonsDropped++;
-    }
-  }
+  const allDomainIds = curriculumData.getAllDomainIds();
+  let domainsKept = 0;
   for (const domainId of allDomainIds) {
     const key = domainId.toString();
     const existing = progress.domainCompletions[key];
-    if (existing) {
-      if (typeof existing === "object" && existing !== null && "firstCompleted" in existing && "lastUpdated" in existing) {
-        reconciledDomains[key] = existing;
-        if (existing.firstCompleted !== null) {
-          domainsKept++;
-        }
-      } else {
-        reconciledDomains[key] = { firstCompleted: null, lastUpdated: 0 };
+    if (existing && typeof existing === "object" && existing !== null && "firstCompleted" in existing && "lastUpdated" in existing && (existing.firstCompleted === null || typeof existing.firstCompleted === "number") && typeof existing.lastUpdated === "number") {
+      result.domainCompletions[key] = existing;
+      if (existing.firstCompleted !== null) {
+        domainsKept++;
       }
     } else {
-      reconciledDomains[key] = { firstCompleted: null, lastUpdated: 0 };
+      result.domainCompletions[key] = { firstCompleted: null, lastUpdated: 0 };
     }
   }
-  for (const [domainId, completionData] of Object.entries(progress.domainCompletions)) {
-    const domainIdNum = parseInt(domainId, 10);
-    if (!isNaN(domainIdNum) && !isValidDomainId(domainIdNum, curriculumData) && completionData.firstCompleted !== null) {
-      domainsDropped++;
-    }
+  if (typeof progress.currentStreak === "number" && progress.currentStreak >= 0 && progress.currentStreak <= 1e3) {
+    result.currentStreak = progress.currentStreak;
   }
+  if (typeof progress.lastStreakCheck === "number" && Number.isInteger(progress.lastStreakCheck) && progress.lastStreakCheck >= 0) {
+    result.lastStreakCheck = progress.lastStreakCheck;
+  }
+  result.totalLessonsCompleted = lessonsKept;
+  result.totalDomainsCompleted = domainsKept;
+  const lessonsDropped = Math.max(0, actualLessons - lessonsKept);
+  const domainsDropped = Math.max(0, actualDomains - domainsKept);
   const originalLessonCount = actualLessons;
   const originalDomainCount = actualDomains;
   return {
-    data: {
-      lessonCompletions: reconciledLessons,
-      domainCompletions: reconciledDomains,
-      currentStreak: progress.currentStreak,
-      lastStreakCheck: progress.lastStreakCheck,
-      totalLessonsCompleted: lessonsKept,
-      totalDomainsCompleted: domainsKept
-    },
+    data: result,
     lessonsDroppedRatio: originalLessonCount > 0 ? lessonsDropped / originalLessonCount : 0,
-    // No lessons = nothing to drop
     domainsDroppedRatio: originalDomainCount > 0 ? domainsDropped / originalDomainCount : 0,
-    // No domains = nothing to drop
     corruptionDetected,
     lessonsLostToCorruption,
     domainsLostToCorruption
@@ -47547,43 +47535,51 @@ function initializeAllComponentsWithDefaults() {
 function createFullyDefaultedResult(expectedWebId, foundWebId) {
   const allComponentIds2 = curriculumData.getAllComponentIds();
   const { lessonCompletions, domainCompletions } = initializeAllLessonsAndDomainsWithDefaults();
+  let bundle = {
+    metadata: {
+      webId: "WEBID_MISMATCH_ERROR"
+      // Security: Unparseable = treat as mismatch
+    },
+    overallProgress: {
+      lessonCompletions,
+      domainCompletions,
+      currentStreak: 0,
+      lastStreakCheck: 0,
+      totalLessonsCompleted: 0,
+      totalDomainsCompleted: 0
+    },
+    settings: {
+      weekStartDay: ["monday", 0],
+      weekStartTimeUTC: ["00:00", 0],
+      theme: ["auto", 0],
+      learningPace: ["standard", 0],
+      optOutDailyPing: [false, 0],
+      optOutErrorPing: [false, 0],
+      fontSize: ["medium", 0],
+      highContrast: [false, 0],
+      reducedMotion: [false, 0],
+      focusIndicatorStyle: ["default", 0],
+      audioEnabled: [true, 0]
+    },
+    navigationState: {
+      currentEntityId: 0,
+      currentPage: 0,
+      lastUpdated: Math.floor(Date.now() / 1e3)
+    },
+    combinedComponentProgress: {
+      components: initializeAllComponentsWithDefaults()
+    }
+  };
+  try {
+    bundle = PodStorageBundleSchema.parse(bundle);
+  } catch (validationError) {
+    console.error("CRITICAL: Default bundle failed schema validation:", validationError);
+    throw new Error("Default bundle validation failed - this is a bug in progressIntegrity.ts");
+  }
   return {
     perfectlyValidInput: false,
     // Fully defaulted = not valid input
-    bundle: {
-      metadata: {
-        webId: expectedWebId
-      },
-      overallProgress: {
-        lessonCompletions,
-        domainCompletions,
-        currentStreak: 0,
-        lastStreakCheck: 0,
-        totalLessonsCompleted: 0,
-        totalDomainsCompleted: 0
-      },
-      settings: {
-        weekStartDay: ["monday", 0],
-        weekStartTimeUTC: ["00:00", 0],
-        theme: ["auto", 0],
-        learningPace: ["standard", 0],
-        optOutDailyPing: [false, 0],
-        optOutErrorPing: [false, 0],
-        fontSize: ["medium", 0],
-        highContrast: [false, 0],
-        reducedMotion: [false, 0],
-        focusIndicatorStyle: ["default", 0],
-        audioEnabled: [true, 0]
-      },
-      navigationState: {
-        currentEntityId: 0,
-        currentPage: 0,
-        lastUpdated: Math.floor(Date.now() / 1e3)
-      },
-      combinedComponentProgress: {
-        components: initializeAllComponentsWithDefaults()
-      }
-    },
+    bundle,
     recoveryMetrics: {
       metadata: { defaultedRatio: 1 },
       overallProgress: {
@@ -47693,8 +47689,7 @@ async function orchestrateProgressLoading(lessonConfigs) {
   console.log("Starting progress loading orchestration");
   const { MeraBridge: MeraBridge2 } = await Promise.resolve().then(() => (init_meraBridge(), meraBridge_exports));
   const bridge = MeraBridge2.getInstance();
-  const debugInfo = bridge.getDebugInfo();
-  const webId = debugInfo.webId;
+  const webId = bridge.getWebId();
   if (!webId) {
     console.error("No webId available - user not authenticated");
     return null;

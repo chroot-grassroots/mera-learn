@@ -172,6 +172,14 @@ export class MeraBridge {
   }
 
   /**
+   * Get authenticated user's WebID
+   * Returns null if not authenticated
+   */
+  public getWebId(): string | null {
+    return this.session?.info?.webId || null;
+  }
+
+  /**
    * Logout user
    * Solid Client handles clearing its own localStorage
    */
@@ -274,21 +282,28 @@ export class MeraBridge {
         const key = localStorage.key(i);
         
         // Skip Solid Client's own localStorage keys
-        if (key?.startsWith('mera_')) {
-          // Remove 'mera_' prefix
-          const filename = key.substring(5);
-          
-          // Filter by pattern if provided
-          if (pattern) {
-            if (this._matchesPattern(filename, pattern)) {
-              filenames.push(filename);
-            }
-          } else {
-            filenames.push(filename);
-          }
+        if (!key || !key.startsWith('mera_')) {
+          continue;
         }
+        
+        // Extract filename (remove mera_ prefix)
+        const filename = key.substring(5);
+        
+        // Apply pattern filter if provided
+        if (pattern && !this._matchesPattern(filename, pattern)) {
+          continue;
+        }
+        
+        filenames.push(filename);
       }
       
+      // Sort newest first (by timestamp in filename)
+      filenames.sort((a, b) => {
+        const timestampA = this._extractTimestamp(a);
+        const timestampB = this._extractTimestamp(b);
+        return timestampB - timestampA;
+      });
+
       console.log('📋 Listed localStorage files:', filenames.length);
       return { success: true, data: filenames, error: null };
 
@@ -304,21 +319,11 @@ export class MeraBridge {
   }
 
   /**
-   * Clear all Mera data from localStorage
-   * Does NOT touch Solid Client's authentication data
+   * Extract timestamp from filename (expects format: *.{timestamp}.json)
    */
-  public clearLocalData(): void {
-    const keysToRemove: string[] = [];
-    
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith('mera_')) {
-        keysToRemove.push(key);
-      }
-    }
-    
-    keysToRemove.forEach(key => localStorage.removeItem(key));
-    console.log('🧹 Cleared local data:', keysToRemove.length, 'files');
+  private _extractTimestamp(filename: string): number {
+    const match = filename.match(/\.(\d+)\.json$/);
+    return match ? parseInt(match[1], 10) : 0;
   }
 
   // ==========================================================================

@@ -28,16 +28,16 @@ describe('OverallProgressManager', () => {
   });
 
   describe('CompletionData structure', () => {
-    it('stores firstCompleted and lastUpdated on first lesson completion', () => {
+    it('stores timeCompleted and lastUpdated on first lesson completion', () => {
       const before = Math.floor(Date.now() / 1000);
       manager.markLessonComplete(100);
       const completion = manager.getProgress().lessonCompletions['100'];
 
-      expect(completion.firstCompleted).toBeGreaterThanOrEqual(before);
-      expect(completion.lastUpdated).toBe(completion.firstCompleted);
+      expect(completion.timeCompleted).toBeGreaterThanOrEqual(before);
+      expect(completion.lastUpdated).toBe(completion.timeCompleted);
     });
 
-    it('preserves firstCompleted but updates lastUpdated on lesson re-completion', () => {
+    it('preserves timeCompleted but updates lastUpdated on lesson re-completion', () => {
       vi.useFakeTimers();
       
       manager.markLessonComplete(100);
@@ -48,15 +48,15 @@ describe('OverallProgressManager', () => {
       manager.markLessonComplete(100);
       const secondCompletion = manager.getProgress().lessonCompletions['100'];
       
-      expect(secondCompletion.firstCompleted).toBe(firstCompletion.firstCompleted);
+      expect(secondCompletion.timeCompleted).toBe(firstCompletion.timeCompleted);
       expect(secondCompletion.lastUpdated).toBeGreaterThan(firstCompletion.lastUpdated);
       
       vi.useRealTimers();
     });
 
-    it('sets firstCompleted to null but updates lastUpdated on lesson incompletion', () => {
+    it('sets timeCompleted to null but updates lastUpdated on lesson incompletion', () => {
       manager.markLessonComplete(100);
-      const firstTimestamp = manager.getProgress().lessonCompletions['100'].firstCompleted;
+      const firstTimestamp = manager.getProgress().lessonCompletions['100'].timeCompleted;
       
       vi.useFakeTimers();
       vi.advanceTimersByTime(2000);
@@ -64,24 +64,24 @@ describe('OverallProgressManager', () => {
       manager.markLessonIncomplete(100);
       const completion = manager.getProgress().lessonCompletions['100'];
       
-      expect(completion.firstCompleted).toBeNull();
+      expect(completion.timeCompleted).toBeNull();
       expect(completion.lastUpdated).toBeGreaterThan(firstTimestamp!);
       
       vi.useRealTimers();
     });
 
-    it('stores firstCompleted and lastUpdated on first domain completion', () => {
+    it('stores timeCompleted and lastUpdated on first domain completion', () => {
       const before = Math.floor(Date.now() / 1000);
       manager.markDomainComplete(1);
       const completion = manager.getProgress().domainCompletions['1'];
 
-      expect(completion.firstCompleted).toBeGreaterThanOrEqual(before);
-      expect(completion.lastUpdated).toBe(completion.firstCompleted);
+      expect(completion.timeCompleted).toBeGreaterThanOrEqual(before);
+      expect(completion.lastUpdated).toBe(completion.timeCompleted);
     });
 
-    it('sets firstCompleted to null but updates lastUpdated on domain incompletion', () => {
+    it('sets timeCompleted to null but updates lastUpdated on domain incompletion', () => {
       manager.markDomainComplete(1);
-      const firstTimestamp = manager.getProgress().domainCompletions['1'].firstCompleted;
+      const firstTimestamp = manager.getProgress().domainCompletions['1'].timeCompleted;
       
       vi.useFakeTimers();
       vi.advanceTimersByTime(2000);
@@ -89,7 +89,7 @@ describe('OverallProgressManager', () => {
       manager.markDomainIncomplete(1);
       const completion = manager.getProgress().domainCompletions['1'];
       
-      expect(completion.firstCompleted).toBeNull();
+      expect(completion.timeCompleted).toBeNull();
       expect(completion.lastUpdated).toBeGreaterThan(firstTimestamp!);
       
       vi.useRealTimers();
@@ -103,7 +103,7 @@ describe('OverallProgressManager', () => {
       const completion = manager.getProgress().lessonCompletions['100'];
 
       expect(completion).toBeDefined();
-      expect(completion.firstCompleted).toBeGreaterThanOrEqual(before);
+      expect(completion.timeCompleted).toBeGreaterThanOrEqual(before);
       expect(completion.lastUpdated).toBeGreaterThanOrEqual(before);
     });
 
@@ -133,14 +133,14 @@ describe('OverallProgressManager', () => {
   });
 
   describe('markLessonIncomplete', () => {
-    it('sets firstCompleted to null and updates lastUpdated', () => {
+    it('sets timeCompleted to null and updates lastUpdated', () => {
       manager.markLessonComplete(100);
       expect(manager.getProgress().lessonCompletions['100']).toBeDefined();
 
       manager.markLessonIncomplete(100);
       const completion = manager.getProgress().lessonCompletions['100'];
       
-      expect(completion.firstCompleted).toBeNull();
+      expect(completion.timeCompleted).toBeNull();
       expect(completion.lastUpdated).toBeGreaterThan(0);
     });
 
@@ -178,10 +178,10 @@ describe('OverallProgressManager', () => {
 
     it('allows re-completion after incompletion', () => {
       manager.markLessonComplete(100);
-      const firstTimestamp = manager.getProgress().lessonCompletions['100'].firstCompleted;
+      const firstTimestamp = manager.getProgress().lessonCompletions['100'].timeCompleted;
       
       manager.markLessonIncomplete(100);
-      expect(manager.getProgress().lessonCompletions['100'].firstCompleted).toBeNull();
+      expect(manager.getProgress().lessonCompletions['100'].timeCompleted).toBeNull();
       
       vi.useFakeTimers();
       vi.advanceTimersByTime(3000);
@@ -189,8 +189,8 @@ describe('OverallProgressManager', () => {
       manager.markLessonComplete(100);
       const completion = manager.getProgress().lessonCompletions['100'];
       
-      expect(completion.firstCompleted).toBeGreaterThan(firstTimestamp!);
-      expect(completion.lastUpdated).toBe(completion.firstCompleted);
+      expect(completion.timeCompleted).toBeGreaterThan(firstTimestamp!);
+      expect(completion.lastUpdated).toBe(completion.timeCompleted);
       expect(manager.getProgress().totalLessonsCompleted).toBe(1);
       
       vi.useRealTimers();
@@ -204,7 +204,7 @@ describe('OverallProgressManager', () => {
       const completion = manager.getProgress().domainCompletions['1'];
 
       expect(completion).toBeDefined();
-      expect(completion.firstCompleted).toBeGreaterThanOrEqual(before);
+      expect(completion.timeCompleted).toBeGreaterThanOrEqual(before);
       expect(completion.lastUpdated).toBeGreaterThanOrEqual(before);
     });
 
@@ -234,14 +234,14 @@ describe('OverallProgressManager', () => {
   });
 
   describe('markDomainIncomplete', () => {
-    it('sets firstCompleted to null and updates lastUpdated', () => {
+    it('sets timeCompleted to null and updates lastUpdated', () => {
       manager.markDomainComplete(1);
       expect(manager.getProgress().domainCompletions['1']).toBeDefined();
 
       manager.markDomainIncomplete(1);
       const completion = manager.getProgress().domainCompletions['1'];
       
-      expect(completion.firstCompleted).toBeNull();
+      expect(completion.timeCompleted).toBeNull();
       expect(completion.lastUpdated).toBeGreaterThan(0);
     });
 
@@ -308,13 +308,13 @@ describe('OverallProgressManager', () => {
   });
 
   describe('counter integrity', () => {
-    it('maintains counter === count of non-null firstCompleted invariant for lessons', () => {
+    it('maintains counter === count of non-null timeCompleted invariant for lessons', () => {
       const progress = manager.getProgress();
       
       // Initial state
       const countCompleted = () => 
         Object.values(progress.lessonCompletions)
-          .filter(c => c.firstCompleted !== null).length;
+          .filter(c => c.timeCompleted !== null).length;
       
       expect(progress.totalLessonsCompleted).toBe(countCompleted());
       
@@ -324,7 +324,7 @@ describe('OverallProgressManager', () => {
       expect(progress.totalLessonsCompleted).toBe(countCompleted());
       expect(progress.totalLessonsCompleted).toBe(2);
       
-      // After marking one incomplete (firstCompleted becomes null)
+      // After marking one incomplete (timeCompleted becomes null)
       manager.markLessonIncomplete(100);
       expect(progress.totalLessonsCompleted).toBe(countCompleted());
       expect(progress.totalLessonsCompleted).toBe(1);
@@ -335,12 +335,12 @@ describe('OverallProgressManager', () => {
       expect(progress.totalLessonsCompleted).toBe(0);
     });
 
-    it('maintains counter === count of non-null firstCompleted invariant for domains', () => {
+    it('maintains counter === count of non-null timeCompleted invariant for domains', () => {
       const progress = manager.getProgress();
       
       const countCompleted = () => 
         Object.values(progress.domainCompletions)
-          .filter(c => c.firstCompleted !== null).length;
+          .filter(c => c.timeCompleted !== null).length;
       
       expect(progress.totalDomainsCompleted).toBe(countCompleted());
       

@@ -27,11 +27,64 @@
 
 import { enforceDataIntegrity } from "./progressIntegrity.js";
 import type { EnforcementResult } from "./progressIntegrity.js";
+import type { PodStorageBundle } from "../persistence/podStorageSchema.js";
 import { mergeBundles } from "./progressMerger.js";
 import { makeEscapeHatchBackup } from "./escapeHatch.js";
 
 // Type alias for consistency with rest of codebase
 type RecoveryResult = EnforcementResult;
+
+// ============================================================================
+// PUBLIC TYPES
+// ============================================================================
+
+/**
+ * Recovery scenario classification for initialization orchestrator.
+ * 
+ * Enables different handling based on why we got the result:
+ * - Logging: Different messages for different scenarios
+ * - User feedback: "Welcome back!" vs "We recovered your data" vs "Starting fresh"
+ * - UI decisions: Show recovery modal when data was salvaged from corruption
+ */
+export enum RecoveryScenario {
+  /** Same-version backup with zero defaulting - perfect load */
+  PERFECT_RECOVERY = "PERFECT_RECOVERY",
+  
+  /** Cross-version migration required but no corruption detected */
+  IMPERFECT_RECOVERY_MIGRATION = "IMPERFECT_RECOVERY_MIGRATION",
+  
+  /** Data loss detected (counter mismatches or validation failures) */
+  IMPERFECT_RECOVERY_CORRUPTION = "IMPERFECT_RECOVERY_CORRUPTION",
+  
+  /** New user - no backups found in either Pod or localStorage */
+  DEFAULT_NO_SAVES = "DEFAULT_NO_SAVES",
+  
+  /** Backups exist but all failed validation/loading */
+  DEFAULT_FAILED_RECOVERY = "DEFAULT_FAILED_RECOVERY",
+  
+  /** All backups belonged to different user (security issue) */
+  DEFAULT_WEBID_MISMATCH = "DEFAULT_WEBID_MISMATCH",
+}
+
+/**
+ * Progress loading result with scenario classification.
+ * 
+ * Returned by orchestrateProgressLoading() to provide initialization
+ * orchestrator with complete context about what happened during recovery.
+ */
+export interface ProgressLoadResult {
+  /** Why we got this result - enables intelligent orchestrator decisions */
+  scenario: RecoveryScenario;
+  
+  /** Whether offline work merge occurred (for user notification) */
+  mergeOccurred: boolean;
+  
+  /** Validated progress bundle ready for core initialization */
+  bundle: PodStorageBundle;
+  
+  /** Detailed recovery metrics (lessons lost, components defaulted, etc) */
+  recoveryMetrics: EnforcementResult['recoveryMetrics'];
+}
 
 // ============================================================================
 // MODULE EXPORTS
@@ -48,12 +101,12 @@ type RecoveryResult = EnforcementResult;
  * Creates escape hatch backup when data requires sanitization or merging,
  * providing manual recovery option if release contains bugs.
  *
- * @returns Recovery result with validated bundle, or null if no valid backups
+ * @returns Progress load result with scenario classification, or null if unauthenticated
  * @throws Error if merge creates corruption (bug in progressMerger)
  */
 export async function orchestrateProgressLoading(
   lessonConfigs: Map<number, any>
-): Promise<RecoveryResult | null> {
+): Promise<ProgressLoadResult | null> {
   console.log("Starting progress loading orchestration");
 
   // Get webId from meraBridge session
@@ -101,6 +154,10 @@ export async function orchestrateProgressLoading(
   let possiblyDestructiveLoad = false;
   let mergeWasPerformed = false;
 
+  // Track why we got the result we got (for scenario classification)
+  let hadWebIdMismatch = false;
+  let hadLoadFailures = false;
+
   // Select best backup using quality scoring
   const result = await selectBestBackup(
     podBackups,
@@ -113,12 +170,33 @@ export async function orchestrateProgressLoading(
     },
     () => {
       mergeWasPerformed = true;
+    },
+    // Pass callbacks to track scenario classification
+    () => {
+      hadWebIdMismatch = true;
+    },
+    () => {
+      hadLoadFailures = true;
     }
   );
 
+  // Handle no valid backups case - determine scenario
   if (!result) {
     console.error("No valid backups available");
-    return null;
+    
+    // Classify why we have no backups
+    const noBackupsScenario = classifyNoBackupsScenario(
+      podBackups.length + localBackups.length,
+      hadWebIdMismatch,
+      hadLoadFailures
+    );
+    
+    return {
+      scenario: noBackupsScenario,
+      mergeOccurred: false,
+      bundle: null as any, // No bundle when no backups (orchestrator handles this)
+      recoveryMetrics: null as any, // No metrics when no backups
+    };
   }
 
   // Create escape hatch backup if load was potentially destructive
@@ -130,8 +208,13 @@ export async function orchestrateProgressLoading(
     });
   }
 
+  // Classify recovery scenario based on result quality
+  const scenario = classifyRecoveryScenario(result, mergeWasPerformed);
+
   // Log recovery metrics for debugging
   console.log("Progress loading complete:", {
+    scenario,
+    mergeOccurred: mergeWasPerformed,
     perfectlyValidInput: result.perfectlyValidInput,
     lessonsLostToCorruption:
       result.recoveryMetrics.overallProgress.lessonsLostToCorruption,
@@ -141,7 +224,75 @@ export async function orchestrateProgressLoading(
       result.recoveryMetrics.combinedComponentProgress.componentsDefaulted,
   });
 
-  return result;
+  return {
+    scenario,
+    mergeOccurred: mergeWasPerformed,
+    bundle: result.bundle,
+    recoveryMetrics: result.recoveryMetrics,
+  };
+}
+
+// ============================================================================
+// SCENARIO CLASSIFICATION
+// ============================================================================
+
+/**
+ * Classify why we have no valid backups.
+ * 
+ * Determines the specific scenario when no backup could be loaded,
+ * enabling appropriate user messaging and initialization flow.
+ * 
+ * @param totalBackups - Total number of backup files found (Pod + localStorage)
+ * @param hadWebIdMismatch - Whether any backups were skipped due to wrong user
+ * @param hadLoadFailures - Whether any backups failed to load
+ * @returns Scenario classification
+ */
+function classifyNoBackupsScenario(
+  totalBackups: number,
+  hadWebIdMismatch: boolean,
+  hadLoadFailures: boolean
+): RecoveryScenario {
+  // No backups exist anywhere - new user
+  if (totalBackups === 0) {
+    return RecoveryScenario.DEFAULT_NO_SAVES;
+  }
+  
+  // Backups exist but all belonged to different user - security issue
+  if (hadWebIdMismatch) {
+    return RecoveryScenario.DEFAULT_WEBID_MISMATCH;
+  }
+  
+  // Backups exist but all failed to load/validate - recovery failed
+  return RecoveryScenario.DEFAULT_FAILED_RECOVERY;
+}
+
+/**
+ * Classify recovery scenario based on result quality.
+ * 
+ * Examines recovery metrics to determine whether this was a perfect
+ * load, required migration, or had data corruption.
+ * 
+ * @param result - Recovery result from backup loading
+ * @param mergeOccurred - Whether a merge operation was performed
+ * @returns Scenario classification
+ */
+function classifyRecoveryScenario(
+  result: RecoveryResult,
+  mergeOccurred: boolean
+): RecoveryScenario {
+  // Perfect load - same version, zero defaulting
+  if (result.perfectlyValidInput) {
+    return RecoveryScenario.PERFECT_RECOVERY;
+  }
+  
+  // Check if corruption was detected (counter mismatches)
+  if (result.recoveryMetrics.overallProgress.corruptionDetected) {
+    return RecoveryScenario.IMPERFECT_RECOVERY_CORRUPTION;
+  }
+  
+  // Imperfect but no corruption - must be migration/defaulting
+  // This includes: cross-version migration, curriculum changes, component changes
+  return RecoveryScenario.IMPERFECT_RECOVERY_MIGRATION;
 }
 
 // ============================================================================
@@ -476,17 +627,26 @@ function scoreBackup(result: RecoveryResult, backupIndex: number): number {
  * Iterates through backups newest-first, loading and scoring each.
  * Stops immediately on finding perfect backup. Otherwise returns lowest-scored.
  *
+ * Tracks scenario classification via callbacks:
+ * - Calls onImperfectBackup when backup needs sanitization
+ * - Calls onWebIdMismatch when backup belongs to different user
+ * - Calls onLoadFailure when backup fails to load
+ *
  * @param backups - Sorted backups (newest first)
  * @param webId - Expected user WebID
  * @param lessonConfigs - Parsed lesson configs for component validation
  * @param onImperfectBackup - Callback when backup is imperfect (needs sanitization)
+ * @param onWebIdMismatch - Callback when backup has wrong user
+ * @param onLoadFailure - Callback when backup fails to load
  * @returns Best scored result, or null if all backups disqualified
  */
 async function scoreSortedBackups(
   backups: Backup[],
   webId: string,
   lessonConfigs: Map<number, any>,
-  onImperfectBackup?: (imperfect: boolean) => void
+  onImperfectBackup?: (imperfect: boolean) => void,
+  onWebIdMismatch?: () => void,
+  onLoadFailure?: () => void
 ): Promise<ScoredResult | null> {
   if (backups.length === 0) {
     return null;
@@ -502,6 +662,7 @@ async function scoreSortedBackups(
     const data = await loadBackupData(backup);
     if (!data) {
       console.warn(`Skipping backup ${backup.filename}: failed to load`);
+      if (onLoadFailure) onLoadFailure();
       continue;
     }
 
@@ -520,6 +681,7 @@ async function scoreSortedBackups(
     // Disqualify wrong-user backups
     if (result.criticalFailures.webIdMismatch) {
       console.warn(`Backup ${backup.filename} is for different user, skipping`);
+      if (onWebIdMismatch) onWebIdMismatch();
       continue;
     }
 
@@ -649,12 +811,18 @@ async function validateAndMerge(
  * - Flags if backup is imperfect (requires sanitization)
  * - Flags if merge is performed
  *
+ * Tracks scenario classification:
+ * - Flags if any backups had webId mismatch
+ * - Flags if any backups failed to load
+ *
  * @param podBackups - Sorted Pod backups (newest first)
  * @param localBackups - Sorted localStorage backups (newest first)
  * @param webId - Expected user WebID
  * @param lessonConfigs - Parsed lesson configs for component validation
  * @param onDestructive - Callback when load is potentially destructive
  * @param onMerge - Callback when merge is performed
+ * @param onWebIdMismatch - Callback when backup has wrong user
+ * @param onLoadFailure - Callback when backup fails to load
  * @returns Best recovery result, or null if no valid backups
  */
 async function selectBestBackup(
@@ -663,19 +831,26 @@ async function selectBestBackup(
   webId: string,
   lessonConfigs: Map<number, any>,
   onDestructive?: (destructive: boolean) => void,
-  onMerge?: () => void
+  onMerge?: () => void,
+  onWebIdMismatch?: () => void,
+  onLoadFailure?: () => void
 ): Promise<RecoveryResult | null> {
   // Score both sources (track if Pod backup needs sanitization)
   const bestPod = await scoreSortedBackups(
     podBackups,
     webId,
     lessonConfigs,
-    onDestructive // Flag if imperfect
+    onDestructive, // Flag if imperfect
+    onWebIdMismatch,
+    onLoadFailure
   );
   const bestLocal = await scoreSortedBackups(
     localBackups,
     webId,
-    lessonConfigs
+    lessonConfigs,
+    undefined, // Don't track localStorage imperfections for escape hatch
+    onWebIdMismatch,
+    onLoadFailure
   );
 
   // Handle missing sources

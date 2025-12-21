@@ -8,12 +8,19 @@
  * - Source selection logic (Pod vs localStorage, quality thresholds)
  * - Merge validation and corruption detection
  * - Escape hatch integration (callback triggering)
+ * - Recovery scenario classification
  * - Error handling and edge cases
  * - Full integration scenarios
+ * 
+ * Note: orchestrateProgressLoading() now returns ProgressLoadResult with:
+ * - scenario: RecoveryScenario enum
+ * - mergeOccurred: boolean
+ * - bundle: PodStorageBundle
+ * - recoveryMetrics: RecoveryMetrics
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { orchestrateProgressLoading } from './progressLoader.js';
+import { orchestrateProgressLoading, RecoveryScenario, type ProgressLoadResult } from './progressLoader.js';
 import type { EnforcementResult } from './progressIntegrity.js';
 import type { PodStorageBundle } from '../persistence/podStorageSchema.js';
 
@@ -268,7 +275,7 @@ describe('progressLoader', () => {
       const result = await orchestrateProgressLoading(mockLessonConfigs);
 
       expect(result).toBeTruthy();
-      expect(result?.perfectlyValidInput).toBe(true);
+      expect(result?.scenario).toBe(RecoveryScenario.PERFECT_RECOVERY);
     });
 
     it('applies 20,000 point penalty per lesson lost to corruption', async () => {
@@ -303,7 +310,7 @@ describe('progressLoader', () => {
 
       // Score should be: 3 * 20,000 = 60,000
       expect(result).toBeTruthy();
-      expect(result?.perfectlyValidInput).toBe(false);
+      expect(result?.scenario).toBe(RecoveryScenario.IMPERFECT_RECOVERY_CORRUPTION);
     });
 
     it('applies 1,000 point penalty per lesson dropped from curriculum', async () => {
@@ -544,13 +551,14 @@ describe('progressLoader', () => {
       expect(mockMergeBundles).not.toHaveBeenCalled();
     });
 
-    it('returns null when no backups exist anywhere', async () => {
+    it('returns result with DEFAULT_NO_SAVES when no backups exist anywhere', async () => {
       mockBridge.solidList.mockResolvedValue({ success: true, data: [] });
       mockBridge.localList.mockResolvedValue({ success: true, data: [] });
 
       const result = await orchestrateProgressLoading(mockLessonConfigs);
 
-      expect(result).toBeNull();
+      expect(result).toBeTruthy();
+      expect(result?.scenario).toBe(RecoveryScenario.DEFAULT_NO_SAVES);
     });
 
     it('uses Pod when quality is good (score < 1000) and no offline work', async () => {
@@ -1124,7 +1132,7 @@ describe('progressLoader', () => {
       const result = await orchestrateProgressLoading(mockLessonConfigs);
 
       // Should continue with empty Pod list
-      expect(result).toBeNull(); // No backups anywhere
+      expect(result?.scenario).toBe(RecoveryScenario.DEFAULT_NO_SAVES); // No backups anywhere
     });
 
     it('handles localStorage list failure gracefully', async () => {
@@ -1134,7 +1142,7 @@ describe('progressLoader', () => {
       const result = await orchestrateProgressLoading(mockLessonConfigs);
 
       // Should continue with empty localStorage list
-      expect(result).toBeNull();
+      expect(result?.scenario).toBe(RecoveryScenario.DEFAULT_NO_SAVES);
     });
 
     it('skips backup when load fails', async () => {
@@ -1208,7 +1216,7 @@ describe('progressLoader', () => {
 
       const result = await orchestrateProgressLoading(mockLessonConfigs);
 
-      expect(result).toBeNull();
+      expect(result?.scenario).toBe(RecoveryScenario.DEFAULT_FAILED_RECOVERY);
     });
 
     it('throws on malformed backup filenames', async () => {
@@ -1247,7 +1255,8 @@ describe('progressLoader', () => {
       const result = await orchestrateProgressLoading(mockLessonConfigs);
 
       expect(result).toBeTruthy();
-      expect(result?.perfectlyValidInput).toBe(true);
+      expect(result?.scenario).toBe(RecoveryScenario.PERFECT_RECOVERY);
+      expect(result?.mergeOccurred).toBe(false);
       expect(mockMergeBundles).not.toHaveBeenCalled();
       expect(mockMakeEscapeHatchBackup).not.toHaveBeenCalled();
     });
@@ -1315,7 +1324,8 @@ describe('progressLoader', () => {
       const result = await orchestrateProgressLoading(mockLessonConfigs);
 
       expect(result).toBeTruthy();
-      expect(result?.perfectlyValidInput).toBe(false);
+      expect(result?.scenario).toBe(RecoveryScenario.IMPERFECT_RECOVERY_MIGRATION);
+      expect(result?.mergeOccurred).toBe(false);
       expect(mockMakeEscapeHatchBackup).toHaveBeenCalled();
     });
 
@@ -1402,7 +1412,7 @@ describe('progressLoader', () => {
 
       const result = await orchestrateProgressLoading(mockLessonConfigs);
 
-      expect(result).toBeNull();
+      expect(result?.scenario).toBe(RecoveryScenario.DEFAULT_NO_SAVES);
       expect(mockEnforceDataIntegrity).not.toHaveBeenCalled();
       expect(mockMergeBundles).not.toHaveBeenCalled();
     });
@@ -1424,6 +1434,182 @@ describe('progressLoader', () => {
 
       expect(result).toBeTruthy();
       expect(mockBridge.localLoad).toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // RECOVERY SCENARIO CLASSIFICATION
+  // ==========================================================================
+
+  describe('Recovery Scenario Classification', () => {
+    it('returns PERFECT_RECOVERY for same-version backup with zero defaulting', async () => {
+      const backup = `mera.0.1.0.sp.${currentTime}.json`;
+
+      mockBridge.solidList.mockResolvedValue({ success: true, data: [backup] });
+      mockBridge.solidLoad.mockResolvedValue({
+        success: true,
+        data: createMockBackupData('https://test.pod/profile/card#me'),
+      });
+
+      mockEnforceDataIntegrity.mockReturnValue(createMockRecoveryResult(true, undefined, { webIDMismatch: false }));
+
+      const result = await orchestrateProgressLoading(mockLessonConfigs);
+
+      expect(result?.scenario).toBe(RecoveryScenario.PERFECT_RECOVERY);
+      expect(result?.mergeOccurred).toBe(false);
+    });
+
+    it('returns IMPERFECT_RECOVERY_CORRUPTION when counter mismatches detected', async () => {
+      const backup = `mera.0.1.0.sp.${currentTime}.json`;
+
+      mockBridge.solidList.mockResolvedValue({ success: true, data: [backup] });
+      mockBridge.solidLoad.mockResolvedValue({
+        success: true,
+        data: createMockBackupData('https://test.pod/profile/card#me'),
+      });
+
+      mockEnforceDataIntegrity.mockReturnValue(
+        createMockRecoveryResult(false, {
+          overallProgress: {
+            lessonsLostToCorruption: 2,
+            lessonsDroppedCount: 0,
+            lessonsDroppedRatio: 0,
+            domainsLostToCorruption: 0,
+            domainsDroppedCount: 0,
+            domainsDroppedRatio: 0,
+            corruptionDetected: true,
+          },
+          settings: { defaultedRatio: 0 },
+          navigationState: { wasDefaulted: false },
+          metadata: { defaultedRatio: 0 },
+          combinedComponentProgress: { defaultedRatio: 0, componentsRetained: 0, componentsDefaulted: 0 },
+        })
+      );
+
+      const result = await orchestrateProgressLoading(mockLessonConfigs);
+
+      expect(result?.scenario).toBe(RecoveryScenario.IMPERFECT_RECOVERY_CORRUPTION);
+    });
+
+    it('returns IMPERFECT_RECOVERY_MIGRATION for cross-version migration without corruption', async () => {
+      const backup = `mera.0.1.0.sp.${currentTime}.json`;
+
+      mockBridge.solidList.mockResolvedValue({ success: true, data: [backup] });
+      mockBridge.solidLoad.mockResolvedValue({
+        success: true,
+        data: createMockBackupData('https://test.pod/profile/card#me'),
+      });
+
+      mockEnforceDataIntegrity.mockReturnValue(
+        createMockRecoveryResult(false, {
+          overallProgress: {
+            lessonsLostToCorruption: 0,
+            lessonsDroppedCount: 3,
+            lessonsDroppedRatio: 0.3,
+            domainsLostToCorruption: 0,
+            domainsDroppedCount: 0,
+            domainsDroppedRatio: 0,
+            corruptionDetected: false, // No corruption, just migration
+          },
+          settings: { defaultedRatio: 0.1 },
+          navigationState: { wasDefaulted: false },
+          metadata: { defaultedRatio: 0 },
+          combinedComponentProgress: { defaultedRatio: 0, componentsRetained: 10, componentsDefaulted: 5 },
+        })
+      );
+
+      const result = await orchestrateProgressLoading(mockLessonConfigs);
+
+      expect(result?.scenario).toBe(RecoveryScenario.IMPERFECT_RECOVERY_MIGRATION);
+    });
+
+    it('returns DEFAULT_NO_SAVES when no backups exist', async () => {
+      mockBridge.solidList.mockResolvedValue({ success: true, data: [] });
+      mockBridge.localList.mockResolvedValue({ success: true, data: [] });
+
+      const result = await orchestrateProgressLoading(mockLessonConfigs);
+
+      expect(result?.scenario).toBe(RecoveryScenario.DEFAULT_NO_SAVES);
+      expect(result?.bundle).toBeNull();
+    });
+
+    it('returns DEFAULT_WEBID_MISMATCH when all backups belong to different user', async () => {
+      const backup = `mera.0.1.0.sp.${currentTime}.json`;
+
+      mockBridge.solidList.mockResolvedValue({ success: true, data: [backup] });
+      mockBridge.solidLoad.mockResolvedValue({
+        success: true,
+        data: createMockBackupData('https://wrong.pod/profile#me'),
+      });
+
+      mockEnforceDataIntegrity.mockReturnValue(
+        createMockRecoveryResult(true, undefined, { webIDMismatch: true })
+      );
+
+      const result = await orchestrateProgressLoading(mockLessonConfigs);
+
+      expect(result?.scenario).toBe(RecoveryScenario.DEFAULT_WEBID_MISMATCH);
+    });
+
+    it('returns DEFAULT_FAILED_RECOVERY when backups exist but all fail to load', async () => {
+      const backups = [
+        `mera.0.1.0.sp.${currentTime}.json`,
+        `mera.0.1.0.sp.${currentTime - 1000}.json`,
+      ];
+
+      mockBridge.solidList.mockResolvedValue({ success: true, data: backups });
+      mockBridge.solidLoad.mockResolvedValue({
+        success: false,
+        error: 'All corrupted',
+      });
+
+      const result = await orchestrateProgressLoading(mockLessonConfigs);
+
+      expect(result?.scenario).toBe(RecoveryScenario.DEFAULT_FAILED_RECOVERY);
+    });
+
+    it('sets mergeOccurred=true when offline work merge happens', async () => {
+      const podBackup = `mera.0.1.0.sp.${currentTime}.json`;
+      const localBackup = `mera.0.1.0.lofp.${currentTime - 1000}.json`;
+
+      mockBridge.solidList.mockResolvedValue({ success: true, data: [podBackup] });
+      mockBridge.localList.mockResolvedValue({ success: true, data: [localBackup] });
+
+      mockBridge.solidLoad.mockResolvedValue({
+        success: true,
+        data: createMockBackupData('https://test.pod/profile/card#me'),
+      });
+      mockBridge.localLoad.mockResolvedValue({
+        success: true,
+        data: createMockBackupData('https://test.pod/profile/card#me'),
+      });
+
+      mockEnforceDataIntegrity.mockReturnValue(createMockRecoveryResult(true, undefined, { webIDMismatch: false }));
+      mockMergeBundles.mockReturnValue(createMockBundle());
+
+      const result = await orchestrateProgressLoading(mockLessonConfigs);
+
+      expect(result?.mergeOccurred).toBe(true);
+      expect(mockMergeBundles).toHaveBeenCalled();
+    });
+
+    it('sets mergeOccurred=false when using single source', async () => {
+      const backup = `mera.0.1.0.sp.${currentTime}.json`;
+
+      mockBridge.solidList.mockResolvedValue({ success: true, data: [backup] });
+      mockBridge.localList.mockResolvedValue({ success: true, data: [] });
+
+      mockBridge.solidLoad.mockResolvedValue({
+        success: true,
+        data: createMockBackupData('https://test.pod/profile/card#me'),
+      });
+
+      mockEnforceDataIntegrity.mockReturnValue(createMockRecoveryResult(true, undefined, { webIDMismatch: false }));
+
+      const result = await orchestrateProgressLoading(mockLessonConfigs);
+
+      expect(result?.mergeOccurred).toBe(false);
+      expect(mockMergeBundles).not.toHaveBeenCalled();
     });
   });
 });

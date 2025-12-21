@@ -46845,11 +46845,11 @@ function date4(params) {
 config(en_default());
 
 // src/ts/core/coreTypes.ts
-var ImmutableId = external_exports.number().int().min(1).max(999999999999);
+var ImmutableId = external_exports.number().int().min(0).max(999999999999);
 
 // src/ts/core/overallProgressSchema.ts
 var CompletionDataSchema = external_exports.object({
-  firstCompleted: external_exports.number().nullable(),
+  timeCompleted: external_exports.number().nullable(),
   lastUpdated: external_exports.number()
 });
 var OverallProgressDataSchema = external_exports.object({
@@ -47167,6 +47167,8 @@ function enforceDataIntegrity(rawJson, expectedWebId, lessonConfigs) {
       overallProgress: {
         lessonsDroppedRatio: overallProgressResult.lessonsDroppedRatio,
         domainsDroppedRatio: overallProgressResult.domainsDroppedRatio,
+        lessonsDroppedCount: overallProgressResult.lessonsDroppedCount,
+        domainsDroppedCount: overallProgressResult.domainsDroppedCount,
         corruptionDetected: overallProgressResult.corruptionDetected,
         lessonsLostToCorruption: overallProgressResult.lessonsLostToCorruption,
         domainsLostToCorruption: overallProgressResult.domainsLostToCorruption
@@ -47193,7 +47195,7 @@ function extractMetadata(parsed, expectedWebId) {
   if (zodResult.success) {
     if (zodResult.data.webId !== expectedWebId) {
       return {
-        data: { webId: "WEBID_MISMATCH_ERROR" },
+        data: { webId: "https://error.mera.invalid/webid-mismatch" },
         // Security: Never use mismatched webId
         defaultedRatio: 1,
         webIDMismatch: {
@@ -47214,7 +47216,7 @@ function extractMetadata(parsed, expectedWebId) {
     found: webId
   } : void 0;
   return {
-    data: { webId: "WEBID_MISMATCH_ERROR" },
+    data: { webId: "https://error.mera.invalid/webid-mismatch" },
     // Security: Never use mismatched webId
     defaultedRatio: 1,
     webIDMismatch
@@ -47265,8 +47267,8 @@ function reconcileOverallProgress(progress) {
   };
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
   const claimedDomains = progress.totalDomainsCompleted ?? 0;
-  const actualLessons = Object.values(progress.lessonCompletions).filter((completion) => completion.firstCompleted !== null).length;
-  const actualDomains = Object.values(progress.domainCompletions).filter((completion) => completion.firstCompleted !== null).length;
+  const actualLessons = Object.values(progress.lessonCompletions).filter((completion) => completion.timeCompleted !== null).length;
+  const actualDomains = Object.values(progress.domainCompletions).filter((completion) => completion.timeCompleted !== null).length;
   const lessonsLostToCorruption = Math.max(0, claimedLessons - actualLessons);
   const domainsLostToCorruption = Math.max(0, claimedDomains - actualDomains);
   const corruptionDetected = lessonsLostToCorruption > 0 || domainsLostToCorruption > 0;
@@ -47275,13 +47277,13 @@ function reconcileOverallProgress(progress) {
   for (const lessonId of allLessonIds2) {
     const key = lessonId.toString();
     const existing = progress.lessonCompletions[key];
-    if (existing && typeof existing === "object" && existing !== null && "firstCompleted" in existing && "lastUpdated" in existing && (existing.firstCompleted === null || typeof existing.firstCompleted === "number") && typeof existing.lastUpdated === "number") {
+    if (existing && typeof existing === "object" && existing !== null && "timeCompleted" in existing && "lastUpdated" in existing && (existing.timeCompleted === null || typeof existing.timeCompleted === "number") && typeof existing.lastUpdated === "number") {
       result.lessonCompletions[key] = existing;
-      if (existing.firstCompleted !== null) {
+      if (existing.timeCompleted !== null) {
         lessonsKept++;
       }
     } else {
-      result.lessonCompletions[key] = { firstCompleted: null, lastUpdated: 0 };
+      result.lessonCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
     }
   }
   const allDomainIds = curriculumData.getAllDomainIds();
@@ -47289,13 +47291,13 @@ function reconcileOverallProgress(progress) {
   for (const domainId of allDomainIds) {
     const key = domainId.toString();
     const existing = progress.domainCompletions[key];
-    if (existing && typeof existing === "object" && existing !== null && "firstCompleted" in existing && "lastUpdated" in existing && (existing.firstCompleted === null || typeof existing.firstCompleted === "number") && typeof existing.lastUpdated === "number") {
+    if (existing && typeof existing === "object" && existing !== null && "timeCompleted" in existing && "lastUpdated" in existing && (existing.timeCompleted === null || typeof existing.timeCompleted === "number") && typeof existing.lastUpdated === "number") {
       result.domainCompletions[key] = existing;
-      if (existing.firstCompleted !== null) {
+      if (existing.timeCompleted !== null) {
         domainsKept++;
       }
     } else {
-      result.domainCompletions[key] = { firstCompleted: null, lastUpdated: 0 };
+      result.domainCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
     }
   }
   if (typeof progress.currentStreak === "number" && progress.currentStreak >= 0 && progress.currentStreak <= 1e3) {
@@ -47314,6 +47316,8 @@ function reconcileOverallProgress(progress) {
     data: result,
     lessonsDroppedRatio: originalLessonCount > 0 ? lessonsDropped / originalLessonCount : 0,
     domainsDroppedRatio: originalDomainCount > 0 ? domainsDropped / originalDomainCount : 0,
+    lessonsDroppedCount: lessonsDropped,
+    domainsDroppedCount: domainsDropped,
     corruptionDetected,
     lessonsLostToCorruption,
     domainsLostToCorruption
@@ -47419,6 +47423,7 @@ function extractNavigationState(parsed) {
   return {
     data: {
       currentEntityId: 0,
+      // Main menu
       currentPage: 0,
       lastUpdated: Math.floor(Date.now() / 1e3)
     },
@@ -47502,14 +47507,14 @@ function initializeAllLessonsAndDomainsWithDefaults() {
   const allLessonIds2 = curriculumData.getAllLessonIds();
   for (const lessonId of allLessonIds2) {
     lessonCompletions[lessonId.toString()] = {
-      firstCompleted: null,
+      timeCompleted: null,
       lastUpdated: 0
     };
   }
   const allDomainIds = curriculumData.getAllDomainIds();
   for (const domainId of allDomainIds) {
     domainCompletions[domainId.toString()] = {
-      firstCompleted: null,
+      timeCompleted: null,
       lastUpdated: 0
     };
   }
@@ -47537,7 +47542,7 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
   const { lessonCompletions, domainCompletions } = initializeAllLessonsAndDomainsWithDefaults();
   let bundle = {
     metadata: {
-      webId: "WEBID_MISMATCH_ERROR"
+      webId: "https://error.mera.invalid/unparseable-json"
       // Security: Unparseable = treat as mismatch
     },
     overallProgress: {
@@ -47563,6 +47568,7 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
     },
     navigationState: {
       currentEntityId: 0,
+      // Main menu
       currentPage: 0,
       lastUpdated: Math.floor(Date.now() / 1e3)
     },
@@ -47585,6 +47591,10 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
       overallProgress: {
         lessonsDroppedRatio: 1,
         domainsDroppedRatio: 1,
+        lessonsDroppedCount: 0,
+        // Nothing to drop - fully defaulted
+        domainsDroppedCount: 0,
+        // Nothing to drop - fully defaulted
         corruptionDetected: false,
         // Fully defaulted = no corruption, just empty
         lessonsLostToCorruption: 0,
@@ -47619,8 +47629,8 @@ function mergeOverallProgress(dataA, dataB) {
     const compB = dataB.domainCompletions[domainId];
     mergedDomains[domainId] = compA.lastUpdated >= compB.lastUpdated ? compA : compB;
   }
-  const totalLessonsCompleted = Object.values(mergedLessons).filter((c) => c.firstCompleted !== null).length;
-  const totalDomainsCompleted = Object.values(mergedDomains).filter((c) => c.firstCompleted !== null).length;
+  const totalLessonsCompleted = Object.values(mergedLessons).filter((c) => c.timeCompleted !== null).length;
+  const totalDomainsCompleted = Object.values(mergedDomains).filter((c) => c.timeCompleted !== null).length;
   const useDataA = dataA.lastStreakCheck >= dataB.lastStreakCheck;
   const mergedStreak = useDataA ? dataA.currentStreak : dataB.currentStreak;
   const mergedStreakCheck = Math.max(dataA.lastStreakCheck, dataB.lastStreakCheck);
@@ -47684,6 +47694,88 @@ function mergeBundles(bundleA, bundleB) {
   };
 }
 
+// src/ts/initialization/escapeHatch.ts
+async function makeEscapeHatchBackup(rawJson) {
+  try {
+    const shouldCreate = await shouldCreateEscapeHatch();
+    if (!shouldCreate) {
+      console.log("Skipping escape hatch: recent backup exists (< 1 hour old)");
+      return;
+    }
+    const timestamp2 = Date.now();
+    const filename = generateEscapeHatchFilename(timestamp2);
+    const { MeraBridge: MeraBridge2 } = await Promise.resolve().then(() => (init_meraBridge(), meraBridge_exports));
+    const bridge = MeraBridge2.getInstance();
+    const result = await bridge.solidSave(filename, rawJson);
+    if (!result.success) {
+      console.error("Failed to create escape hatch backup:", result.error);
+      return;
+    }
+    console.log(`Escape hatch backup created: ${filename}`);
+    cleanupOldEscapeHatches().catch((err) => {
+      console.error("Escape hatch cleanup failed:", err);
+    });
+  } catch (err) {
+    console.error("Escape hatch backup failed:", err);
+  }
+}
+var MAX_ESCAPE_HATCHES = 20;
+var MIN_INTERVAL_MS = 60 * 60 * 1e3;
+function generateEscapeHatchFilename(timestamp2) {
+  return `mera.0.1.0.ehb.${timestamp2}.json`;
+}
+async function shouldCreateEscapeHatch() {
+  const existing = await listEscapeHatchBackups();
+  if (existing.length === 0) {
+    return true;
+  }
+  const mostRecent = existing[0];
+  const age = Date.now() - mostRecent.timestamp;
+  return age >= MIN_INTERVAL_MS;
+}
+async function listEscapeHatchBackups() {
+  const { MeraBridge: MeraBridge2 } = await Promise.resolve().then(() => (init_meraBridge(), meraBridge_exports));
+  const bridge = MeraBridge2.getInstance();
+  const result = await bridge.solidList("mera.*.*.*.ehb.*.json");
+  if (!result.success || !result.data) {
+    if (!result.success) {
+      console.warn("Failed to list escape hatch backups:", result.error);
+    }
+    return [];
+  }
+  const backups = result.data.map((filename) => {
+    const match = filename.match(/\.(\d+)\.json$/);
+    if (!match) {
+      console.warn(`Invalid escape hatch filename: ${filename}`);
+      return null;
+    }
+    return {
+      filename,
+      timestamp: parseInt(match[1], 10)
+    };
+  }).filter((b) => b !== null);
+  backups.sort((a, b) => b.timestamp - a.timestamp);
+  return backups;
+}
+async function cleanupOldEscapeHatches() {
+  const backups = await listEscapeHatchBackups();
+  if (backups.length <= MAX_ESCAPE_HATCHES) {
+    console.log(`Escape hatch cleanup: ${backups.length} backups, under limit`);
+    return;
+  }
+  const toDelete = backups.slice(MAX_ESCAPE_HATCHES);
+  console.log(`Escape hatch cleanup: deleting ${toDelete.length} old backups`);
+  const { MeraBridge: MeraBridge2 } = await Promise.resolve().then(() => (init_meraBridge(), meraBridge_exports));
+  const bridge = MeraBridge2.getInstance();
+  for (const backup of toDelete) {
+    const result = await bridge.solidDelete(backup.filename);
+    if (!result.success) {
+      console.error(`Failed to delete escape hatch ${backup.filename}:`, result.error);
+    }
+  }
+  console.log("Escape hatch cleanup complete");
+}
+
 // src/ts/initialization/progressLoader.ts
 async function orchestrateProgressLoading(lessonConfigs) {
   console.log("Starting progress loading orchestration");
@@ -47694,14 +47786,52 @@ async function orchestrateProgressLoading(lessonConfigs) {
     console.error("No webId available - user not authenticated");
     return null;
   }
-  console.log(`Loading progress for webId: ${webId}, with ${lessonConfigs.size} lesson configs`);
+  console.log(
+    `Loading progress for webId: ${webId}, with ${lessonConfigs.size} lesson configs`
+  );
   const podBackups = await listPodBackups();
   const localBackups = await listLocalStorageBackups();
-  console.log(`Found ${podBackups.length} Pod backups, ${localBackups.length} localStorage backups`);
-  const result = await selectBestBackup(podBackups, localBackups, webId, lessonConfigs);
+  console.log(
+    `Found ${podBackups.length} Pod backups, ${localBackups.length} localStorage backups`
+  );
+  let mostRecentPodJson = null;
+  if (podBackups.length > 0) {
+    const primaryBackup = podBackups.find((b) => b.filename.includes(".sp."));
+    if (primaryBackup) {
+      const data = await loadBackupData(primaryBackup);
+      if (data && typeof data === "string") {
+        mostRecentPodJson = data;
+        console.log(`Captured escape hatch source: ${primaryBackup.filename}`);
+      } else {
+        console.warn(
+          "Failed to capture escape hatch source: invalid data type or load failure"
+        );
+      }
+    }
+  }
+  let possiblyDestructiveLoad = false;
+  let mergeWasPerformed = false;
+  const result = await selectBestBackup(
+    podBackups,
+    localBackups,
+    webId,
+    lessonConfigs,
+    // Pass callbacks to capture escape hatch triggers
+    (wasDestructive) => {
+      possiblyDestructiveLoad = wasDestructive;
+    },
+    () => {
+      mergeWasPerformed = true;
+    }
+  );
   if (!result) {
     console.error("No valid backups available");
     return null;
+  }
+  if ((possiblyDestructiveLoad || mergeWasPerformed) && mostRecentPodJson) {
+    makeEscapeHatchBackup(mostRecentPodJson).catch((err) => {
+      console.error("Failed to create escape hatch backup:", err);
+    });
   }
   console.log("Progress loading complete:", {
     perfectlyValidInput: result.perfectlyValidInput,
@@ -47716,12 +47846,14 @@ var SCORING = {
   LESSON_LOST: 2e4,
   /** Per lesson removed from curriculum (reconciliation) */
   LESSON_DEFAULTED: 1e3,
-  /** All settings defaulted (binary penalty) */
-  SETTINGS_DEFAULTED: 1e3,
+  /** Baseline penalty for any settings defaulted */
+  SETTINGS_BASELINE: 1e3,
+  /** Additional proportional penalty for settings (scaled by ratio) */
+  SETTINGS_PROPORTIONAL: 4e3,
   /** Per component defaulted (migration or corruption) */
   COMPONENT_DEFAULTED: 5,
   /** Per backup step back in time (recency tie-breaker) */
-  BACKUP_STEP: 300,
+  BACKUP_STEP: 500,
   /** Quality threshold - above this, check localStorage as backup source */
   QUALITY_THRESHOLD: 1e3
 };
@@ -47753,36 +47885,86 @@ async function loadBackupData(backup) {
 async function listPodBackups() {
   const { MeraBridge: MeraBridge2 } = await Promise.resolve().then(() => (init_meraBridge(), meraBridge_exports));
   const bridge = MeraBridge2.getInstance();
-  const result = await bridge.solidList("mera.*.*.*.sp.*.json");
-  if (!result.success || !result.data) {
-    console.error("Failed to list Pod backups:", result.error);
-    return [];
+  const primaryResult = await bridge.solidList("mera.*.*.*.sp.*.json");
+  const duplicateResult = await bridge.solidList("mera.*.*.*.sd.*.json");
+  const allBackups = [];
+  if (primaryResult.success && primaryResult.data) {
+    const primaryBackups = primaryResult.data.map(
+      (filename) => parseBackupFilename(filename, "pod")
+    );
+    allBackups.push(...primaryBackups);
+  } else if (!primaryResult.success) {
+    console.error("Failed to list Pod primary backups:", primaryResult.error);
   }
-  const backups = result.data.map((filename) => parseBackupFilename(filename, "pod"));
-  backups.sort((a, b) => b.timestamp - a.timestamp);
-  return backups;
+  if (duplicateResult.success && duplicateResult.data) {
+    const duplicateBackups = duplicateResult.data.map(
+      (filename) => parseBackupFilename(filename, "pod")
+    );
+    allBackups.push(...duplicateBackups);
+  } else if (!duplicateResult.success) {
+    console.error(
+      "Failed to list Pod duplicate backups:",
+      duplicateResult.error
+    );
+  }
+  allBackups.sort((a, b) => b.timestamp - a.timestamp);
+  return allBackups;
 }
 async function listLocalStorageBackups() {
   const { MeraBridge: MeraBridge2 } = await Promise.resolve().then(() => (init_meraBridge(), meraBridge_exports));
   const bridge = MeraBridge2.getInstance();
-  const offlineResult = await bridge.localList("mera.*.*.*.lofp.*.json");
-  const onlineResult = await bridge.localList("mera.*.*.*.lonp.*.json");
+  const offlinePrimaryResult = await bridge.localList("mera.*.*.*.lofp.*.json");
+  const offlineDuplicateResult = await bridge.localList(
+    "mera.*.*.*.lofd.*.json"
+  );
+  const onlinePrimaryResult = await bridge.localList("mera.*.*.*.lonp.*.json");
+  const onlineDuplicateResult = await bridge.localList(
+    "mera.*.*.*.lond.*.json"
+  );
   const allBackups = [];
-  if (offlineResult.success && offlineResult.data) {
-    const offlineBackups = offlineResult.data.map(
+  if (offlinePrimaryResult.success && offlinePrimaryResult.data) {
+    const backups = offlinePrimaryResult.data.map(
       (filename) => parseBackupFilename(filename, "localStorage")
     );
-    allBackups.push(...offlineBackups);
-  } else if (!offlineResult.success) {
-    console.error("Failed to list offline localStorage backups:", offlineResult.error);
+    allBackups.push(...backups);
+  } else if (!offlinePrimaryResult.success) {
+    console.error(
+      "Failed to list offline primary localStorage backups:",
+      offlinePrimaryResult.error
+    );
   }
-  if (onlineResult.success && onlineResult.data) {
-    const onlineBackups = onlineResult.data.map(
+  if (offlineDuplicateResult.success && offlineDuplicateResult.data) {
+    const backups = offlineDuplicateResult.data.map(
       (filename) => parseBackupFilename(filename, "localStorage")
     );
-    allBackups.push(...onlineBackups);
-  } else if (!onlineResult.success) {
-    console.error("Failed to list online localStorage backups:", onlineResult.error);
+    allBackups.push(...backups);
+  } else if (!offlineDuplicateResult.success) {
+    console.error(
+      "Failed to list offline duplicate localStorage backups:",
+      offlineDuplicateResult.error
+    );
+  }
+  if (onlinePrimaryResult.success && onlinePrimaryResult.data) {
+    const backups = onlinePrimaryResult.data.map(
+      (filename) => parseBackupFilename(filename, "localStorage")
+    );
+    allBackups.push(...backups);
+  } else if (!onlinePrimaryResult.success) {
+    console.error(
+      "Failed to list online primary localStorage backups:",
+      onlinePrimaryResult.error
+    );
+  }
+  if (onlineDuplicateResult.success && onlineDuplicateResult.data) {
+    const backups = onlineDuplicateResult.data.map(
+      (filename) => parseBackupFilename(filename, "localStorage")
+    );
+    allBackups.push(...backups);
+  } else if (!onlineDuplicateResult.success) {
+    console.error(
+      "Failed to list online duplicate localStorage backups:",
+      onlineDuplicateResult.error
+    );
   }
   allBackups.sort((a, b) => b.timestamp - a.timestamp);
   return allBackups;
@@ -47794,17 +47976,18 @@ function scoreBackup(result, backupIndex) {
   let score = 0;
   score += backupIndex * SCORING.BACKUP_STEP;
   score += result.recoveryMetrics.overallProgress.lessonsLostToCorruption * SCORING.LESSON_LOST;
-  const lessonsDropped = Math.round(
-    result.recoveryMetrics.overallProgress.lessonsDroppedRatio * 100
-  );
-  score += lessonsDropped * SCORING.LESSON_DEFAULTED;
+  score += result.recoveryMetrics.overallProgress.lessonsDroppedCount * SCORING.LESSON_DEFAULTED;
   if (result.recoveryMetrics.settings.defaultedRatio > 0) {
-    score += SCORING.SETTINGS_DEFAULTED;
+    const settingsBaseline = SCORING.SETTINGS_BASELINE;
+    const settingsProportional = Math.round(
+      result.recoveryMetrics.settings.defaultedRatio * SCORING.SETTINGS_PROPORTIONAL
+    );
+    score += settingsBaseline + settingsProportional;
   }
   score += result.recoveryMetrics.combinedComponentProgress.componentsDefaulted * SCORING.COMPONENT_DEFAULTED;
   return score;
 }
-async function scoreSortedBackups(backups, webId, lessonConfigs) {
+async function scoreSortedBackups(backups, webId, lessonConfigs, onImperfectBackup) {
   if (backups.length === 0) {
     return null;
   }
@@ -47828,6 +48011,9 @@ async function scoreSortedBackups(backups, webId, lessonConfigs) {
       continue;
     }
     const score = scoreBackup(result, i);
+    if (!result.perfectlyValidInput && onImperfectBackup) {
+      onImperfectBackup(true);
+    }
     if (score === 0) {
       console.log(`Perfect backup found: ${backup.filename}`);
       return { result, score, backup };
@@ -47838,7 +48024,9 @@ async function scoreSortedBackups(backups, webId, lessonConfigs) {
     }
   }
   if (bestResult) {
-    console.log(`Best backup: ${bestResult.backup.filename} (score: ${bestResult.score})`);
+    console.log(
+      `Best backup: ${bestResult.backup.filename} (score: ${bestResult.score})`
+    );
   }
   return bestResult;
 }
@@ -47846,7 +48034,9 @@ function hasOfflineTag(backup) {
   return backup.filename.includes(".lofp.");
 }
 async function validateAndMerge(primary, secondary, webId, lessonConfigs) {
-  console.log(`Merging ${primary.backup.filename} + ${secondary.backup.filename}`);
+  console.log(
+    `Merging ${primary.backup.filename} + ${secondary.backup.filename}`
+  );
   const mergedBundle = mergeBundles(
     primary.result.bundle,
     secondary.result.bundle
@@ -47854,18 +48044,26 @@ async function validateAndMerge(primary, secondary, webId, lessonConfigs) {
   const mergedJson = JSON.stringify(mergedBundle);
   const finalResult = enforceDataIntegrity(mergedJson, webId, lessonConfigs);
   if (finalResult.recoveryMetrics.overallProgress.corruptionDetected) {
-    console.warn(
-      "Merge created corruption (counter mismatch), falling back to primary source",
-      { primary: primary.backup.filename, secondary: secondary.backup.filename }
+    throw new Error(
+      `Merge created corruption (counter mismatch). This is a bug in progressMerger.ts. Primary: ${primary.backup.filename}, Secondary: ${secondary.backup.filename}, Corruption: ${finalResult.recoveryMetrics.overallProgress.lessonsLostToCorruption} lessons lost`
     );
-    return primary.result;
   }
   console.log("Merge successful");
   return finalResult;
 }
-async function selectBestBackup(podBackups, localBackups, webId, lessonConfigs) {
-  const bestPod = await scoreSortedBackups(podBackups, webId, lessonConfigs);
-  const bestLocal = await scoreSortedBackups(localBackups, webId, lessonConfigs);
+async function selectBestBackup(podBackups, localBackups, webId, lessonConfigs, onDestructive, onMerge) {
+  const bestPod = await scoreSortedBackups(
+    podBackups,
+    webId,
+    lessonConfigs,
+    onDestructive
+    // Flag if imperfect
+  );
+  const bestLocal = await scoreSortedBackups(
+    localBackups,
+    webId,
+    lessonConfigs
+  );
   if (!bestPod && !bestLocal) {
     console.error("No valid backups found in either Pod or localStorage");
     return null;
@@ -47881,23 +48079,15 @@ async function selectBestBackup(podBackups, localBackups, webId, lessonConfigs) 
   if (bestPod.score < SCORING.QUALITY_THRESHOLD) {
     if (hasOfflineTag(bestLocal.backup)) {
       console.log("Good Pod backup + offline work detected, merging");
+      if (onMerge) onMerge();
       return validateAndMerge(bestPod, bestLocal, webId, lessonConfigs);
     }
     console.log("Good Pod backup, no offline work, using Pod");
     return bestPod.result;
   }
-  console.log("Pod backup has quality issues, checking localStorage as backup source");
-  if (bestLocal.score < bestPod.score) {
-    if (hasOfflineTag(bestLocal.backup)) {
-      console.log("localStorage is better AND has offline work, merging");
-      return validateAndMerge(bestLocal, bestPod, webId, lessonConfigs);
-    } else {
-      console.log("localStorage is better but stale, using as backup source");
-      return bestLocal.result;
-    }
-  }
-  console.log("Pod is best option despite quality issues");
-  return bestPod.result;
+  console.log("Pod backup has quality issues, merging with localStorage");
+  if (onMerge) onMerge();
+  return validateAndMerge(bestLocal, bestPod, webId, lessonConfigs);
 }
 
 // node_modules/js-yaml/dist/js-yaml.mjs

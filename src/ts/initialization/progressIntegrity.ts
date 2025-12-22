@@ -1,92 +1,77 @@
 /**
  * @fileoverview Progress integrity checking, recovery, and validation
  * @module initialization/progressIntegrity
- * 
+ *
  * TIMESTAMP ARCHITECTURE:
  * - lessonCompletions use CompletionData format {timeCompleted, lastUpdated}
  * - domainCompletions use CompletionData format {timeCompleted, lastUpdated}
  * - Settings use tuple format [value, timestamp]
  * - Component progress includes lastUpdated timestamp
  * - Counters calculated from CompletionData.timeCompleted !== null
- * 
+ *
  * Transforms potentially corrupted or malformed backup data into a valid
  * PodStorageBundle matching current schema version. Handles:
- * 
+ *
  * - Corruption detection via current-count trackers
  * - Curriculum reconciliation (drops deleted content)
  * - Recovery from partial data loss
  * - Initialization of missing components with sensible defaults
- * 
+ *
  * Design principles:
  * - Never throw - always return valid bundle with metrics
  * - Best-effort extraction - salvage recognizable data
  * - Honest reporting - metrics show recovery quality
  * - Registry as truth - validate against current curriculum
  * - Full structure initialization - all components always present
- * 
+ *
  * Recovery strategies vary by section based on data importance and replaceability.
- * 
+ *
  * INITIALIZATION DEPENDENCY:
  * This module requires parsed lesson configs (from YAML parsing phase) to validate
  * component progress structures. Orchestration must ensure YAML parsing completes
  * before calling enforceDataIntegrity().
  */
 
-import { z } from 'zod';
-import { 
-  PodStorageBundle, 
+import { z } from "zod";
+import {
+  PodStorageBundle,
   PodStorageBundleSchema,
   PodMetadata,
-  PodMetadataSchema 
-} from '../persistence/podStorageSchema.js';
+  PodMetadataSchema,
+} from "../persistence/podStorageSchema.js";
 import {
   OverallProgressData,
   OverallProgressDataSchema,
   CompletionData,
   isValidLessonId,
   isValidDomainId,
-} from '../core/overallProgressSchema.js';
-import {
-  SettingsData,
-  SettingsDataSchema,
-} from '../core/settingsSchema.js';
+} from "../core/overallProgressSchema.js";
+import { SettingsData, SettingsDataSchema } from "../core/settingsSchema.js";
 import {
   NavigationState,
-  NavigationStateSchema
-} from '../core/navigationSchema.js';
-import { validateNavigationEntity } from '../core/navigationSchema.js';
+  NavigationStateSchema,
+} from "../core/navigationSchema.js";
+import { validateNavigationEntity } from "../core/navigationSchema.js";
 import {
   CombinedComponentProgress,
-  CombinedComponentProgressSchema
-} from '../core/combinedComponentProgressSchema.js';
-import { 
-  CurriculumRegistry, 
+  CombinedComponentProgressSchema,
+} from "../core/combinedComponentProgressSchema.js";
+import {
+  CurriculumRegistry,
   progressSchemaMap,
   componentValidatorMap,
   componentInitializerMap,
-  curriculumData 
-} from '../registry/mera-registry.js';
-import type { Lesson } from '../core/lessonSchemas.js';
+  curriculumData,
+} from "../registry/mera-registry.js";
 
-/**
- * Parsed lesson data with components for validation
- */
-export interface ParsedLessonData {
-  metadata: Lesson['metadata'];
-  pages: Lesson['pages'];
-  components: Array<{
-    id: number;
-    type: string;
-    [key: string]: any;
-  }>;
-}
+import type { ParsedLessonData } from "../core/parsedLessonData.js";
 
 /**
  * Result of extracting a section with quality metrics
  */
 interface ExtractionResult<T> {
   data: T;
-  defaultedRatio: number;  // 0.0 = perfect extraction, 1.0 = fully defaulted
+  defaultedRatio: number; // 0.0 = perfect extraction, 1.0 = fully defaulted
 }
 
 /**
@@ -94,11 +79,11 @@ interface ExtractionResult<T> {
  */
 interface OverallProgressExtractionResult {
   data: OverallProgressData;
-  lessonsDroppedRatio: number;  // 0.0 = none dropped, 1.0 = all dropped
-  domainsDroppedRatio: number;  // 0.0 = none dropped, 1.0 = all dropped
-  lessonsDroppedCount: number;  // Absolute count of lessons dropped
-  domainsDroppedCount: number;  // Absolute count of domains dropped
-  corruptionDetected: boolean;    // Mismatch between counters and actual data
+  lessonsDroppedRatio: number; // 0.0 = none dropped, 1.0 = all dropped
+  domainsDroppedRatio: number; // 0.0 = none dropped, 1.0 = all dropped
+  lessonsDroppedCount: number; // Absolute count of lessons dropped
+  domainsDroppedCount: number; // Absolute count of domains dropped
+  corruptionDetected: boolean; // Mismatch between counters and actual data
   lessonsLostToCorruption: number; // Lessons missing due to corruption
   domainsLostToCorruption: number; // Domains missing due to corruption
 }
@@ -117,7 +102,7 @@ interface MetadataExtractionResult extends ExtractionResult<PodMetadata> {
  * Complete recovery result with per-section metrics
  */
 export interface EnforcementResult {
-  perfectlyValidInput: boolean;  // Top-level flag: true if input needed no fixes/defaults
+  perfectlyValidInput: boolean; // Top-level flag: true if input needed no fixes/defaults
   bundle: PodStorageBundle;
   recoveryMetrics: {
     metadata: {
@@ -158,10 +143,10 @@ export interface EnforcementResult {
 
 /**
  * Main entry point: Migrate/restore arbitrary JSON to current schema version.
- * 
+ *
  * NEVER THROWS - always returns valid bundle with metrics about
  * data salvage quality.
- * 
+ *
  * @param rawJson - JSON string (potentially corrupted, old version, or malformed)
  * @param expectedWebId - WebId that must match for backup validity
  * @param lessonConfigs - Parsed lesson data for component validation
@@ -176,8 +161,8 @@ export function enforceDataIntegrity(
   // Defensive check: Ensure initialization order is correct
   if (!lessonConfigs || lessonConfigs.size === 0) {
     throw new Error(
-      'progressRecovery requires parsed lesson configs. ' +
-      'Ensure YAML parsing phase completes before recovery phase.'
+      "progressRecovery requires parsed lesson configs. " +
+        "Ensure YAML parsing phase completes before recovery phase."
     );
   }
 
@@ -187,7 +172,7 @@ export function enforceDataIntegrity(
     parsed = JSON.parse(rawJson);
   } catch (e) {
     // Unparseable JSON - return fully defaulted bundle
-    console.warn('⚠️ JSON parse failed, returning fully defaulted bundle');
+    console.warn("⚠️ JSON parse failed, returning fully defaulted bundle");
     return createFullyDefaultedResult(expectedWebId, null);
   }
 
@@ -196,7 +181,10 @@ export function enforceDataIntegrity(
   const overallProgressResult = extractOverallProgress(parsed);
   const settingsResult = extractSettings(parsed);
   const navigationResult = extractNavigationState(parsed);
-  const componentProgressResult = extractCombinedComponentProgress(parsed, lessonConfigs);
+  const componentProgressResult = extractCombinedComponentProgress(
+    parsed,
+    lessonConfigs
+  );
 
   // Phase 3: Assemble valid bundle
   let bundle: PodStorageBundle = {
@@ -214,14 +202,19 @@ export function enforceDataIntegrity(
     bundle = PodStorageBundleSchema.parse(bundle);
   } catch (validationError) {
     // This should never happen - indicates bug in extraction logic
-    console.error('CRITICAL: Assembled bundle failed schema validation:', validationError);
+    console.error(
+      "CRITICAL: Assembled bundle failed schema validation:",
+      validationError
+    );
     // Re-throw because this means our extraction logic has a bug
-    throw new Error('Bundle validation failed - this is a bug in progressIntegrity.ts');
+    throw new Error(
+      "Bundle validation failed - this is a bug in progressIntegrity.ts"
+    );
   }
 
   // Phase 4: Calculate if input was perfectly valid (needed no fixes)
   const hasCriticalFailures = metadataResult.webIDMismatch !== undefined;
-  const perfectlyValidInput = 
+  const perfectlyValidInput =
     !hasCriticalFailures &&
     !overallProgressResult.corruptionDetected &&
     metadataResult.defaultedRatio === 0 &&
@@ -260,9 +253,11 @@ export function enforceDataIntegrity(
         componentsDefaulted: componentProgressResult.componentsDefaulted,
       },
     },
-    criticalFailures: metadataResult.webIDMismatch ? {
-      webIdMismatch: metadataResult.webIDMismatch,
-    } : {},
+    criticalFailures: metadataResult.webIDMismatch
+      ? {
+          webIdMismatch: metadataResult.webIDMismatch,
+        }
+      : {},
   };
 }
 
@@ -272,15 +267,15 @@ export function enforceDataIntegrity(
 
 /**
  * Extract metadata with field-level defaulting.
- * 
+ *
  * Strategy: Metadata is critical (webId must match or reject backup).
  * Try each field independently with validation.
- * 
+ *
  * SECURITY: If webId doesn't match expectedWebId, returns invalid placeholder URL
- * "https://error.mera.invalid/webid-mismatch" to prevent accidentally loading 
- * another user's data. The initialization orchestrator must check for this and 
+ * "https://error.mera.invalid/webid-mismatch" to prevent accidentally loading
+ * another user's data. The initialization orchestrator must check for this and
  * handle it as a critical failure.
- * 
+ *
  * @param parsed - Raw parsed JSON
  * @param expectedWebId - WebId that should be in backup
  * @returns Metadata + defaultedRatio + webId mismatch info
@@ -291,12 +286,12 @@ function extractMetadata(
 ): MetadataExtractionResult {
   // Try Zod parse first
   const zodResult = PodMetadataSchema.safeParse(parsed?.metadata);
-  
+
   if (zodResult.success) {
     // Check webId match
     if (zodResult.data.webId !== expectedWebId) {
       return {
-        data: { webId: "https://error.mera.invalid/webid-mismatch" },  // Security: Never use mismatched webId
+        data: { webId: "https://error.mera.invalid/webid-mismatch" }, // Security: Never use mismatched webId
         defaultedRatio: 1.0,
         webIDMismatch: {
           expected: expectedWebId,
@@ -304,7 +299,7 @@ function extractMetadata(
         },
       };
     }
-    
+
     return {
       data: zodResult.data,
       defaultedRatio: 0.0,
@@ -313,15 +308,19 @@ function extractMetadata(
 
   // Zod failed - extract webId or default
   const candidate = parsed?.metadata || {};
-  const webId = typeof candidate.webId === 'string' ? candidate.webId : expectedWebId;
-  
-  const webIDMismatch = webId !== expectedWebId ? {
-    expected: expectedWebId,
-    found: webId,
-  } : undefined;
+  const webId =
+    typeof candidate.webId === "string" ? candidate.webId : expectedWebId;
+
+  const webIDMismatch =
+    webId !== expectedWebId
+      ? {
+          expected: expectedWebId,
+          found: webId,
+        }
+      : undefined;
 
   return {
-    data: { webId: "https://error.mera.invalid/webid-mismatch" },  // Security: Never use mismatched webId
+    data: { webId: "https://error.mera.invalid/webid-mismatch" }, // Security: Never use mismatched webId
     defaultedRatio: 1.0,
     webIDMismatch,
   };
@@ -329,20 +328,20 @@ function extractMetadata(
 
 /**
  * Extract overall progress with corruption detection and curriculum reconciliation.
- * 
+ *
  * Strategy: Reconcile completed lessons/domains against current curriculum.
  * Only keep completions for entities that exist in registry.
- * 
+ *
  * Uses shared validator from overallProgressSchema for consistency.
- * 
+ *
  * @param parsed - Raw parsed JSON
  * @returns OverallProgress + retained ratios + corruption metrics
  */
-function extractOverallProgress(
-  parsed: any
-): OverallProgressExtractionResult {
+function extractOverallProgress(parsed: any): OverallProgressExtractionResult {
   // Try Zod parse first
-  const zodResult = OverallProgressDataSchema.safeParse(parsed?.overallProgress);
+  const zodResult = OverallProgressDataSchema.safeParse(
+    parsed?.overallProgress
+  );
   if (zodResult.success) {
     // Valid structure - still need registry reconciliation
     return reconcileOverallProgress(zodResult.data);
@@ -350,7 +349,7 @@ function extractOverallProgress(
 
   // Zod failed - extract what we can with defaults
   const candidate = parsed?.overallProgress || {};
-  
+
   const overallProgress: OverallProgressData = {
     lessonCompletions: {},
     domainCompletions: {},
@@ -361,31 +360,49 @@ function extractOverallProgress(
   };
 
   // Extract lessonCompletions (should be CompletionData format)
-  if (typeof candidate.lessonCompletions === 'object' && candidate.lessonCompletions !== null) {
+  if (
+    typeof candidate.lessonCompletions === "object" &&
+    candidate.lessonCompletions !== null
+  ) {
     overallProgress.lessonCompletions = candidate.lessonCompletions;
   }
 
   // Extract domainCompletions (should be CompletionData format)
-  if (typeof candidate.domainCompletions === 'object' && candidate.domainCompletions !== null) {
+  if (
+    typeof candidate.domainCompletions === "object" &&
+    candidate.domainCompletions !== null
+  ) {
     overallProgress.domainCompletions = candidate.domainCompletions;
   }
 
   // Extract currentStreak
-  if (typeof candidate.currentStreak === 'number' && candidate.currentStreak >= 0) {
+  if (
+    typeof candidate.currentStreak === "number" &&
+    candidate.currentStreak >= 0
+  ) {
     overallProgress.currentStreak = candidate.currentStreak;
   }
 
   // Extract lastStreakCheck
-  if (typeof candidate.lastStreakCheck === 'number' && candidate.lastStreakCheck >= 0) {
+  if (
+    typeof candidate.lastStreakCheck === "number" &&
+    candidate.lastStreakCheck >= 0
+  ) {
     overallProgress.lastStreakCheck = candidate.lastStreakCheck;
   }
 
   // Extract current-count trackers (for corruption detection)
-  if (typeof candidate.totalLessonsCompleted === 'number' && candidate.totalLessonsCompleted >= 0) {
+  if (
+    typeof candidate.totalLessonsCompleted === "number" &&
+    candidate.totalLessonsCompleted >= 0
+  ) {
     overallProgress.totalLessonsCompleted = candidate.totalLessonsCompleted;
   }
 
-  if (typeof candidate.totalDomainsCompleted === 'number' && candidate.totalDomainsCompleted >= 0) {
+  if (
+    typeof candidate.totalDomainsCompleted === "number" &&
+    candidate.totalDomainsCompleted >= 0
+  ) {
     overallProgress.totalDomainsCompleted = candidate.totalDomainsCompleted;
   }
 
@@ -394,13 +411,13 @@ function extractOverallProgress(
 
 /**
  * Reconcile lesson/domain completions against current curriculum.
- * 
+ *
  * Starts with valid schema defaults, then selectively copies validated fields.
  * This ensures the result always conforms to OverallProgressDataSchema.
- * 
+ *
  * Uses shared validation helpers (isValidLessonId, isValidDomainId) from
  * overallProgressSchema to maintain single source of truth for validation logic.
- * 
+ *
  * Process:
  * 1. Detect corruption by comparing counters to actual completion data
  * 2. Initialize result with valid schema defaults
@@ -409,7 +426,7 @@ function extractOverallProgress(
  *    - Otherwise → leave as default (incomplete)
  * 4. Selectively copy other fields only if they pass validation
  * 5. Track how many completed items were dropped (curriculum reconciliation)
- * 
+ *
  * @param progress - Progress data to reconcile
  * @returns Reconciled progress + corruption detection + dropped ratios
  */
@@ -430,35 +447,39 @@ function reconcileOverallProgress(
   // Current-count trackers should match actual completed count in valid data
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
   const claimedDomains = progress.totalDomainsCompleted ?? 0;
-  
+
   // Count items where timeCompleted !== null (not just object keys)
-  const actualLessons = Object.values(progress.lessonCompletions)
-    .filter(completion => completion.timeCompleted !== null)
-    .length;
-  const actualDomains = Object.values(progress.domainCompletions)
-    .filter(completion => completion.timeCompleted !== null)
-    .length;
-  
+  const actualLessons = Object.values(progress.lessonCompletions).filter(
+    (completion) => completion.timeCompleted !== null
+  ).length;
+  const actualDomains = Object.values(progress.domainCompletions).filter(
+    (completion) => completion.timeCompleted !== null
+  ).length;
+
   const lessonsLostToCorruption = Math.max(0, claimedLessons - actualLessons);
   const domainsLostToCorruption = Math.max(0, claimedDomains - actualDomains);
-  const corruptionDetected = lessonsLostToCorruption > 0 || domainsLostToCorruption > 0;
+  const corruptionDetected =
+    lessonsLostToCorruption > 0 || domainsLostToCorruption > 0;
 
   // STEP 2: Build lesson completions by iterating curriculum
   const allLessonIds = curriculumData.getAllLessonIds();
   let lessonsKept = 0;
-  
+
   for (const lessonId of allLessonIds) {
     const key = lessonId.toString();
     const existing = progress.lessonCompletions[key];
-    
+
     // Validate structure before copying
-    if (existing && 
-        typeof existing === 'object' && 
-        existing !== null &&
-        'timeCompleted' in existing &&
-        'lastUpdated' in existing &&
-        (existing.timeCompleted === null || typeof existing.timeCompleted === 'number') &&
-        typeof existing.lastUpdated === 'number') {
+    if (
+      existing &&
+      typeof existing === "object" &&
+      existing !== null &&
+      "timeCompleted" in existing &&
+      "lastUpdated" in existing &&
+      (existing.timeCompleted === null ||
+        typeof existing.timeCompleted === "number") &&
+      typeof existing.lastUpdated === "number"
+    ) {
       // Valid - copy it
       result.lessonCompletions[key] = existing;
       if (existing.timeCompleted !== null) {
@@ -469,23 +490,26 @@ function reconcileOverallProgress(
       result.lessonCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
     }
   }
-  
+
   // STEP 3: Build domain completions by iterating curriculum
   const allDomainIds = curriculumData.getAllDomainIds();
   let domainsKept = 0;
-  
+
   for (const domainId of allDomainIds) {
     const key = domainId.toString();
     const existing = progress.domainCompletions[key];
-    
+
     // Validate structure before copying
-    if (existing && 
-        typeof existing === 'object' && 
-        existing !== null &&
-        'timeCompleted' in existing &&
-        'lastUpdated' in existing &&
-        (existing.timeCompleted === null || typeof existing.timeCompleted === 'number') &&
-        typeof existing.lastUpdated === 'number') {
+    if (
+      existing &&
+      typeof existing === "object" &&
+      existing !== null &&
+      "timeCompleted" in existing &&
+      "lastUpdated" in existing &&
+      (existing.timeCompleted === null ||
+        typeof existing.timeCompleted === "number") &&
+      typeof existing.lastUpdated === "number"
+    ) {
       // Valid - copy it
       result.domainCompletions[key] = existing;
       if (existing.timeCompleted !== null) {
@@ -496,42 +520,44 @@ function reconcileOverallProgress(
       result.domainCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
     }
   }
-  
+
   // STEP 4: Selectively copy other fields only if valid
   // currentStreak: must be number between 0 and 1000
-  if (typeof progress.currentStreak === 'number' && 
-      progress.currentStreak >= 0 && 
-      progress.currentStreak <= 1000) {
+  if (
+    typeof progress.currentStreak === "number" &&
+    progress.currentStreak >= 0 &&
+    progress.currentStreak <= 1000
+  ) {
     result.currentStreak = progress.currentStreak;
   }
   // else: stays at default 0
-  
+
   // lastStreakCheck: must be non-negative integer
-  if (typeof progress.lastStreakCheck === 'number' && 
-      Number.isInteger(progress.lastStreakCheck) &&
-      progress.lastStreakCheck >= 0) {
+  if (
+    typeof progress.lastStreakCheck === "number" &&
+    Number.isInteger(progress.lastStreakCheck) &&
+    progress.lastStreakCheck >= 0
+  ) {
     result.lastStreakCheck = progress.lastStreakCheck;
   }
   // else: stays at default 0
-  
+
   // totalLessonsCompleted and totalDomainsCompleted are recalculated from kept counts
   result.totalLessonsCompleted = lessonsKept;
   result.totalDomainsCompleted = domainsKept;
-  
+
   // STEP 5: Calculate dropped ratios
   const lessonsDropped = Math.max(0, actualLessons - lessonsKept);
   const domainsDropped = Math.max(0, actualDomains - domainsKept);
   const originalLessonCount = actualLessons;
   const originalDomainCount = actualDomains;
-  
+
   return {
     data: result,
-    lessonsDroppedRatio: originalLessonCount > 0 
-      ? lessonsDropped / originalLessonCount 
-      : 0.0,
-    domainsDroppedRatio: originalDomainCount > 0 
-      ? domainsDropped / originalDomainCount 
-      : 0.0,
+    lessonsDroppedRatio:
+      originalLessonCount > 0 ? lessonsDropped / originalLessonCount : 0.0,
+    domainsDroppedRatio:
+      originalDomainCount > 0 ? domainsDropped / originalDomainCount : 0.0,
     lessonsDroppedCount: lessonsDropped,
     domainsDroppedCount: domainsDropped,
     corruptionDetected,
@@ -542,18 +568,16 @@ function reconcileOverallProgress(
 
 /**
  * Extract settings with field-level defaulting.
- * 
+ *
  * Settings use [value, timestamp] tuple format.
- * 
+ *
  * Strategy: Settings are user preferences - salvage each field independently.
  * If field invalid, default it but keep rest.
- * 
+ *
  * @param parsed - Raw parsed JSON
  * @returns Settings + defaultedRatio
  */
-function extractSettings(
-  parsed: any
-): ExtractionResult<SettingsData> {
+function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   // Try Zod parse first
   const zodResult = SettingsDataSchema.safeParse(parsed?.settings);
   if (zodResult.success) {
@@ -571,100 +595,165 @@ function extractSettings(
   const defaultTimestamp = 0;
 
   // Field 1: weekStartDay
-  if (Array.isArray(candidate.weekStartDay) && 
-      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].includes(candidate.weekStartDay[0])) {
-    settings.weekStartDay = [candidate.weekStartDay[0], candidate.weekStartDay[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.weekStartDay) &&
+    [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday",
+    ].includes(candidate.weekStartDay[0])
+  ) {
+    settings.weekStartDay = [
+      candidate.weekStartDay[0],
+      candidate.weekStartDay[1] ?? defaultTimestamp,
+    ];
   } else {
-    settings.weekStartDay = ['monday', defaultTimestamp];
+    settings.weekStartDay = ["monday", defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 2: weekStartTimeUTC
-  if (Array.isArray(candidate.weekStartTimeUTC) &&
-      typeof candidate.weekStartTimeUTC[0] === 'string' && 
-      /^\d{2}:\d{2}$/.test(candidate.weekStartTimeUTC[0])) {
-    settings.weekStartTimeUTC = [candidate.weekStartTimeUTC[0], candidate.weekStartTimeUTC[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.weekStartTimeUTC) &&
+    typeof candidate.weekStartTimeUTC[0] === "string" &&
+    /^\d{2}:\d{2}$/.test(candidate.weekStartTimeUTC[0])
+  ) {
+    settings.weekStartTimeUTC = [
+      candidate.weekStartTimeUTC[0],
+      candidate.weekStartTimeUTC[1] ?? defaultTimestamp,
+    ];
   } else {
-    settings.weekStartTimeUTC = ['00:00', defaultTimestamp];
+    settings.weekStartTimeUTC = ["00:00", defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 3: theme
-  if (Array.isArray(candidate.theme) && 
-      ['light', 'dark', 'auto'].includes(candidate.theme[0])) {
-    settings.theme = [candidate.theme[0], candidate.theme[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.theme) &&
+    ["light", "dark", "auto"].includes(candidate.theme[0])
+  ) {
+    settings.theme = [
+      candidate.theme[0],
+      candidate.theme[1] ?? defaultTimestamp,
+    ];
   } else {
-    settings.theme = ['auto', defaultTimestamp];
+    settings.theme = ["auto", defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 4: learningPace
-  if (Array.isArray(candidate.learningPace) && 
-      ['relaxed', 'standard', 'intensive'].includes(candidate.learningPace[0])) {
-    settings.learningPace = [candidate.learningPace[0], candidate.learningPace[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.learningPace) &&
+    ["relaxed", "standard", "intensive"].includes(candidate.learningPace[0])
+  ) {
+    settings.learningPace = [
+      candidate.learningPace[0],
+      candidate.learningPace[1] ?? defaultTimestamp,
+    ];
   } else {
-    settings.learningPace = ['standard', defaultTimestamp];
+    settings.learningPace = ["standard", defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 5: optOutDailyPing
-  if (Array.isArray(candidate.optOutDailyPing) && 
-      typeof candidate.optOutDailyPing[0] === 'boolean') {
-    settings.optOutDailyPing = [candidate.optOutDailyPing[0], candidate.optOutDailyPing[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.optOutDailyPing) &&
+    typeof candidate.optOutDailyPing[0] === "boolean"
+  ) {
+    settings.optOutDailyPing = [
+      candidate.optOutDailyPing[0],
+      candidate.optOutDailyPing[1] ?? defaultTimestamp,
+    ];
   } else {
     settings.optOutDailyPing = [false, defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 6: optOutErrorPing
-  if (Array.isArray(candidate.optOutErrorPing) && 
-      typeof candidate.optOutErrorPing[0] === 'boolean') {
-    settings.optOutErrorPing = [candidate.optOutErrorPing[0], candidate.optOutErrorPing[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.optOutErrorPing) &&
+    typeof candidate.optOutErrorPing[0] === "boolean"
+  ) {
+    settings.optOutErrorPing = [
+      candidate.optOutErrorPing[0],
+      candidate.optOutErrorPing[1] ?? defaultTimestamp,
+    ];
   } else {
     settings.optOutErrorPing = [false, defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 7: fontSize
-  if (Array.isArray(candidate.fontSize) && 
-      ['small', 'medium', 'large', 'x-large'].includes(candidate.fontSize[0])) {
-    settings.fontSize = [candidate.fontSize[0], candidate.fontSize[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.fontSize) &&
+    ["small", "medium", "large", "x-large"].includes(candidate.fontSize[0])
+  ) {
+    settings.fontSize = [
+      candidate.fontSize[0],
+      candidate.fontSize[1] ?? defaultTimestamp,
+    ];
   } else {
-    settings.fontSize = ['medium', defaultTimestamp];
+    settings.fontSize = ["medium", defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 8: highContrast
-  if (Array.isArray(candidate.highContrast) && 
-      typeof candidate.highContrast[0] === 'boolean') {
-    settings.highContrast = [candidate.highContrast[0], candidate.highContrast[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.highContrast) &&
+    typeof candidate.highContrast[0] === "boolean"
+  ) {
+    settings.highContrast = [
+      candidate.highContrast[0],
+      candidate.highContrast[1] ?? defaultTimestamp,
+    ];
   } else {
     settings.highContrast = [false, defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 9: reducedMotion
-  if (Array.isArray(candidate.reducedMotion) && 
-      typeof candidate.reducedMotion[0] === 'boolean') {
-    settings.reducedMotion = [candidate.reducedMotion[0], candidate.reducedMotion[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.reducedMotion) &&
+    typeof candidate.reducedMotion[0] === "boolean"
+  ) {
+    settings.reducedMotion = [
+      candidate.reducedMotion[0],
+      candidate.reducedMotion[1] ?? defaultTimestamp,
+    ];
   } else {
     settings.reducedMotion = [false, defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 10: focusIndicatorStyle
-  if (Array.isArray(candidate.focusIndicatorStyle) && 
-      ['default', 'high-visibility', 'outline'].includes(candidate.focusIndicatorStyle[0])) {
-    settings.focusIndicatorStyle = [candidate.focusIndicatorStyle[0], candidate.focusIndicatorStyle[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.focusIndicatorStyle) &&
+    ["default", "high-visibility", "outline"].includes(
+      candidate.focusIndicatorStyle[0]
+    )
+  ) {
+    settings.focusIndicatorStyle = [
+      candidate.focusIndicatorStyle[0],
+      candidate.focusIndicatorStyle[1] ?? defaultTimestamp,
+    ];
   } else {
-    settings.focusIndicatorStyle = ['default', defaultTimestamp];
+    settings.focusIndicatorStyle = ["default", defaultTimestamp];
     defaultedFields++;
   }
 
   // Field 11: audioEnabled
-  if (Array.isArray(candidate.audioEnabled) && 
-      typeof candidate.audioEnabled[0] === 'boolean') {
-    settings.audioEnabled = [candidate.audioEnabled[0], candidate.audioEnabled[1] ?? defaultTimestamp];
+  if (
+    Array.isArray(candidate.audioEnabled) &&
+    typeof candidate.audioEnabled[0] === "boolean"
+  ) {
+    settings.audioEnabled = [
+      candidate.audioEnabled[0],
+      candidate.audioEnabled[1] ?? defaultTimestamp,
+    ];
   } else {
     settings.audioEnabled = [true, defaultTimestamp];
     defaultedFields++;
@@ -678,12 +767,12 @@ function extractSettings(
 
 /**
  * Extract navigation state with registry validation.
- * 
+ *
  * Strategy: Navigation is ephemeral (where user left off). Binary strategy:
  * use all or default all.
- * 
+ *
  * Uses shared validator from navigationSchema for entity validation.
- * 
+ *
  * @param parsed - Raw parsed JSON
  * @returns Navigation state + whether defaulted
  */
@@ -692,14 +781,14 @@ function extractNavigationState(
 ): ExtractionResult<NavigationState> & { wasDefaulted: boolean } {
   // Try Zod parse first
   const zodResult = NavigationStateSchema.safeParse(parsed?.navigationState);
-  
+
   if (zodResult.success) {
     // Valid structure - check entity exists in curriculum
     const validationResult = validateNavigationEntity(
       zodResult.data,
       curriculumData
     );
-    
+
     return {
       data: validationResult.cleaned,
       defaultedRatio: validationResult.wasDefaulted ? 1.0 : 0.0,
@@ -710,7 +799,7 @@ function extractNavigationState(
   // Zod validation failed - return defaults
   return {
     data: {
-      currentEntityId: 0,  // Main menu
+      currentEntityId: 0, // Main menu
       currentPage: 0,
       lastUpdated: Math.floor(Date.now() / 1000),
     },
@@ -721,22 +810,22 @@ function extractNavigationState(
 
 /**
  * Extract combined component progress with full initialization.
- * 
+ *
  * Strategy: Create complete mapping of ALL components in current curriculum.
  * For each component:
  * 1. If exists in backup and valid → keep it
  * 2. If missing or invalid → initialize with createInitialProgress()
- * 
+ *
  * This ensures the returned structure always contains every component
  * in the curriculum, either with real progress or sensible defaults.
- * 
+ *
  * Validation per component:
  * - Zod schema validation (structural correctness)
  * - Component config validation (progress structure matches current YAML)
  * - Verify lastUpdated field exists
- * 
+ *
  * Component worth 2-3 minutes max - not worth complex field-level recovery.
- * 
+ *
  * @param parsed - Raw parsed JSON
  * @param lessonConfigs - Parsed lesson data for component validation
  * @returns Component progress + per-component metrics
@@ -744,14 +833,15 @@ function extractNavigationState(
 function extractCombinedComponentProgress(
   parsed: any,
   lessonConfigs: Map<number, ParsedLessonData>
-): ExtractionResult<CombinedComponentProgress> & { 
-  componentsRetained: number; 
+): ExtractionResult<CombinedComponentProgress> & {
+  componentsRetained: number;
   componentsDefaulted: number;
 } {
   const candidateComponents = parsed?.combinedComponentProgress?.components;
-  const savedComponents = typeof candidateComponents === 'object' && candidateComponents !== null
-    ? candidateComponents
-    : {};
+  const savedComponents =
+    typeof candidateComponents === "object" && candidateComponents !== null
+      ? candidateComponents
+      : {};
 
   const components: Record<string, any> = {};
   let componentsRetained = 0;
@@ -759,7 +849,7 @@ function extractCombinedComponentProgress(
 
   // Iterate through ALL components in current curriculum
   const allComponentIds = curriculumData.getAllComponentIds();
-  
+
   for (const componentId of allComponentIds) {
     const componentIdStr = componentId.toString();
     const savedProgress = savedComponents[componentIdStr];
@@ -785,8 +875,10 @@ function extractCombinedComponentProgress(
     if (!componentType) {
       // Component type unknown - initialize with default
       componentsDefaulted++;
-      const initializer = componentInitializerMap.get('unknown');
-      components[componentIdStr] = initializer ? initializer() : { lastUpdated: 0 };
+      const initializer = componentInitializerMap.get("unknown");
+      components[componentIdStr] = initializer
+        ? initializer()
+        : { lastUpdated: 0 };
       continue;
     }
 
@@ -795,7 +887,9 @@ function extractCombinedComponentProgress(
     if (!progressSchema) {
       componentsDefaulted++;
       const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : { lastUpdated: 0 };
+      components[componentIdStr] = initializer
+        ? initializer()
+        : { lastUpdated: 0 };
       continue;
     }
 
@@ -804,7 +898,9 @@ function extractCombinedComponentProgress(
       // Schema validation failed - re-initialize
       componentsDefaulted++;
       const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer ? initializer() : { lastUpdated: 0 };
+      components[componentIdStr] = initializer
+        ? initializer()
+        : { lastUpdated: 0 };
       continue;
     }
 
@@ -814,8 +910,10 @@ function extractCombinedComponentProgress(
       // Get component config for validation
       const lessonId = curriculumData.getLessonIdForComponent(componentId);
       const lessonConfig = lessonId ? lessonConfigs.get(lessonId) : null;
-      const componentConfig = lessonConfig?.components.find(c => c.id === componentId);
-      
+      const componentConfig = lessonConfig?.components.find(
+        (c) => c.id === componentId
+      );
+
       if (componentConfig) {
         const validationResult = validator(zodResult.data, componentConfig);
         if (validationResult.defaultedRatio > 0) {
@@ -833,7 +931,8 @@ function extractCombinedComponentProgress(
   }
 
   const totalComponents = allComponentIds.length;
-  const defaultedRatio = totalComponents > 0 ? componentsDefaulted / totalComponents : 0;
+  const defaultedRatio =
+    totalComponents > 0 ? componentsDefaulted / totalComponents : 0;
 
   return {
     data: { components },
@@ -849,11 +948,11 @@ function extractCombinedComponentProgress(
 
 /**
  * Initialize all lessons and domains in curriculum with default incomplete values.
- * 
+ *
  * Creates a complete structure with all curriculum entities initialized to their
- * default incomplete state. Used when creating fully defaulted result for 
+ * default incomplete state. Used when creating fully defaulted result for
  * unparseable JSON or catastrophic recovery scenarios.
- * 
+ *
  * @returns Object with lessonCompletions and domainCompletions fully initialized
  */
 function initializeAllLessonsAndDomainsWithDefaults(): {
@@ -862,7 +961,7 @@ function initializeAllLessonsAndDomainsWithDefaults(): {
 } {
   const lessonCompletions: Record<string, CompletionData> = {};
   const domainCompletions: Record<string, CompletionData> = {};
-  
+
   // Initialize all curriculum lessons as incomplete
   const allLessonIds = curriculumData.getAllLessonIds();
   for (const lessonId of allLessonIds) {
@@ -871,7 +970,7 @@ function initializeAllLessonsAndDomainsWithDefaults(): {
       lastUpdated: 0,
     };
   }
-  
+
   // Initialize all curriculum domains as incomplete
   const allDomainIds = curriculumData.getAllDomainIds();
   for (const domainId of allDomainIds) {
@@ -880,25 +979,25 @@ function initializeAllLessonsAndDomainsWithDefaults(): {
       lastUpdated: 0,
     };
   }
-  
+
   return { lessonCompletions, domainCompletions };
 }
 
 /**
  * Initialize all components in curriculum with default values.
- * 
+ *
  * Used when creating fully defaulted result for unparseable JSON.
- * 
+ *
  * @returns Record with default progress for every component
  */
 function initializeAllComponentsWithDefaults(): Record<string, any> {
   const components: Record<string, any> = {};
   const allComponentIds = curriculumData.getAllComponentIds();
-  
+
   for (const componentId of allComponentIds) {
     const componentIdStr = componentId.toString();
     const componentType = curriculumData.getComponentType(componentId);
-    
+
     if (componentType) {
       const initializer = componentInitializerMap.get(componentType);
       if (initializer) {
@@ -908,13 +1007,13 @@ function initializeAllComponentsWithDefaults(): Record<string, any> {
       }
     }
   }
-  
+
   return components;
 }
 
 /**
  * Create fully defaulted result for catastrophic failures (unparseable JSON).
- * 
+ *
  * @param expectedWebId - WebId that should be in backup
  * @param foundWebId - WebId found (null if unparseable)
  * @returns Recovery result with all sections defaulted
@@ -924,11 +1023,12 @@ function createFullyDefaultedResult(
   foundWebId: string | null
 ): EnforcementResult {
   const allComponentIds = curriculumData.getAllComponentIds();
-  const { lessonCompletions, domainCompletions } = initializeAllLessonsAndDomainsWithDefaults();
-  
+  const { lessonCompletions, domainCompletions } =
+    initializeAllLessonsAndDomainsWithDefaults();
+
   let bundle: PodStorageBundle = {
     metadata: {
-      webId: "https://error.mera.invalid/unparseable-json",  // Security: Unparseable = treat as mismatch
+      webId: "https://error.mera.invalid/unparseable-json", // Security: Unparseable = treat as mismatch
     },
     overallProgress: {
       lessonCompletions,
@@ -939,20 +1039,20 @@ function createFullyDefaultedResult(
       totalDomainsCompleted: 0,
     },
     settings: {
-      weekStartDay: ['monday', 0],
-      weekStartTimeUTC: ['00:00', 0],
-      theme: ['auto', 0],
-      learningPace: ['standard', 0],
+      weekStartDay: ["monday", 0],
+      weekStartTimeUTC: ["00:00", 0],
+      theme: ["auto", 0],
+      learningPace: ["standard", 0],
       optOutDailyPing: [false, 0],
       optOutErrorPing: [false, 0],
-      fontSize: ['medium', 0],
+      fontSize: ["medium", 0],
       highContrast: [false, 0],
       reducedMotion: [false, 0],
-      focusIndicatorStyle: ['default', 0],
+      focusIndicatorStyle: ["default", 0],
       audioEnabled: [true, 0],
     },
     navigationState: {
-      currentEntityId: 0,  // Main menu
+      currentEntityId: 0, // Main menu
       currentPage: 0,
       lastUpdated: Math.floor(Date.now() / 1000),
     },
@@ -966,30 +1066,35 @@ function createFullyDefaultedResult(
     bundle = PodStorageBundleSchema.parse(bundle);
   } catch (validationError) {
     // This should never happen - our defaults should always be valid
-    console.error('CRITICAL: Default bundle failed schema validation:', validationError);
-    throw new Error('Default bundle validation failed - this is a bug in progressIntegrity.ts');
+    console.error(
+      "CRITICAL: Default bundle failed schema validation:",
+      validationError
+    );
+    throw new Error(
+      "Default bundle validation failed - this is a bug in progressIntegrity.ts"
+    );
   }
-  
+
   return {
-    perfectlyValidInput: false,  // Fully defaulted = not valid input
+    perfectlyValidInput: false, // Fully defaulted = not valid input
     bundle,
     recoveryMetrics: {
       metadata: { defaultedRatio: 1.0 },
-      overallProgress: { 
-        lessonsDroppedRatio: 1.0, 
+      overallProgress: {
+        lessonsDroppedRatio: 1.0,
         domainsDroppedRatio: 1.0,
-        lessonsDroppedCount: 0,  // Nothing to drop - fully defaulted
-        domainsDroppedCount: 0,  // Nothing to drop - fully defaulted
-        corruptionDetected: false,  // Fully defaulted = no corruption, just empty
+        lessonsDroppedCount: 0, // Nothing to drop - fully defaulted
+        domainsDroppedCount: 0, // Nothing to drop - fully defaulted
+        corruptionDetected: false, // Fully defaulted = no corruption, just empty
         lessonsLostToCorruption: 0,
         domainsLostToCorruption: 0,
       },
       settings: { defaultedRatio: 1.0 },
       navigationState: { wasDefaulted: true },
-      combinedComponentProgress: { 
-        defaultedRatio: 1.0, 
-        componentsRetained: 0, 
-        componentsDefaulted: allComponentIds.length 
+      combinedComponentProgress: {
+        defaultedRatio: 1.0,
+        componentsRetained: 0,
+        componentsDefaulted: allComponentIds.length,
       },
     },
     criticalFailures: {

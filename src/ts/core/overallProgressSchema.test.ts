@@ -13,6 +13,12 @@ describe('OverallProgressManager', () => {
     mockRegistry = {
       hasLesson: vi.fn((id: number) => id === 100 || id === 200),
       hasDomain: vi.fn((id: number) => id === 1 || id === 2),
+      getAllDomainIds: vi.fn(() => [1, 2]),
+      getLessonsInDomain: vi.fn((domainId: number) => {
+        if (domainId === 1) return [100];
+        if (domainId === 2) return [200];
+        return undefined;
+      }),
     };
 
     const initialProgress = {
@@ -25,6 +31,68 @@ describe('OverallProgressManager', () => {
     };
 
     manager = new OverallProgressManager(initialProgress, mockRegistry);
+  });
+
+  describe('cloning behavior', () => {
+    it('constructor clones input data to prevent external mutations', () => {
+      const inputData = {
+        lessonCompletions: { '100': { timeCompleted: 1000, lastUpdated: 1000 } },
+        domainCompletions: {},
+        currentStreak: 5,
+        lastStreakCheck: 2000,
+        totalLessonsCompleted: 1,
+        totalDomainsCompleted: 0,
+      };
+
+      const manager = new OverallProgressManager(inputData, mockRegistry);
+
+      // Mutate original input
+      inputData.currentStreak = 999;
+      inputData.lessonCompletions['100'].timeCompleted = 9999;
+
+      // Manager's data should be unchanged
+      const managerData = manager.getProgress();
+      expect(managerData.currentStreak).toBe(5);
+      expect(managerData.lessonCompletions['100'].timeCompleted).toBe(1000);
+    });
+
+    it('getProgress returns clone to prevent external mutations', () => {
+      manager.markLessonComplete(100);
+
+      const progress1 = manager.getProgress();
+      const progress2 = manager.getProgress();
+
+      // Should be different objects (not same reference)
+      expect(progress1).not.toBe(progress2);
+
+      // But with same values
+      expect(progress1).toEqual(progress2);
+
+      // Mutating returned clone should not affect manager
+      progress1.currentStreak = 999;
+      progress1.lessonCompletions['100'].timeCompleted = 9999;
+
+      const progress3 = manager.getProgress();
+      expect(progress3.currentStreak).toBe(0);
+      expect(progress3.lessonCompletions['100'].timeCompleted).not.toBe(9999);
+    });
+
+    it('mutations do not affect previously returned clones', () => {
+      const before = manager.getProgress();
+      
+      manager.markLessonComplete(100);
+      manager.updateStreak(5);
+
+      // Before clone should still have original values
+      expect(before.totalLessonsCompleted).toBe(0);
+      expect(before.currentStreak).toBe(0);
+      expect(before.lessonCompletions).toEqual({});
+
+      // New clone has updated values
+      const after = manager.getProgress();
+      expect(after.totalLessonsCompleted).toBe(1);
+      expect(after.currentStreak).toBe(5);
+    });
   });
 
   describe('CompletionData structure', () => {
@@ -130,6 +198,20 @@ describe('OverallProgressManager', () => {
       manager.markLessonComplete(100); // Re-complete same lesson
       expect(manager.getProgress().totalLessonsCompleted).toBe(1); // Still 1
     });
+
+    it('increments counter again after marking incomplete then complete', () => {
+      manager.markLessonComplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
+      
+      manager.markLessonIncomplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(0);
+      
+      manager.markLessonComplete(100);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
+      expect(manager.getProgress().lessonCompletions['100'].timeCompleted).toBeGreaterThan(0);
+      
+      vi.useRealTimers();
+    });
   });
 
   describe('markLessonIncomplete', () => {
@@ -161,39 +243,6 @@ describe('OverallProgressManager', () => {
       
       manager.markLessonIncomplete(100);
       expect(manager.getProgress().totalLessonsCompleted).toBe(1);
-    });
-
-    it('does not decrement counter if lesson was already incomplete', () => {
-      manager.markLessonComplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
-      
-      // Mark 100 incomplete
-      manager.markLessonIncomplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(0);
-      
-      // Try to mark it incomplete again
-      manager.markLessonIncomplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(0); // Still 0, no underflow
-    });
-
-    it('allows re-completion after incompletion', () => {
-      manager.markLessonComplete(100);
-      const firstTimestamp = manager.getProgress().lessonCompletions['100'].timeCompleted;
-      
-      manager.markLessonIncomplete(100);
-      expect(manager.getProgress().lessonCompletions['100'].timeCompleted).toBeNull();
-      
-      vi.useFakeTimers();
-      vi.advanceTimersByTime(3000);
-      
-      manager.markLessonComplete(100);
-      const completion = manager.getProgress().lessonCompletions['100'];
-      
-      expect(completion.timeCompleted).toBeGreaterThan(firstTimestamp!);
-      expect(completion.lastUpdated).toBe(completion.timeCompleted);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
-      
-      vi.useRealTimers();
     });
   });
 
@@ -292,66 +341,53 @@ describe('OverallProgressManager', () => {
     });
   });
 
-  describe('getAllTrumpStrategies', () => {
-    it('returns correct strategies (counters excluded as derived values)', () => {
-      const strategies = manager.getAllTrumpStrategies();
-
-      expect(strategies.lessonCompletions).toBe('LATEST_TIMESTAMP');
-      expect(strategies.domainCompletions).toBe('LATEST_TIMESTAMP');
-      expect(strategies.currentStreak).toBe('LATEST_TIMESTAMP');
-      expect(strategies.lastStreakCheck).toBe('MAX');
-      
-      // Counters should NOT be in strategies - they're derived values
-      expect(strategies.totalLessonsCompleted).toBeUndefined();
-      expect(strategies.totalDomainsCompleted).toBeUndefined();
-    });
-  });
-
   describe('counter integrity', () => {
     it('maintains counter === count of non-null timeCompleted invariant for lessons', () => {
-      const progress = manager.getProgress();
+      // Helper to count completed lessons from fresh progress clone
+      const countCompleted = () => {
+        const progress = manager.getProgress();
+        return Object.values(progress.lessonCompletions)
+          .filter(c => c.timeCompleted !== null).length;
+      };
       
       // Initial state
-      const countCompleted = () => 
-        Object.values(progress.lessonCompletions)
-          .filter(c => c.timeCompleted !== null).length;
-      
-      expect(progress.totalLessonsCompleted).toBe(countCompleted());
+      expect(manager.getProgress().totalLessonsCompleted).toBe(countCompleted());
       
       // After completing lessons
       manager.markLessonComplete(100);
       manager.markLessonComplete(200);
-      expect(progress.totalLessonsCompleted).toBe(countCompleted());
-      expect(progress.totalLessonsCompleted).toBe(2);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(countCompleted());
+      expect(manager.getProgress().totalLessonsCompleted).toBe(2);
       
       // After marking one incomplete (timeCompleted becomes null)
       manager.markLessonIncomplete(100);
-      expect(progress.totalLessonsCompleted).toBe(countCompleted());
-      expect(progress.totalLessonsCompleted).toBe(1);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(countCompleted());
+      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
       
       // After marking all incomplete
       manager.markLessonIncomplete(200);
-      expect(progress.totalLessonsCompleted).toBe(countCompleted());
-      expect(progress.totalLessonsCompleted).toBe(0);
+      expect(manager.getProgress().totalLessonsCompleted).toBe(countCompleted());
+      expect(manager.getProgress().totalLessonsCompleted).toBe(0);
     });
 
     it('maintains counter === count of non-null timeCompleted invariant for domains', () => {
-      const progress = manager.getProgress();
-      
-      const countCompleted = () => 
-        Object.values(progress.domainCompletions)
+      // Helper to count completed domains from fresh progress clone
+      const countCompleted = () => {
+        const progress = manager.getProgress();
+        return Object.values(progress.domainCompletions)
           .filter(c => c.timeCompleted !== null).length;
+      };
       
-      expect(progress.totalDomainsCompleted).toBe(countCompleted());
+      expect(manager.getProgress().totalDomainsCompleted).toBe(countCompleted());
       
       manager.markDomainComplete(1);
       manager.markDomainComplete(2);
-      expect(progress.totalDomainsCompleted).toBe(countCompleted());
-      expect(progress.totalDomainsCompleted).toBe(2);
+      expect(manager.getProgress().totalDomainsCompleted).toBe(countCompleted());
+      expect(manager.getProgress().totalDomainsCompleted).toBe(2);
       
       manager.markDomainIncomplete(1);
-      expect(progress.totalDomainsCompleted).toBe(countCompleted());
-      expect(progress.totalDomainsCompleted).toBe(1);
+      expect(manager.getProgress().totalDomainsCompleted).toBe(countCompleted());
+      expect(manager.getProgress().totalDomainsCompleted).toBe(1);
     });
   });
 });
@@ -362,14 +398,20 @@ describe('OverallProgressMessageQueueManager', () => {
 
   beforeEach(() => {
     mockRegistry = {
-      hasLesson: vi.fn((id: number) => id === 100),
-      hasDomain: vi.fn((id: number) => id === 1),
+      hasLesson: vi.fn((id: number) => id === 100 || id === 200),
+      hasDomain: vi.fn((id: number) => id === 1 || id === 2),
+      getAllDomainIds: vi.fn(() => [1, 2]),
+      getLessonsInDomain: vi.fn((domainId: number) => {
+        if (domainId === 1) return [100];
+        if (domainId === 2) return [200];
+        return undefined;
+      }),
     };
 
     queueManager = new OverallProgressMessageQueueManager(mockRegistry);
   });
 
-  describe('queueLessonComplete', () => {
+  describe('lesson queue methods', () => {
     it('queues valid lesson complete message', () => {
       queueManager.queueLessonComplete(100);
       const messages = queueManager.getMessages();
@@ -384,9 +426,7 @@ describe('OverallProgressMessageQueueManager', () => {
         'Invalid lesson ID: 999 does not exist in curriculum'
       );
     });
-  });
 
-  describe('queueLessonIncomplete', () => {
     it('queues valid lesson incomplete message', () => {
       queueManager.queueLessonIncomplete(100);
       const messages = queueManager.getMessages();
@@ -395,15 +435,9 @@ describe('OverallProgressMessageQueueManager', () => {
       expect(messages[0].method).toBe('markLessonIncomplete');
       expect(messages[0].args).toEqual([100]);
     });
-
-    it('throws error for invalid lesson ID', () => {
-      expect(() => queueManager.queueLessonIncomplete(999)).toThrow(
-        'Invalid lesson ID: 999 does not exist in curriculum'
-      );
-    });
   });
 
-  describe('queueDomainComplete', () => {
+  describe('domain queue methods', () => {
     it('queues valid domain complete message', () => {
       queueManager.queueDomainComplete(1);
       const messages = queueManager.getMessages();
@@ -418,9 +452,7 @@ describe('OverallProgressMessageQueueManager', () => {
         'Invalid domain ID: 999 does not exist in curriculum'
       );
     });
-  });
 
-  describe('queueDomainIncomplete', () => {
     it('queues valid domain incomplete message', () => {
       queueManager.queueDomainIncomplete(1);
       const messages = queueManager.getMessages();

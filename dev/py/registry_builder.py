@@ -662,6 +662,10 @@ export class CurriculumRegistry {{
         return Array.from(this.domainMap.keys());
     }}
 
+    getLessonsInDomain(domainId: number): number[] | undefined {{
+        return this.domainMap.get(domainId);
+    }}
+
     getLessonIdForComponent(componentId: number): number | undefined {{
         return this.componentToLesson.get(componentId);
     }}

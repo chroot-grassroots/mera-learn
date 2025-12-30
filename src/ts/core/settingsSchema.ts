@@ -8,6 +8,11 @@
  * REFACTORED: Each setting now has an associated lastUpdated timestamp to enable
  * granular merge conflict resolution during offline/online sync.
  *
+ * CLONING STRATEGY:
+ * - Constructor: Clones input data to prevent external mutations
+ * - getSettings(): Returns clone to prevent external access to internal state
+ * - All mutations happen only on internal cloned copy
+ *
  * Components cannot mutate settings directly. They queue validated messages
  * that Main Core processes, preventing invalid state from buggy components.
  */
@@ -113,7 +118,12 @@ export type SettingsData = z.infer<typeof SettingsDataSchema>;
  * Used directly by Main Core for settings updates.
  */
 export class SettingsDataManager {
-  constructor(private settings: SettingsData) {}
+  private settings: SettingsData;
+
+  constructor(initialSettings: SettingsData) {
+    // Clone input data - manager owns its own copy
+    this.settings = structuredClone(initialSettings);
+  }
 
   // Readonly getters for all settings (return value only, not timestamp)
   getWeekStartDay(): "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" {
@@ -160,14 +170,19 @@ export class SettingsDataManager {
     return this.settings.audioEnabled[0];
   }
 
-  // Returns all settings for saver (includes timestamps)
+  /**
+   * Returns cloned settings data for persistence.
+   *
+   * Clone ensures external code cannot mutate manager's internal state.
+   * Core calls this during save to build the bundle.
+   */
   getSettings(): SettingsData {
-    return this.settings;
+    return structuredClone(this.settings);
   }
 
-  // Validated setters for all settings (auto-update timestamps)
+  // Setters construct tuple and validate against schema (ensures schema consistency)
   setWeekStartDay(day: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"): void {
-    // Validate value
+    // Construct tuple and validate against schema
     const validated = SettingsDataSchema.shape.weekStartDay.parse([
       day,
       Math.floor(Date.now() / 1000)
@@ -314,31 +329,6 @@ export class SettingsDataManager {
     return Math.floor(weekStart.getTime() / 1000);
   }
 
-  /**
-   * Return trump strategies for conflict resolution during offline sync.
-   *
-   * All settings use LATEST_TIMESTAMP - the per-field timestamp determines
-   * which value wins for each setting independently.
-   * 
-   * With the new structure, each field can be merged independently based on
-   * its own lastUpdated timestamp, enabling granular conflict resolution.
-   */
-  getAllTrumpStrategies(): Record<keyof SettingsData, TrumpStrategy<any>> {
-    // All fields use LATEST_TIMESTAMP (per-field comparison)
-    return {
-      weekStartDay: "LATEST_TIMESTAMP",
-      weekStartTimeUTC: "LATEST_TIMESTAMP",
-      theme: "LATEST_TIMESTAMP",
-      learningPace: "LATEST_TIMESTAMP",
-      optOutDailyPing: "LATEST_TIMESTAMP",
-      optOutErrorPing: "LATEST_TIMESTAMP",
-      fontSize: "LATEST_TIMESTAMP",
-      highContrast: "LATEST_TIMESTAMP",
-      reducedMotion: "LATEST_TIMESTAMP",
-      focusIndicatorStyle: "LATEST_TIMESTAMP",
-      audioEnabled: "LATEST_TIMESTAMP",
-    };
-  }
 }
 
 // ============================================================================

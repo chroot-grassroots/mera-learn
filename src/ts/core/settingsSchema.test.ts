@@ -324,24 +324,6 @@ describe('SettingsDataManager', () => {
     });
   });
 
-  describe('getAllTrumpStrategies', () => {
-    it('returns LATEST_TIMESTAMP for all fields', () => {
-      const strategies = manager.getAllTrumpStrategies();
-
-      expect(strategies.weekStartDay).toBe('LATEST_TIMESTAMP');
-      expect(strategies.weekStartTimeUTC).toBe('LATEST_TIMESTAMP');
-      expect(strategies.theme).toBe('LATEST_TIMESTAMP');
-      expect(strategies.learningPace).toBe('LATEST_TIMESTAMP');
-      expect(strategies.optOutDailyPing).toBe('LATEST_TIMESTAMP');
-      expect(strategies.optOutErrorPing).toBe('LATEST_TIMESTAMP');
-      expect(strategies.fontSize).toBe('LATEST_TIMESTAMP');
-      expect(strategies.highContrast).toBe('LATEST_TIMESTAMP');
-      expect(strategies.reducedMotion).toBe('LATEST_TIMESTAMP');
-      expect(strategies.focusIndicatorStyle).toBe('LATEST_TIMESTAMP');
-      expect(strategies.audioEnabled).toBe('LATEST_TIMESTAMP');
-    });
-  });
-
   describe('granular conflict resolution scenario', () => {
     it('allows independent timestamps per field for merge', () => {
       // Simulate offline device changes theme

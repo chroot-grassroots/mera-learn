@@ -32,7 +32,6 @@
  * before calling enforceDataIntegrity().
  */
 
-import { z } from "zod";
 import {
   PodStorageBundle,
   PodStorageBundleSchema,
@@ -46,16 +45,17 @@ import {
   CompletionDataSchema,
   getDefaultOverallProgress,
 } from "../core/overallProgressSchema.js";
-import { 
-  SettingsData, 
-  SettingsDataSchema, 
-  getDefaultSettings 
+import {
+  SettingsData,
+  SettingsDataSchema,
+  getDefaultSettings,
 } from "../core/settingsSchema.js";
 import {
   NavigationState,
   NavigationStateSchema,
+  validateNavigationEntity,
+  getDefaultNavigationState,
 } from "../core/navigationSchema.js";
-import { validateNavigationEntity } from "../core/navigationSchema.js";
 import {
   CombinedComponentProgress,
   CombinedComponentProgressSchema,
@@ -590,7 +590,7 @@ function reconcileOverallProgress(
 function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   // Get defaults from schema module (single source of truth)
   const defaults = getDefaultSettings();
-  
+
   // Extract field-by-field with defaults
   const candidate = parsed?.settings || {};
   const settings: Partial<SettingsData> = {};
@@ -639,10 +639,7 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
     Array.isArray(candidate.theme) &&
     ["light", "dark", "auto"].includes(candidate.theme[0])
   ) {
-    settings.theme = [
-      candidate.theme[0],
-      candidate.theme[1] ?? 0,
-    ];
+    settings.theme = [candidate.theme[0], candidate.theme[1] ?? 0];
   } else {
     settings.theme = defaults.theme;
     defaultedFields++;
@@ -695,10 +692,7 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
     Array.isArray(candidate.fontSize) &&
     ["small", "medium", "large"].includes(candidate.fontSize[0])
   ) {
-    settings.fontSize = [
-      candidate.fontSize[0],
-      candidate.fontSize[1] ?? 0,
-    ];
+    settings.fontSize = [candidate.fontSize[0], candidate.fontSize[1] ?? 0];
   } else {
     settings.fontSize = defaults.fontSize;
     defaultedFields++;
@@ -796,14 +790,9 @@ function extractNavigationState(
       wasDefaulted: validationResult.wasDefaulted,
     };
   }
-
   // Zod validation failed - return defaults
   return {
-    data: {
-      currentEntityId: 0, // Main menu
-      currentPage: 0,
-      lastUpdated: Math.floor(Date.now() / 1000),
-    },
+    data: getDefaultNavigationState(), // <-- Use centralized default function
     defaultedRatio: 1.0,
     wasDefaulted: true,
   };
@@ -1044,11 +1033,7 @@ function createFullyDefaultedResult(
       domainCompletions,
     },
     settings: defaultSettings,
-    navigationState: {
-      currentEntityId: 0, // Main menu
-      currentPage: 0,
-      lastUpdated: Math.floor(Date.now() / 1000),
-    },
+    navigationState: getDefaultNavigationState(),
     combinedComponentProgress: {
       components: initializeAllComponentsWithDefaults(),
     },

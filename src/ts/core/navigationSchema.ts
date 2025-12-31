@@ -10,6 +10,11 @@
  * - Shared validation helpers: Atomic checks used by both validators and managers
  * - Full validators: Pure functions that validate entire navigation state
  * - Manager classes: Use helpers for defensive runtime validation
+ * 
+ * CLONING STRATEGY:
+ * - Constructor: Clones input data to prevent external mutations
+ * - getState(): Returns clone to prevent external access to internal state
+ * - All mutations happen only on internal cloned copy
  */
 
 import { z } from "zod";
@@ -21,6 +26,9 @@ import { CurriculumRegistry } from "../registry/mera-registry.js";
  *
  * Stores lesson/menu (entity) immutable ID, current page number,
  * and when it was last updated.
+ * 
+ * NOTE: No .default() on lastUpdated - progressIntegrity.ts handles defaulting
+ * explicitly with proper metrics tracking.
  */
 export const NavigationStateSchema = z.object({
   currentEntityId: ImmutableId, // 0 = main menu by convention
@@ -29,6 +37,32 @@ export const NavigationStateSchema = z.object({
 });
 
 export type NavigationState = z.infer<typeof NavigationStateSchema>;
+
+// ============================================================================
+// DEFAULT VALUES
+// ============================================================================
+
+/**
+ * Get default navigation state (main menu, timestamp 0).
+ * 
+ * Used by:
+ * - progressIntegrity.ts for navigation recovery when entity deleted
+ * - New user initialization
+ * - Stale session reversion (>30 min old)
+ * 
+ * Timestamp 0 semantics:
+ * - Indicates "never set by user" or "defaulted on load"
+ * - Always loses in merge conflict resolution (any timestamp > 0 wins)
+ * 
+ * @returns Default NavigationState pointing to main menu
+ */
+export function getDefaultNavigationState(): NavigationState {
+  return {
+    currentEntityId: 0,
+    currentPage: 0,
+    lastUpdated: 0,
+  };
+}
 
 // ============================================================================
 // SHARED VALIDATION HELPERS
@@ -95,7 +129,7 @@ export interface NavigationValidationResult {
  * defaults to main menu.
  *
  * Used by:
- * - progressRecovery: Gracefully handles deleted entities
+ * - progressIntegrity: Gracefully handles deleted entities
  * - NavigationStateManager: Defensive check (throws if defaulted)
  *
  * @param data - Navigation state to validate
@@ -112,11 +146,7 @@ export function validateNavigationEntity(
   if (!isValidEntityId(entityId, curriculum)) {
     // Entity deleted from curriculum - default to main menu
     return {
-      cleaned: {
-        currentEntityId: 0,
-        currentPage: 0,
-        lastUpdated: Date.now(),
-      },
+      cleaned: getDefaultNavigationState(),
       wasDefaulted: true,
     };
   }
@@ -125,11 +155,7 @@ export function validateNavigationEntity(
   if (!isValidPageNumber(entityId, data.currentPage, curriculum)) {
     // Page out of bounds - default to main menu
     return {
-      cleaned: {
-        currentEntityId: 0,
-        currentPage: 0,
-        lastUpdated: Date.now(),
-      },
+      cleaned: getDefaultNavigationState(),
       wasDefaulted: true,
     };
   }
@@ -150,27 +176,44 @@ export function validateNavigationEntity(
  *
  * All mutations validate against CurriculumRegistry to prevent
  * corruption by ensuring lesson/menu and page exist.
+ * 
+ * CLONING STRATEGY:
+ * - Constructor clones input to own internal copy
+ * - getState() returns clone to prevent external mutations
+ * - Mutations only affect internal copy
  */
 export class NavigationStateManager {
+  private state: NavigationState;
+
   constructor(
-    private state: NavigationState,
+    initialState: NavigationState,
     private curriculumRegistry: CurriculumRegistry
-  ) {}
+  ) {
+    // Clone input data - manager owns its own copy
+    this.state = structuredClone(initialState);
+  }
 
   /**
-   * Returns state for persistence.
+   * Returns cloned state for persistence.
    *
+   * Clone ensures external code cannot mutate manager's internal state.
    * Validates before returning using private helper.
+   * 
+   * @returns Cloned navigation state
+   * @throws Error if current state is invalid (entity/page doesn't exist)
    */
   getState(): NavigationState {
     this.validateCurrentView();
-    return this.state;
+    // Return clone to prevent external mutations
+    return structuredClone(this.state);
   }
 
   /**
    * Returns current view for startup after page load.
    *
    * Reverts to main menu if timestamp is older than 30 minutes.
+   * 
+   * @returns Entity ID and page number for startup
    */
   getCurrentViewStartup(): { entityId: number; page: number } {
     // Uses Unix time in seconds
@@ -193,6 +236,8 @@ export class NavigationStateManager {
    * Returns current view while running.
    *
    * Used by core to check if new page needs to be loaded.
+   * 
+   * @returns Entity ID and page number
    */
   getCurrentViewRunning(): { entityId: number; page: number } {
     return {
@@ -205,7 +250,10 @@ export class NavigationStateManager {
    * Set navigation to specific entity and page.
    *
    * The only setter available via messages from components.
-   * Completely replaces current state.
+   * Completely replaces current state with new timestamp.
+   * 
+   * @param entityId - Entity ID to navigate to
+   * @param page - Page number within entity
    */
   setCurrentView(entityId: number, page: number): void {
     this.state.currentEntityId = entityId;
@@ -214,7 +262,7 @@ export class NavigationStateManager {
   }
 
   /**
-   * Reset navigation to main menu.
+   * Reset navigation to main menu with current timestamp.
    */
   setDefaults(): void {
     this.state.currentEntityId = 0;
@@ -226,6 +274,8 @@ export class NavigationStateManager {
    * Define trump strategies for offline/online conflict resolution.
    *
    * Most recent timestamp wins for all fields.
+   * 
+   * @returns Trump strategy map for all navigation fields
    */
   getAllTrumpStrategies(): Record<keyof NavigationState, TrumpStrategy<any>> {
     return {

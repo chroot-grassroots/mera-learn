@@ -1,10 +1,29 @@
-// src/ts/core/navigationSchema.test.ts
+// src/ts/core/navigationSchema_test.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   NavigationStateManager,
   NavigationMessageManager,
   NavigationMessageQueueManager,
+  getDefaultNavigationState,
 } from './navigationSchema.js';
+
+describe('getDefaultNavigationState', () => {
+  it('returns main menu with timestamp 0', () => {
+    const defaults = getDefaultNavigationState();
+    
+    expect(defaults.currentEntityId).toBe(0);
+    expect(defaults.currentPage).toBe(0);
+    expect(defaults.lastUpdated).toBe(0);
+  });
+
+  it('returns new object on each call', () => {
+    const defaults1 = getDefaultNavigationState();
+    const defaults2 = getDefaultNavigationState();
+    
+    expect(defaults1).not.toBe(defaults2); // Different objects
+    expect(defaults1).toEqual(defaults2); // Same values
+  });
+});
 
 describe('NavigationStateManager', () => {
   let mockRegistry: any;
@@ -23,6 +42,55 @@ describe('NavigationStateManager', () => {
     };
     
     manager = new NavigationStateManager(initialState, mockRegistry);
+  });
+
+  describe('constructor cloning', () => {
+    it('clones input data to prevent external mutations', () => {
+      const externalState = {
+        currentEntityId: 0,
+        currentPage: 0,
+        lastUpdated: 123456,
+      };
+      
+      const manager = new NavigationStateManager(externalState, mockRegistry);
+      
+      // Mutate external state
+      externalState.currentEntityId = 999;
+      externalState.currentPage = 42;
+      
+      // Manager's state should be unchanged
+      const view = manager.getCurrentViewRunning();
+      expect(view.entityId).toBe(0);
+      expect(view.page).toBe(0);
+    });
+  });
+
+  describe('getState cloning', () => {
+    it('returns clone to prevent external mutations', () => {
+      manager.setCurrentView(100, 2);
+      
+      const state1 = manager.getState();
+      const state2 = manager.getState();
+      
+      // Different objects
+      expect(state1).not.toBe(state2);
+      // Same values
+      expect(state1).toEqual(state2);
+    });
+
+    it('external mutation of returned state does not affect manager', () => {
+      manager.setCurrentView(100, 2);
+      
+      const externalState = manager.getState();
+      externalState.currentEntityId = 999;
+      externalState.currentPage = 99;
+      externalState.lastUpdated = 0;
+      
+      // Manager's internal state unchanged
+      const view = manager.getCurrentViewRunning();
+      expect(view.entityId).toBe(100);
+      expect(view.page).toBe(2);
+    });
   });
 
   describe('setCurrentView', () => {

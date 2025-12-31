@@ -33,6 +33,9 @@ import { TrumpStrategy } from "./coreTypes";
  * - Most recent timestamp wins per field
  * 
  * Structure: Each field is [value, timestamp] where timestamp is Unix seconds
+ * 
+ * NOTE: No .default() on fields - progressIntegrity.ts handles defaulting explicitly
+ * with proper metrics tracking. Timestamp 0 = schema default, >0 = user-set value.
  */
 export const SettingsDataSchema = z.object({
   // Week timing for streaks: [value, lastUpdated]
@@ -47,64 +50,98 @@ export const SettingsDataSchema = z.object({
       "saturday",
     ]),
     z.number().int().min(0), // lastUpdated timestamp
-  ]).default(["sunday", 0]),
+  ]),
   
   weekStartTimeUTC: z.tuple([
     z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM in 24-hour format"),
     z.number().int().min(0),
-  ]).default(["00:00", 0]),
+  ]),
 
   // Appearance: [value, lastUpdated]
   theme: z.tuple([
     z.enum(["light", "dark", "auto"]),
     z.number().int().min(0),
-  ]).default(["auto", 0]),
+  ]),
 
   // Learning: [value, lastUpdated]
   learningPace: z.tuple([
     z.enum(["accelerated", "standard", "flexible"]),
     z.number().int().min(0),
-  ]).default(["standard", 0]),
+  ]),
 
   // Privacy/Analytics: [value, lastUpdated]
   optOutDailyPing: z.tuple([
     z.boolean(),
     z.number().int().min(0),
-  ]).default([false, 0]),
+  ]),
   
   optOutErrorPing: z.tuple([
     z.boolean(),
     z.number().int().min(0),
-  ]).default([false, 0]),
+  ]),
 
   // Accessibility: [value, lastUpdated]
   fontSize: z.tuple([
     z.enum(["small", "medium", "large"]),
     z.number().int().min(0),
-  ]).default(["medium", 0]),
+  ]),
   
   highContrast: z.tuple([
     z.boolean(),
     z.number().int().min(0),
-  ]).default([false, 0]),
+  ]),
   
   reducedMotion: z.tuple([
     z.boolean(),
     z.number().int().min(0),
-  ]).default([false, 0]),
+  ]),
   
   focusIndicatorStyle: z.tuple([
     z.enum(["default", "enhanced"]),
     z.number().int().min(0),
-  ]).default(["default", 0]),
+  ]),
   
   audioEnabled: z.tuple([
     z.boolean(),
     z.number().int().min(0),
-  ]).default([true, 0]),
+  ]),
 });
 
 export type SettingsData = z.infer<typeof SettingsDataSchema>;
+
+// ============================================================================
+// DEFAULT VALUES
+// ============================================================================
+
+/**
+ * Get default settings with timestamp 0 (never set by user).
+ * 
+ * Used by:
+ * - progressIntegrity.ts for field-by-field recovery
+ * - New user initialization
+ * 
+ * Timestamp 0 semantics:
+ * - Indicates "schema default, never customized by user"
+ * - Always loses in merge conflict resolution (any timestamp > 0 wins)
+ * - Distinguishes "default value" from "user chose default"
+ * 
+ * @returns Complete SettingsData with all fields at defaults
+ */
+export function getDefaultSettings(): SettingsData {
+  return {
+    weekStartDay: ["sunday", 0],
+    weekStartTimeUTC: ["00:00", 0],
+    theme: ["auto", 0],
+    learningPace: ["standard", 0],
+    optOutDailyPing: [false, 0],
+    optOutErrorPing: [false, 0],
+    fontSize: ["medium", 0],
+    highContrast: [false, 0],
+    reducedMotion: [false, 0],
+    focusIndicatorStyle: ["default", 0],
+    audioEnabled: [true, 0],
+  };
+}
 
 // ============================================================================
 // MANAGER CLASS
@@ -271,20 +308,6 @@ export class SettingsDataManager {
   }
 
   /**
-   * Fill in missing settings fields with defaults.
-   *
-   * Used for:
-   * - New users: Initialize all settings on first use
-   * - Schema migration: Add new settings fields for existing users
-   *
-   * Does NOT overwrite existing values - preserves user preferences.
-   */
-  setDefaultsIfBlank(): void {
-    // Parse the entire settings object through the schema to fill in defaults
-    this.settings = SettingsDataSchema.parse(this.settings);
-  }
-
-  /**
    * Calculate Unix timestamp of last week start based on user's week preferences.
    *
    * Used by streak tracking to determine if user completed learning goals.
@@ -292,9 +315,14 @@ export class SettingsDataManager {
    */
   getLastWeekStart(): number {
     const now = new Date();
-    const currentDay = now.getUTCDay(); // Get UTC day of week (0-6)
+    const currentDay = now.getUTCDay();
+    const [weekStartTimeStr] = this.settings.weekStartTimeUTC;
+    const [hourStr, minuteStr] = weekStartTimeStr.split(":");
+    const weekStartHour = parseInt(hourStr, 10);
+    const weekStartMinute = parseInt(minuteStr, 10);
 
-    const dayMap: Record<string, number> = {
+    // Map weekStartDay to numeric (0 = Sunday)
+    const weekStartDayMap: Record<string, number> = {
       sunday: 0,
       monday: 1,
       tuesday: 2,
@@ -303,36 +331,29 @@ export class SettingsDataManager {
       friday: 5,
       saturday: 6,
     };
+    const [weekStartDayValue] = this.settings.weekStartDay;
+    const targetDay = weekStartDayMap[weekStartDayValue];
 
-    const targetDay = dayMap[this.settings.weekStartDay[0].toLowerCase()] ?? 0;
+    // Calculate days since last week start
+    let daysSinceWeekStart = currentDay - targetDay;
+    if (daysSinceWeekStart < 0) daysSinceWeekStart += 7;
 
-    let daysBack = currentDay - targetDay;
-    if (daysBack < 0) {
-      daysBack += 7;
+    // Calculate last week start date
+    const lastWeekStart = new Date(now);
+    lastWeekStart.setUTCDate(now.getUTCDate() - daysSinceWeekStart);
+    lastWeekStart.setUTCHours(weekStartHour, weekStartMinute, 0, 0);
+
+    // If calculated time is in the future, go back one more week
+    if (lastWeekStart.getTime() > now.getTime()) {
+      lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
     }
 
-    const weekStart = new Date(now);
-    weekStart.setUTCDate(now.getUTCDate() - daysBack);
-
-    // Parse and set the time (weekStartTime format: "HH:MM")
-    const [hours, minutes] = this.settings.weekStartTimeUTC[0]
-      .split(":")
-      .map(Number);
-    weekStart.setUTCHours(hours, minutes, 0, 0);
-
-    // If the calculated time is in the future, go back one more week
-    if (weekStart > now) {
-      weekStart.setUTCDate(weekStart.getUTCDate() - 7);
-    }
-
-    // Return Unix timestamp
-    return Math.floor(weekStart.getTime() / 1000);
+    return Math.floor(lastWeekStart.getTime() / 1000);
   }
-
 }
 
 // ============================================================================
-// MESSAGE SCHEMAS
+// MESSAGES
 // ============================================================================
 
 /**
@@ -360,31 +381,28 @@ export const SettingsMessageSchema = z.object({
 export type SettingsMessage = z.infer<typeof SettingsMessageSchema>;
 
 /**
- * Validates and handles settings messages from components.
+ * Validates and routes settings messages to SettingsDataManager.
  *
- * Used by Main Core to process queued settings changes.
- * Validates each message type before forwarding to SettingsDataManager.
+ * Used by Main Core to process queued messages from components.
+ * All messages validated before routing to ensure type safety.
  */
 export class SettingsMessageManager {
   constructor(private settingsManager: SettingsDataManager) {}
 
   /**
-   * Validate message arguments against appropriate schema.
+   * Validate a settings message.
    *
-   * Each method has specific validation requirements matching
-   * the corresponding SettingsDataManager setter.
-   * 
-   * Note: We validate against the value type only, not the full tuple,
-   * since timestamps are added automatically by the manager.
+   * Per-method validation of argument count and types.
+   *
+   * @param message - Settings message to validate
+   * @throws Error if message invalid
    */
   validateMessage(message: SettingsMessage): void {
-    // Per-method argument validation
     switch (message.method) {
       case "setWeekStartDay":
         if (message.args.length !== 1) {
           throw new Error("setWeekStartDay requires exactly 1 argument");
         }
-        // Validate just the value (manager adds timestamp)
         z.enum(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])
           .parse(message.args[0]);
         break;

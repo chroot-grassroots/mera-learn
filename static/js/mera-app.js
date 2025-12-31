@@ -34298,6 +34298,22 @@ var SolidConnectionErrorDisplay = class extends ErrorDisplay {
 };
 window.ErrorDisplay = ErrorDisplay;
 window.SolidConnectionErrorDisplay = SolidConnectionErrorDisplay;
+function showCriticalError(options) {
+  console.error(`\u{1F6A8} ${options.title}:`, options.message);
+  if (options.technicalDetails) {
+    console.error("Technical details:", options.technicalDetails);
+  }
+  const shouldReload = confirm(
+    `${options.title}
+
+${options.message}
+
+Reload page now?`
+  );
+  if (shouldReload) {
+    window.location.reload();
+  }
+}
 
 // src/ts/initialization/bootstrap.ts
 init_meraBridge();
@@ -46854,18 +46870,22 @@ var CompletionDataSchema = external_exports.object({
 });
 var OverallProgressDataSchema = external_exports.object({
   lessonCompletions: external_exports.record(external_exports.string(), CompletionDataSchema),
-  // lessonId -> CompletionData
   domainCompletions: external_exports.record(external_exports.string(), CompletionDataSchema),
-  // domainId -> CompletionData
   currentStreak: external_exports.number().min(0).max(1e3),
-  // Completed weeks (not including current)
   lastStreakCheck: external_exports.number().int().min(0),
-  // Unix timestamp of last validation
-  totalLessonsCompleted: external_exports.number().int().min(0).default(0),
-  // Current count tracker for corruption detection
-  totalDomainsCompleted: external_exports.number().int().min(0).default(0)
-  // Current count tracker for corruption detection
+  totalLessonsCompleted: external_exports.number().int().min(0).max(1e3),
+  totalDomainsCompleted: external_exports.number().int().min(0).max(1e3)
 });
+function getDefaultOverallProgress() {
+  return {
+    lessonCompletions: {},
+    domainCompletions: {},
+    currentStreak: 0,
+    lastStreakCheck: 0,
+    totalLessonsCompleted: 0,
+    totalDomainsCompleted: 0
+  };
+}
 var OverallProgressMessageSchema = external_exports.object({
   method: external_exports.enum([
     "markLessonComplete",
@@ -46894,52 +46914,67 @@ var SettingsDataSchema = external_exports.object({
     ]),
     external_exports.number().int().min(0)
     // lastUpdated timestamp
-  ]).default(["sunday", 0]),
+  ]),
   weekStartTimeUTC: external_exports.tuple([
     external_exports.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be HH:MM in 24-hour format"),
     external_exports.number().int().min(0)
-  ]).default(["00:00", 0]),
+  ]),
   // Appearance: [value, lastUpdated]
   theme: external_exports.tuple([
     external_exports.enum(["light", "dark", "auto"]),
     external_exports.number().int().min(0)
-  ]).default(["auto", 0]),
+  ]),
   // Learning: [value, lastUpdated]
   learningPace: external_exports.tuple([
     external_exports.enum(["accelerated", "standard", "flexible"]),
     external_exports.number().int().min(0)
-  ]).default(["standard", 0]),
+  ]),
   // Privacy/Analytics: [value, lastUpdated]
   optOutDailyPing: external_exports.tuple([
     external_exports.boolean(),
     external_exports.number().int().min(0)
-  ]).default([false, 0]),
+  ]),
   optOutErrorPing: external_exports.tuple([
     external_exports.boolean(),
     external_exports.number().int().min(0)
-  ]).default([false, 0]),
+  ]),
   // Accessibility: [value, lastUpdated]
   fontSize: external_exports.tuple([
     external_exports.enum(["small", "medium", "large"]),
     external_exports.number().int().min(0)
-  ]).default(["medium", 0]),
+  ]),
   highContrast: external_exports.tuple([
     external_exports.boolean(),
     external_exports.number().int().min(0)
-  ]).default([false, 0]),
+  ]),
   reducedMotion: external_exports.tuple([
     external_exports.boolean(),
     external_exports.number().int().min(0)
-  ]).default([false, 0]),
+  ]),
   focusIndicatorStyle: external_exports.tuple([
     external_exports.enum(["default", "enhanced"]),
     external_exports.number().int().min(0)
-  ]).default(["default", 0]),
+  ]),
   audioEnabled: external_exports.tuple([
     external_exports.boolean(),
     external_exports.number().int().min(0)
-  ]).default([true, 0])
+  ])
 });
+function getDefaultSettings() {
+  return {
+    weekStartDay: ["sunday", 0],
+    weekStartTimeUTC: ["00:00", 0],
+    theme: ["auto", 0],
+    learningPace: ["standard", 0],
+    optOutDailyPing: [false, 0],
+    optOutErrorPing: [false, 0],
+    fontSize: ["medium", 0],
+    highContrast: [false, 0],
+    reducedMotion: [false, 0],
+    focusIndicatorStyle: ["default", 0],
+    audioEnabled: [true, 0]
+  };
+}
 var SettingsMessageSchema = external_exports.object({
   method: external_exports.enum([
     "setWeekStartDay",
@@ -47091,6 +47126,9 @@ var CurriculumRegistry = class {
   getAllDomainIds() {
     return Array.from(this.domainMap.keys());
   }
+  getLessonsInDomain(domainId) {
+    return this.domainMap.get(domainId);
+  }
   getLessonIdForComponent(componentId) {
     return this.componentToLesson.get(componentId);
   }
@@ -47141,7 +47179,10 @@ function enforceDataIntegrity(rawJson, expectedWebId, lessonConfigs) {
   const overallProgressResult = extractOverallProgress(parsed);
   const settingsResult = extractSettings(parsed);
   const navigationResult = extractNavigationState(parsed);
-  const componentProgressResult = extractCombinedComponentProgress(parsed, lessonConfigs);
+  const componentProgressResult = extractCombinedComponentProgress(
+    parsed,
+    lessonConfigs
+  );
   let bundle = {
     metadata: metadataResult.data,
     overallProgress: overallProgressResult.data,
@@ -47152,8 +47193,13 @@ function enforceDataIntegrity(rawJson, expectedWebId, lessonConfigs) {
   try {
     bundle = PodStorageBundleSchema.parse(bundle);
   } catch (validationError) {
-    console.error("CRITICAL: Assembled bundle failed schema validation:", validationError);
-    throw new Error("Bundle validation failed - this is a bug in progressIntegrity.ts");
+    console.error(
+      "CRITICAL: Assembled bundle failed schema validation:",
+      validationError
+    );
+    throw new Error(
+      "Bundle validation failed - this is a bug in progressIntegrity.ts"
+    );
   }
   const hasCriticalFailures = metadataResult.webIDMismatch !== void 0;
   const perfectlyValidInput = !hasCriticalFailures && !overallProgressResult.corruptionDetected && metadataResult.defaultedRatio === 0 && overallProgressResult.lessonsDroppedRatio === 0 && overallProgressResult.domainsDroppedRatio === 0 && settingsResult.defaultedRatio === 0 && !navigationResult.wasDefaulted && componentProgressResult.defaultedRatio === 0;
@@ -47223,19 +47269,14 @@ function extractMetadata(parsed, expectedWebId) {
   };
 }
 function extractOverallProgress(parsed) {
-  const zodResult = OverallProgressDataSchema.safeParse(parsed?.overallProgress);
+  const zodResult = OverallProgressDataSchema.safeParse(
+    parsed?.overallProgress
+  );
   if (zodResult.success) {
     return reconcileOverallProgress(zodResult.data);
   }
   const candidate = parsed?.overallProgress || {};
-  const overallProgress = {
-    lessonCompletions: {},
-    domainCompletions: {},
-    currentStreak: 0,
-    lastStreakCheck: 0,
-    totalLessonsCompleted: 0,
-    totalDomainsCompleted: 0
-  };
+  const overallProgress = getDefaultOverallProgress();
   if (typeof candidate.lessonCompletions === "object" && candidate.lessonCompletions !== null) {
     overallProgress.lessonCompletions = candidate.lessonCompletions;
   }
@@ -47260,58 +47301,86 @@ function reconcileOverallProgress(progress) {
   const result = {
     lessonCompletions: {},
     domainCompletions: {},
-    currentStreak: 0,
-    lastStreakCheck: 0,
+    currentStreak: progress.currentStreak,
+    lastStreakCheck: progress.lastStreakCheck,
     totalLessonsCompleted: 0,
     totalDomainsCompleted: 0
   };
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
   const claimedDomains = progress.totalDomainsCompleted ?? 0;
-  const actualLessons = Object.values(progress.lessonCompletions).filter((completion) => completion.timeCompleted !== null).length;
-  const actualDomains = Object.values(progress.domainCompletions).filter((completion) => completion.timeCompleted !== null).length;
-  const lessonsLostToCorruption = Math.max(0, claimedLessons - actualLessons);
-  const domainsLostToCorruption = Math.max(0, claimedDomains - actualDomains);
-  const corruptionDetected = lessonsLostToCorruption > 0 || domainsLostToCorruption > 0;
+  let actualCompletedLessons = 0;
+  let actualCompletedDomains = 0;
+  let lessonsDropped = 0;
+  let domainsDropped = 0;
+  for (const [lessonIdStr, completion] of Object.entries(
+    progress.lessonCompletions
+  )) {
+    const lessonId = parseInt(lessonIdStr, 10);
+    if (!curriculumData.hasLesson(lessonId)) {
+      lessonsDropped++;
+      continue;
+    }
+    const zodResult = CompletionDataSchema.safeParse(completion);
+    if (!zodResult.success) {
+      lessonsDropped++;
+      continue;
+    }
+    result.lessonCompletions[lessonIdStr] = zodResult.data;
+    if (zodResult.data.timeCompleted !== null) {
+      actualCompletedLessons++;
+    }
+  }
+  for (const [domainIdStr, completion] of Object.entries(
+    progress.domainCompletions
+  )) {
+    const domainId = parseInt(domainIdStr, 10);
+    if (!curriculumData.hasDomain(domainId)) {
+      domainsDropped++;
+      continue;
+    }
+    const zodResult = CompletionDataSchema.safeParse(completion);
+    if (!zodResult.success) {
+      domainsDropped++;
+      continue;
+    }
+    result.domainCompletions[domainIdStr] = zodResult.data;
+    if (zodResult.data.timeCompleted !== null) {
+      actualCompletedDomains++;
+    }
+  }
   const allLessonIds2 = curriculumData.getAllLessonIds();
-  let lessonsKept = 0;
   for (const lessonId of allLessonIds2) {
     const key = lessonId.toString();
-    const existing = progress.lessonCompletions[key];
-    if (existing && typeof existing === "object" && existing !== null && "timeCompleted" in existing && "lastUpdated" in existing && (existing.timeCompleted === null || typeof existing.timeCompleted === "number") && typeof existing.lastUpdated === "number") {
-      result.lessonCompletions[key] = existing;
-      if (existing.timeCompleted !== null) {
-        lessonsKept++;
-      }
-    } else {
-      result.lessonCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
+    if (!result.lessonCompletions[key]) {
+      result.lessonCompletions[key] = {
+        timeCompleted: null,
+        lastUpdated: 0
+      };
     }
   }
   const allDomainIds = curriculumData.getAllDomainIds();
-  let domainsKept = 0;
   for (const domainId of allDomainIds) {
     const key = domainId.toString();
-    const existing = progress.domainCompletions[key];
-    if (existing && typeof existing === "object" && existing !== null && "timeCompleted" in existing && "lastUpdated" in existing && (existing.timeCompleted === null || typeof existing.timeCompleted === "number") && typeof existing.lastUpdated === "number") {
-      result.domainCompletions[key] = existing;
-      if (existing.timeCompleted !== null) {
-        domainsKept++;
-      }
-    } else {
-      result.domainCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
+    if (!result.domainCompletions[key]) {
+      result.domainCompletions[key] = {
+        timeCompleted: null,
+        lastUpdated: 0
+      };
     }
   }
-  if (typeof progress.currentStreak === "number" && progress.currentStreak >= 0 && progress.currentStreak <= 1e3) {
-    result.currentStreak = progress.currentStreak;
-  }
-  if (typeof progress.lastStreakCheck === "number" && Number.isInteger(progress.lastStreakCheck) && progress.lastStreakCheck >= 0) {
-    result.lastStreakCheck = progress.lastStreakCheck;
-  }
-  result.totalLessonsCompleted = lessonsKept;
-  result.totalDomainsCompleted = domainsKept;
-  const lessonsDropped = Math.max(0, actualLessons - lessonsKept);
-  const domainsDropped = Math.max(0, actualDomains - domainsKept);
-  const originalLessonCount = actualLessons;
-  const originalDomainCount = actualDomains;
+  const corruptionDetected = claimedLessons !== actualCompletedLessons || claimedDomains !== actualCompletedDomains;
+  const lessonsLostToCorruption = Math.max(
+    0,
+    claimedLessons - actualCompletedLessons
+  );
+  const domainsLostToCorruption = Math.max(
+    0,
+    claimedDomains - actualCompletedDomains
+  );
+  result.totalLessonsCompleted = actualCompletedLessons;
+  result.totalDomainsCompleted = actualCompletedDomains;
+  const originalLessonCount = Object.keys(progress.lessonCompletions).length;
+  const originalDomainCount = Object.keys(progress.domainCompletions).length;
   return {
     data: result,
     lessonsDroppedRatio: originalLessonCount > 0 ? lessonsDropped / originalLessonCount : 0,
@@ -47324,82 +47393,116 @@ function reconcileOverallProgress(progress) {
   };
 }
 function extractSettings(parsed) {
-  const zodResult = SettingsDataSchema.safeParse(parsed?.settings);
-  if (zodResult.success) {
-    return {
-      data: zodResult.data,
-      defaultedRatio: 0
-    };
-  }
+  const defaults = getDefaultSettings();
   const candidate = parsed?.settings || {};
   const settings = {};
   const totalFields = 11;
   let defaultedFields = 0;
-  const defaultTimestamp = 0;
-  if (Array.isArray(candidate.weekStartDay) && ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].includes(candidate.weekStartDay[0])) {
-    settings.weekStartDay = [candidate.weekStartDay[0], candidate.weekStartDay[1] ?? defaultTimestamp];
+  if (Array.isArray(candidate.weekStartDay) && [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday"
+  ].includes(candidate.weekStartDay[0])) {
+    settings.weekStartDay = [
+      candidate.weekStartDay[0],
+      candidate.weekStartDay[1] ?? 0
+    ];
   } else {
-    settings.weekStartDay = ["monday", defaultTimestamp];
+    settings.weekStartDay = defaults.weekStartDay;
     defaultedFields++;
   }
   if (Array.isArray(candidate.weekStartTimeUTC) && typeof candidate.weekStartTimeUTC[0] === "string" && /^\d{2}:\d{2}$/.test(candidate.weekStartTimeUTC[0])) {
-    settings.weekStartTimeUTC = [candidate.weekStartTimeUTC[0], candidate.weekStartTimeUTC[1] ?? defaultTimestamp];
+    settings.weekStartTimeUTC = [
+      candidate.weekStartTimeUTC[0],
+      candidate.weekStartTimeUTC[1] ?? 0
+    ];
   } else {
-    settings.weekStartTimeUTC = ["00:00", defaultTimestamp];
+    settings.weekStartTimeUTC = defaults.weekStartTimeUTC;
     defaultedFields++;
   }
   if (Array.isArray(candidate.theme) && ["light", "dark", "auto"].includes(candidate.theme[0])) {
-    settings.theme = [candidate.theme[0], candidate.theme[1] ?? defaultTimestamp];
+    settings.theme = [
+      candidate.theme[0],
+      candidate.theme[1] ?? 0
+    ];
   } else {
-    settings.theme = ["auto", defaultTimestamp];
+    settings.theme = defaults.theme;
     defaultedFields++;
   }
-  if (Array.isArray(candidate.learningPace) && ["relaxed", "standard", "intensive"].includes(candidate.learningPace[0])) {
-    settings.learningPace = [candidate.learningPace[0], candidate.learningPace[1] ?? defaultTimestamp];
+  if (Array.isArray(candidate.learningPace) && ["accelerated", "standard", "flexible"].includes(candidate.learningPace[0])) {
+    settings.learningPace = [
+      candidate.learningPace[0],
+      candidate.learningPace[1] ?? 0
+    ];
   } else {
-    settings.learningPace = ["standard", defaultTimestamp];
+    settings.learningPace = defaults.learningPace;
     defaultedFields++;
   }
   if (Array.isArray(candidate.optOutDailyPing) && typeof candidate.optOutDailyPing[0] === "boolean") {
-    settings.optOutDailyPing = [candidate.optOutDailyPing[0], candidate.optOutDailyPing[1] ?? defaultTimestamp];
+    settings.optOutDailyPing = [
+      candidate.optOutDailyPing[0],
+      candidate.optOutDailyPing[1] ?? 0
+    ];
   } else {
-    settings.optOutDailyPing = [false, defaultTimestamp];
+    settings.optOutDailyPing = defaults.optOutDailyPing;
     defaultedFields++;
   }
   if (Array.isArray(candidate.optOutErrorPing) && typeof candidate.optOutErrorPing[0] === "boolean") {
-    settings.optOutErrorPing = [candidate.optOutErrorPing[0], candidate.optOutErrorPing[1] ?? defaultTimestamp];
+    settings.optOutErrorPing = [
+      candidate.optOutErrorPing[0],
+      candidate.optOutErrorPing[1] ?? 0
+    ];
   } else {
-    settings.optOutErrorPing = [false, defaultTimestamp];
+    settings.optOutErrorPing = defaults.optOutErrorPing;
     defaultedFields++;
   }
-  if (Array.isArray(candidate.fontSize) && ["small", "medium", "large", "x-large"].includes(candidate.fontSize[0])) {
-    settings.fontSize = [candidate.fontSize[0], candidate.fontSize[1] ?? defaultTimestamp];
+  if (Array.isArray(candidate.fontSize) && ["small", "medium", "large"].includes(candidate.fontSize[0])) {
+    settings.fontSize = [
+      candidate.fontSize[0],
+      candidate.fontSize[1] ?? 0
+    ];
   } else {
-    settings.fontSize = ["medium", defaultTimestamp];
+    settings.fontSize = defaults.fontSize;
     defaultedFields++;
   }
   if (Array.isArray(candidate.highContrast) && typeof candidate.highContrast[0] === "boolean") {
-    settings.highContrast = [candidate.highContrast[0], candidate.highContrast[1] ?? defaultTimestamp];
+    settings.highContrast = [
+      candidate.highContrast[0],
+      candidate.highContrast[1] ?? 0
+    ];
   } else {
-    settings.highContrast = [false, defaultTimestamp];
+    settings.highContrast = defaults.highContrast;
     defaultedFields++;
   }
   if (Array.isArray(candidate.reducedMotion) && typeof candidate.reducedMotion[0] === "boolean") {
-    settings.reducedMotion = [candidate.reducedMotion[0], candidate.reducedMotion[1] ?? defaultTimestamp];
+    settings.reducedMotion = [
+      candidate.reducedMotion[0],
+      candidate.reducedMotion[1] ?? 0
+    ];
   } else {
-    settings.reducedMotion = [false, defaultTimestamp];
+    settings.reducedMotion = defaults.reducedMotion;
     defaultedFields++;
   }
-  if (Array.isArray(candidate.focusIndicatorStyle) && ["default", "high-visibility", "outline"].includes(candidate.focusIndicatorStyle[0])) {
-    settings.focusIndicatorStyle = [candidate.focusIndicatorStyle[0], candidate.focusIndicatorStyle[1] ?? defaultTimestamp];
+  if (Array.isArray(candidate.focusIndicatorStyle) && ["default", "enhanced"].includes(candidate.focusIndicatorStyle[0])) {
+    settings.focusIndicatorStyle = [
+      candidate.focusIndicatorStyle[0],
+      candidate.focusIndicatorStyle[1] ?? 0
+    ];
   } else {
-    settings.focusIndicatorStyle = ["default", defaultTimestamp];
+    settings.focusIndicatorStyle = defaults.focusIndicatorStyle;
     defaultedFields++;
   }
   if (Array.isArray(candidate.audioEnabled) && typeof candidate.audioEnabled[0] === "boolean") {
-    settings.audioEnabled = [candidate.audioEnabled[0], candidate.audioEnabled[1] ?? defaultTimestamp];
+    settings.audioEnabled = [
+      candidate.audioEnabled[0],
+      candidate.audioEnabled[1] ?? 0
+    ];
   } else {
-    settings.audioEnabled = [true, defaultTimestamp];
+    settings.audioEnabled = defaults.audioEnabled;
     defaultedFields++;
   }
   return {
@@ -47479,7 +47582,9 @@ function extractCombinedComponentProgress(parsed, lessonConfigs) {
     if (validator) {
       const lessonId = curriculumData.getLessonIdForComponent(componentId);
       const lessonConfig = lessonId ? lessonConfigs.get(lessonId) : null;
-      const componentConfig = lessonConfig?.components.find((c) => c.id === componentId);
+      const componentConfig = lessonConfig?.components.find(
+        (c) => c.id === componentId
+      );
       if (componentConfig) {
         const validationResult = validator(zodResult.data, componentConfig);
         if (validationResult.defaultedRatio > 0) {
@@ -47540,32 +47645,19 @@ function initializeAllComponentsWithDefaults() {
 function createFullyDefaultedResult(expectedWebId, foundWebId) {
   const allComponentIds2 = curriculumData.getAllComponentIds();
   const { lessonCompletions, domainCompletions } = initializeAllLessonsAndDomainsWithDefaults();
+  const defaultSettings = getDefaultSettings();
+  const defaultProgress = getDefaultOverallProgress();
   let bundle = {
     metadata: {
       webId: "https://error.mera.invalid/unparseable-json"
       // Security: Unparseable = treat as mismatch
     },
     overallProgress: {
+      ...defaultProgress,
       lessonCompletions,
-      domainCompletions,
-      currentStreak: 0,
-      lastStreakCheck: 0,
-      totalLessonsCompleted: 0,
-      totalDomainsCompleted: 0
+      domainCompletions
     },
-    settings: {
-      weekStartDay: ["monday", 0],
-      weekStartTimeUTC: ["00:00", 0],
-      theme: ["auto", 0],
-      learningPace: ["standard", 0],
-      optOutDailyPing: [false, 0],
-      optOutErrorPing: [false, 0],
-      fontSize: ["medium", 0],
-      highContrast: [false, 0],
-      reducedMotion: [false, 0],
-      focusIndicatorStyle: ["default", 0],
-      audioEnabled: [true, 0]
-    },
+    settings: defaultSettings,
     navigationState: {
       currentEntityId: 0,
       // Main menu
@@ -47579,8 +47671,13 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
   try {
     bundle = PodStorageBundleSchema.parse(bundle);
   } catch (validationError) {
-    console.error("CRITICAL: Default bundle failed schema validation:", validationError);
-    throw new Error("Default bundle validation failed - this is a bug in progressIntegrity.ts");
+    console.error(
+      "CRITICAL: Default bundle failed schema validation:",
+      validationError
+    );
+    throw new Error(
+      "Default bundle validation failed - this is a bug in progressIntegrity.ts"
+    );
   }
   return {
     perfectlyValidInput: false,
@@ -47694,13 +47791,24 @@ function mergeBundles(bundleA, bundleB) {
   };
 }
 
+// src/ts/persistence/schemaVersion.ts
+var CURRENT_SCHEMA_VERSION = {
+  major: 1,
+  minor: 0,
+  patch: 0
+};
+
 // src/ts/initialization/escapeHatch.ts
 async function makeEscapeHatchBackup(rawJson) {
   try {
-    const shouldCreate = await shouldCreateEscapeHatch();
-    if (!shouldCreate) {
-      console.log("Skipping escape hatch: recent backup exists (< 1 hour old)");
-      return;
+    const existingBackups = await listEscapeHatchBackups();
+    if (existingBackups.length > 0) {
+      const mostRecent = existingBackups[0];
+      const age = Date.now() - mostRecent.timestamp;
+      if (age < MIN_INTERVAL_MS) {
+        console.log("Skipping escape hatch: recent backup exists (< 1 hour old)");
+        return;
+      }
     }
     const timestamp2 = Date.now();
     const filename = generateEscapeHatchFilename(timestamp2);
@@ -47712,7 +47820,7 @@ async function makeEscapeHatchBackup(rawJson) {
       return;
     }
     console.log(`Escape hatch backup created: ${filename}`);
-    cleanupOldEscapeHatches().catch((err) => {
+    cleanupOldEscapeHatches(existingBackups.length + 1, existingBackups).catch((err) => {
       console.error("Escape hatch cleanup failed:", err);
     });
   } catch (err) {
@@ -47722,16 +47830,8 @@ async function makeEscapeHatchBackup(rawJson) {
 var MAX_ESCAPE_HATCHES = 20;
 var MIN_INTERVAL_MS = 60 * 60 * 1e3;
 function generateEscapeHatchFilename(timestamp2) {
-  return `mera.0.1.0.ehb.${timestamp2}.json`;
-}
-async function shouldCreateEscapeHatch() {
-  const existing = await listEscapeHatchBackups();
-  if (existing.length === 0) {
-    return true;
-  }
-  const mostRecent = existing[0];
-  const age = Date.now() - mostRecent.timestamp;
-  return age >= MIN_INTERVAL_MS;
+  const v = CURRENT_SCHEMA_VERSION;
+  return `mera.${v.major}.${v.minor}.${v.patch}.ehb.${timestamp2}.json`;
 }
 async function listEscapeHatchBackups() {
   const { MeraBridge: MeraBridge2 } = await Promise.resolve().then(() => (init_meraBridge(), meraBridge_exports));
@@ -47757,13 +47857,13 @@ async function listEscapeHatchBackups() {
   backups.sort((a, b) => b.timestamp - a.timestamp);
   return backups;
 }
-async function cleanupOldEscapeHatches() {
-  const backups = await listEscapeHatchBackups();
-  if (backups.length <= MAX_ESCAPE_HATCHES) {
-    console.log(`Escape hatch cleanup: ${backups.length} backups, under limit`);
+async function cleanupOldEscapeHatches(currentCount, existingBackups) {
+  if (currentCount <= MAX_ESCAPE_HATCHES) {
+    console.log(`Escape hatch cleanup: ${currentCount} backups, under limit`);
     return;
   }
-  const toDelete = backups.slice(MAX_ESCAPE_HATCHES);
+  const numToDelete = currentCount - MAX_ESCAPE_HATCHES;
+  const toDelete = existingBackups.slice(-numToDelete);
   console.log(`Escape hatch cleanup: deleting ${toDelete.length} old backups`);
   const { MeraBridge: MeraBridge2 } = await Promise.resolve().then(() => (init_meraBridge(), meraBridge_exports));
   const bridge = MeraBridge2.getInstance();
@@ -47811,6 +47911,8 @@ async function orchestrateProgressLoading(lessonConfigs) {
   }
   let possiblyDestructiveLoad = false;
   let mergeWasPerformed = false;
+  let hadWebIdMismatch = false;
+  let hadLoadFailures = false;
   const result = await selectBestBackup(
     podBackups,
     localBackups,
@@ -47822,24 +47924,69 @@ async function orchestrateProgressLoading(lessonConfigs) {
     },
     () => {
       mergeWasPerformed = true;
+    },
+    // Pass callbacks to track scenario classification
+    () => {
+      hadWebIdMismatch = true;
+    },
+    () => {
+      hadLoadFailures = true;
     }
   );
   if (!result) {
     console.error("No valid backups available");
-    return null;
+    const noBackupsScenario = classifyNoBackupsScenario(
+      podBackups.length + localBackups.length,
+      hadWebIdMismatch,
+      hadLoadFailures
+    );
+    return {
+      scenario: noBackupsScenario,
+      mergeOccurred: false,
+      bundle: null,
+      // No bundle when no backups (orchestrator handles this)
+      recoveryMetrics: null
+      // No metrics when no backups
+    };
   }
   if ((possiblyDestructiveLoad || mergeWasPerformed) && mostRecentPodJson) {
     makeEscapeHatchBackup(mostRecentPodJson).catch((err) => {
       console.error("Failed to create escape hatch backup:", err);
     });
   }
+  const scenario = classifyRecoveryScenario(result, mergeWasPerformed);
   console.log("Progress loading complete:", {
+    scenario,
+    mergeOccurred: mergeWasPerformed,
     perfectlyValidInput: result.perfectlyValidInput,
     lessonsLostToCorruption: result.recoveryMetrics.overallProgress.lessonsLostToCorruption,
     lessonsDroppedRatio: result.recoveryMetrics.overallProgress.lessonsDroppedRatio,
     componentsDefaulted: result.recoveryMetrics.combinedComponentProgress.componentsDefaulted
   });
-  return result;
+  return {
+    scenario,
+    mergeOccurred: mergeWasPerformed,
+    bundle: result.bundle,
+    recoveryMetrics: result.recoveryMetrics
+  };
+}
+function classifyNoBackupsScenario(totalBackups, hadWebIdMismatch, hadLoadFailures) {
+  if (totalBackups === 0) {
+    return "DEFAULT_NO_SAVES" /* DEFAULT_NO_SAVES */;
+  }
+  if (hadWebIdMismatch) {
+    return "DEFAULT_WEBID_MISMATCH" /* DEFAULT_WEBID_MISMATCH */;
+  }
+  return "DEFAULT_FAILED_RECOVERY" /* DEFAULT_FAILED_RECOVERY */;
+}
+function classifyRecoveryScenario(result, mergeOccurred) {
+  if (result.perfectlyValidInput) {
+    return "PERFECT_RECOVERY" /* PERFECT_RECOVERY */;
+  }
+  if (result.recoveryMetrics.overallProgress.corruptionDetected) {
+    return "IMPERFECT_RECOVERY_CORRUPTION" /* IMPERFECT_RECOVERY_CORRUPTION */;
+  }
+  return "IMPERFECT_RECOVERY_MIGRATION" /* IMPERFECT_RECOVERY_MIGRATION */;
 }
 var SCORING = {
   /** Per lesson lost to corruption (counter mismatch) */
@@ -47987,7 +48134,7 @@ function scoreBackup(result, backupIndex) {
   score += result.recoveryMetrics.combinedComponentProgress.componentsDefaulted * SCORING.COMPONENT_DEFAULTED;
   return score;
 }
-async function scoreSortedBackups(backups, webId, lessonConfigs, onImperfectBackup) {
+async function scoreSortedBackups(backups, webId, lessonConfigs, onImperfectBackup, onWebIdMismatch, onLoadFailure) {
   if (backups.length === 0) {
     return null;
   }
@@ -47998,6 +48145,7 @@ async function scoreSortedBackups(backups, webId, lessonConfigs, onImperfectBack
     const data = await loadBackupData(backup);
     if (!data) {
       console.warn(`Skipping backup ${backup.filename}: failed to load`);
+      if (onLoadFailure) onLoadFailure();
       continue;
     }
     if (typeof data !== "string") {
@@ -48008,6 +48156,7 @@ async function scoreSortedBackups(backups, webId, lessonConfigs, onImperfectBack
     const result = enforceDataIntegrity(data, webId, lessonConfigs);
     if (result.criticalFailures.webIdMismatch) {
       console.warn(`Backup ${backup.filename} is for different user, skipping`);
+      if (onWebIdMismatch) onWebIdMismatch();
       continue;
     }
     const score = scoreBackup(result, i);
@@ -48051,18 +48200,24 @@ async function validateAndMerge(primary, secondary, webId, lessonConfigs) {
   console.log("Merge successful");
   return finalResult;
 }
-async function selectBestBackup(podBackups, localBackups, webId, lessonConfigs, onDestructive, onMerge) {
+async function selectBestBackup(podBackups, localBackups, webId, lessonConfigs, onDestructive, onMerge, onWebIdMismatch, onLoadFailure) {
   const bestPod = await scoreSortedBackups(
     podBackups,
     webId,
     lessonConfigs,
-    onDestructive
+    onDestructive,
     // Flag if imperfect
+    onWebIdMismatch,
+    onLoadFailure
   );
   const bestLocal = await scoreSortedBackups(
     localBackups,
     webId,
-    lessonConfigs
+    lessonConfigs,
+    void 0,
+    // Don't track localStorage imperfections for escape hatch
+    onWebIdMismatch,
+    onLoadFailure
   );
   if (!bestPod && !bestLocal) {
     console.error("No valid backups found in either Pod or localStorage");
@@ -50977,54 +51132,865 @@ function parseAllLessons() {
   return lessons;
 }
 
+// src/ts/ui/userMessage.ts
+async function showUserMessage(title, message2, primaryLabel, secondaryLabel) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-black/60 flex items-center justify-center z-50";
+    overlay.id = "user-message-overlay";
+    const card = document.createElement("div");
+    card.className = "bg-white rounded-lg shadow-2xl p-6 max-w-md mx-4 space-y-4";
+    const titleEl = document.createElement("h2");
+    titleEl.className = "text-xl font-semibold text-gray-900";
+    titleEl.textContent = title;
+    const messageEl = document.createElement("p");
+    messageEl.className = "text-gray-700 whitespace-pre-line";
+    messageEl.textContent = message2;
+    const buttonContainer = document.createElement("div");
+    buttonContainer.className = "flex gap-3 justify-end pt-2";
+    const primaryBtn = document.createElement("button");
+    primaryBtn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors";
+    primaryBtn.textContent = primaryLabel;
+    primaryBtn.onclick = () => {
+      cleanup();
+      resolve("primary");
+    };
+    if (secondaryLabel) {
+      const secondaryBtn = document.createElement("button");
+      secondaryBtn.className = "px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded transition-colors";
+      secondaryBtn.textContent = secondaryLabel;
+      secondaryBtn.onclick = () => {
+        cleanup();
+        resolve("secondary");
+      };
+      buttonContainer.appendChild(secondaryBtn);
+    }
+    buttonContainer.appendChild(primaryBtn);
+    card.appendChild(titleEl);
+    card.appendChild(messageEl);
+    card.appendChild(buttonContainer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    primaryBtn.focus();
+    function cleanup() {
+      overlay.remove();
+    }
+  });
+}
+async function flashSuccess(message2, durationMs = 2e3) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-black/40 flex items-center justify-center z-50";
+    overlay.id = "success-flash-overlay";
+    const card = document.createElement("div");
+    card.className = "bg-white rounded-lg shadow-2xl p-6 max-w-sm mx-4";
+    const messageEl = document.createElement("p");
+    messageEl.className = "text-lg font-medium text-green-700 text-center";
+    messageEl.textContent = message2;
+    card.appendChild(messageEl);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    setTimeout(() => {
+      overlay.remove();
+      resolve();
+    }, durationMs);
+  });
+}
+
+// src/ts/initialization/initializationOrchestrator.ts
+init_meraBridge();
+
+// src/ts/persistence/saveOrchestrator.ts
+init_meraBridge();
+async function orchestrateSave(bundleJSON, timestamp2, allowSolidSaves) {
+  const fileNames = generateFilenames(timestamp2);
+  let localOfflineSucceeded = false;
+  try {
+    await Promise.all([
+      saveLoadCheckCleanLocal(fileNames.localOfflinePrimary, bundleJSON),
+      saveLoadCheckCleanLocal(fileNames.localOfflineDup, bundleJSON)
+    ]);
+    localOfflineSucceeded = true;
+  } catch (localOfflineError) {
+    console.error("Local offline save failed:", localOfflineError);
+  }
+  let podSucceeded = false;
+  if (allowSolidSaves) {
+    try {
+      await Promise.all([
+        saveLoadCheckCleanSolid(fileNames.solidPrimary, bundleJSON),
+        saveLoadCheckCleanSolid(fileNames.solidDup, bundleJSON)
+      ]);
+      podSucceeded = true;
+    } catch (podError) {
+      console.error("Pod save failed:", podError);
+    }
+  } else {
+    console.warn("Pod save blocked - concurrence check did not pass");
+  }
+  if (!podSucceeded) {
+    return localOfflineSucceeded ? 2 /* OnlyLocalSucceeded */ : 1 /* BothFailed */;
+  }
+  try {
+    await Promise.all([
+      saveLoadCheckCleanLocal(fileNames.localOnlinePrimary, bundleJSON),
+      saveLoadCheckCleanLocal(fileNames.localOnlineDup, bundleJSON)
+    ]);
+    const bridge = MeraBridge.getInstance();
+    try {
+      await Promise.all([
+        bridge.localDelete(fileNames.localOfflinePrimary),
+        bridge.localDelete(fileNames.localOfflineDup)
+      ]);
+    } catch (cleanupError) {
+      console.warn("Cleanup failed:", cleanupError);
+    }
+    return 0 /* BothSucceeded */;
+  } catch (localOnlineError) {
+    console.error("Local online save failed:", localOnlineError);
+    return 3 /* OnlySolidSucceeded */;
+  }
+}
+async function saveLoadCheckCleanLocal(filename, bundleJSON) {
+  const bridge = MeraBridge.getInstance();
+  try {
+    const saveResult = await bridge.localSave(filename, bundleJSON);
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || "Local save failed");
+    }
+    const loadResult = await bridge.localLoad(filename);
+    if (!loadResult.success || !loadResult.data) {
+      throw new Error(loadResult.error || "Local load failed");
+    }
+    if (loadResult.data !== bundleJSON) {
+      throw new Error(`Data mismatch in ${filename}`);
+    }
+  } catch (error46) {
+    try {
+      await bridge.localDelete(filename);
+    } catch (cleanupError) {
+      console.warn("Failed to cleanup after error:", cleanupError);
+    }
+    throw error46;
+  }
+}
+async function saveLoadCheckCleanSolid(filename, bundleJSON) {
+  const bridge = MeraBridge.getInstance();
+  try {
+    const saveResult = await bridge.solidSave(filename, bundleJSON);
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || "Solid save failed");
+    }
+    const loadResult = await bridge.solidLoad(filename);
+    if (!loadResult.success || !loadResult.data) {
+      throw new Error(loadResult.error || "Solid load failed");
+    }
+    if (loadResult.data !== bundleJSON) {
+      throw new Error(`Data mismatch in ${filename}`);
+    }
+  } catch (error46) {
+    try {
+      await bridge.solidDelete(filename);
+    } catch (cleanupError) {
+      console.warn("Failed to cleanup corrupted Pod file:", cleanupError);
+    }
+    throw error46;
+  }
+}
+function generateFilenames(timestamp2) {
+  const v = CURRENT_SCHEMA_VERSION;
+  const prefix = `mera.${v.major}.${v.minor}.${v.patch}`;
+  return {
+    localOfflinePrimary: `${prefix}.lofp.${timestamp2}.json`,
+    localOfflineDup: `${prefix}.lofd.${timestamp2}.json`,
+    solidPrimary: `${prefix}.sp.${timestamp2}.json`,
+    solidDup: `${prefix}.sd.${timestamp2}.json`,
+    localOnlinePrimary: `${prefix}.lonp.${timestamp2}.json`,
+    localOnlineDup: `${prefix}.lond.${timestamp2}.json`
+  };
+}
+
+// src/ts/persistence/saveManager.ts
+init_meraBridge();
+var SaveManager = class _SaveManager {
+  // ============================================================================
+  // INITIALIZATION
+  // ============================================================================
+  constructor() {
+    // ============================================================================
+    // CORE STATE
+    // ============================================================================
+    /** Prevents concurrent save operations */
+    this.saveInProgress = false;
+    /** Last save outcome, used for retry logic and online status */
+    this.lastSaveResult = 0 /* BothSucceeded */;
+    /** Latest progress bundle JSON queued by Main Core */
+    this.queuedSave = null;
+    /** Flag indicating bundle has changed since last save */
+    this.saveHasChanged = false;
+    // ============================================================================
+    // CONCURRENT SESSION PROTECTION STATE
+    // ============================================================================
+    /** Session ID for concurrent session detection (null until first save) */
+    this.sessionId = null;
+    /** Path to session protection file in Pod */
+    this.SESSION_FILE_PATH = "mera_concurrent_session_protection.json";
+    this.startPolling();
+  }
+  /**
+   * Gets singleton instance, creating and starting it if needed.
+   *
+   * @returns The global SaveManager instance
+   */
+  static getInstance() {
+    if (!_SaveManager.instance) {
+      _SaveManager.instance = new _SaveManager();
+    }
+    return _SaveManager.instance;
+  }
+  /**
+   * Begins save polling cycle. Called automatically by constructor.
+   *
+   * Runs every 50ms to check for changed state and trigger saves.
+   * Each poll cycle completes before scheduling the next one.
+   */
+  startPolling() {
+    const poll = async () => {
+      await this.checkAndSave();
+      setTimeout(poll, 50);
+    };
+    poll();
+  }
+  // ============================================================================
+  // CORE SAVE LOGIC
+  // ============================================================================
+  /**
+   * Polling cycle that checks for changed state and triggers saves.
+   *
+   * Save triggers when:
+   * - No save currently in progress, AND
+   * - Either progress has changed, OR last Pod save failed (retry logic)
+   *
+   * However, core generally only calls queueSave() every 15 seconds except for with progress events
+   *
+   * Sequential execution: Each poll waits for save to complete before returning.
+   */
+  async checkAndSave() {
+    if (this.queuedSave === null) {
+      return;
+    }
+    if (!this.saveInProgress && (this.saveHasChanged || this.lastSaveResult === 1 /* BothFailed */ || this.lastSaveResult === 2 /* OnlyLocalSucceeded */)) {
+      this.saveInProgress = true;
+      this.saveHasChanged = false;
+      const bundleSnapshot = this.queuedSave;
+      const timestamp2 = Date.now();
+      const concurrenceCheck = await this.checkConcurrentSessions();
+      if (concurrenceCheck === 1 /* ConcurrentSessionDetected */) {
+        showCriticalError({
+          title: "Concurrent Session Detected",
+          message: "Another device or tab is using this account. Please refresh to continue.",
+          technicalDetails: "Session ID mismatch detected in Pod",
+          errorCode: "concurrent-session"
+        });
+        this.lastSaveResult = 1 /* BothFailed */;
+        return;
+      }
+      if (concurrenceCheck === 2 /* InitializationFailed */) {
+        showCriticalError({
+          title: "Save System Failure",
+          message: "Failed to initialize session protection. Progress is not being saved.",
+          technicalDetails: "Could not write or verify session file after retries",
+          errorCode: "session-init-failure"
+        });
+        this.lastSaveResult = 1 /* BothFailed */;
+        return;
+      }
+      try {
+        const allowSolidSaves = concurrenceCheck === 0 /* Passed */;
+        const result = await orchestrateSave(bundleSnapshot, timestamp2, allowSolidSaves);
+        this.lastSaveResult = result;
+        if (result === 3 /* OnlySolidSucceeded */) {
+          console.error(
+            "\u26A0\uFE0F localStorage save failed - offline mode unavailable"
+          );
+        }
+      } catch (error46) {
+        showCriticalError({
+          title: "Save System Failure",
+          message: "Progress is not being saved.",
+          technicalDetails: error46.stack,
+          errorCode: "save-orchestration-failure"
+        });
+        this.lastSaveResult = 1 /* BothFailed */;
+      } finally {
+        this.saveInProgress = false;
+      }
+    }
+  }
+  /**
+   * Queues progress bundle JSON for next save cycle.
+   *
+   * Called by Main Core after processing progress updates. Does not
+   * block - save happens asynchronously during next polling cycle.
+   *
+   * Typically happens once every 15 seconds if there had been a change
+   * or happens with major progress event.
+   *
+   * @param bundleJSON - Pre-stringified JSON representation of complete progress bundle
+   * @param hasChanged - True if bundle differs from last save
+   */
+  queueSave(bundleJSON, hasChanged) {
+    this.queuedSave = bundleJSON;
+    this.saveHasChanged = hasChanged;
+  }
+  /**
+   * Returns whether Solid Pod sync is currently working.
+   *
+   * Used by UI to display online/offline status. True if last save
+   * succeeded in reaching the Pod, false if offline or Pod unreachable.
+   *
+   * @returns True if Pod sync operational, false otherwise
+   */
+  getOnlineStatus() {
+    if (this.lastSaveResult === 0 /* BothSucceeded */ || this.lastSaveResult === 3 /* OnlySolidSucceeded */) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  // ============================================================================
+  // CONCURRENT SESSION PROTECTION (Edge Case Prevention)
+  // ============================================================================
+  //
+  // This section implements tamper-detection tripwire logic to prevent data
+  // corruption when the same Pod is accessed from multiple devices/tabs.
+  //
+  // Strategy: Write a random session ID to the Pod, then verify it hasn't
+  // changed before each save. If it changes, another session is active.
+  //
+  // This is NOT a lock - it's detection after the fact. The 50ms pause after
+  // writing creates a window to catch near-simultaneous session starts.
+  // ============================================================================
+  /**
+   * Generates a cryptographically random 128-bit session ID.
+   *
+   * @returns Hex-encoded 128-bit random ID
+   */
+  generateSessionId() {
+    const array2 = new Uint8Array(16);
+    crypto.getRandomValues(array2);
+    return Array.from(array2, (byte) => byte.toString(16).padStart(2, "0")).join(
+      ""
+    );
+  }
+  /**
+   * Checks for concurrent sessions by verifying session ID in Pod.
+   *
+   * First call: Writes random session ID, waits, verifies write succeeded
+   * Subsequent calls: Reads session ID, verifies it matches local copy
+   *
+   * This is a tamper-detection tripwire, not a lock. If another device/tab
+   * starts a session, we detect the ID change and halt to prevent corruption.
+   *
+   * @returns ConcurrenceCheckResult indicating what happened
+   */
+  async checkConcurrentSessions() {
+    const bridge = MeraBridge.getInstance();
+    if (this.sessionId === null) {
+      const newSessionId = this.generateSessionId();
+      const sessionFile = { sessionId: newSessionId };
+      const maxRetries = 5;
+      let retryCount = 0;
+      let writeSucceeded = false;
+      while (retryCount < maxRetries && !writeSucceeded) {
+        try {
+          await bridge.solidSave(
+            this.SESSION_FILE_PATH,
+            JSON.stringify(sessionFile)
+          );
+          writeSucceeded = true;
+        } catch (error46) {
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            console.error(`Failed to write session protection file after ${maxRetries} attempts:`, error46);
+            return 2 /* InitializationFailed */;
+          }
+          await new Promise(
+            (resolve) => setTimeout(resolve, 50 * Math.pow(2, retryCount - 1))
+          );
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      try {
+        const readBackResult = await bridge.solidLoad(this.SESSION_FILE_PATH);
+        if (!readBackResult.success || !readBackResult.data) {
+          console.error("Session file read failed:", readBackResult.error);
+          return 2 /* InitializationFailed */;
+        }
+        const verified = JSON.parse(readBackResult.data);
+        if (verified.sessionId !== newSessionId) {
+          console.error("Concurrent session detected during initialization - another device/tab overwrote session ID");
+          return 1 /* ConcurrentSessionDetected */;
+        }
+        this.sessionId = newSessionId;
+        return 0 /* Passed */;
+      } catch (error46) {
+        console.error("Session verification failed:", error46);
+        return 2 /* InitializationFailed */;
+      }
+    } else {
+      try {
+        const currentResult = await bridge.solidLoad(this.SESSION_FILE_PATH);
+        if (!currentResult.success || !currentResult.data) {
+          console.warn("Session check network error, blocking solid saves:", currentResult.error);
+          return 3 /* NetworkError */;
+        }
+        const currentFile = JSON.parse(
+          currentResult.data
+        );
+        if (currentFile.sessionId !== this.sessionId) {
+          console.error("Concurrent session detected - session ID changed. Another device/tab is active.");
+          return 1 /* ConcurrentSessionDetected */;
+        }
+        return 0 /* Passed */;
+      } catch (error46) {
+        console.warn("Session check failed, blocking solid saves:", error46);
+        return 3 /* NetworkError */;
+      }
+    }
+  }
+};
+
+// src/ts/persistence/saveCleaner.ts
+init_meraBridge();
+var SaveCleaner = class _SaveCleaner {
+  constructor() {
+    this.startCleaning();
+  }
+  /**
+   * Begins cleanup interval. Called automatically by constructor.
+   * 
+   * Runs cleanup every 60 seconds as fire-and-forget operations.
+   * Errors are logged but do not stop the interval.
+   */
+  startCleaning() {
+    setInterval(() => this.clean(), 60 * 1e3);
+  }
+  /**
+   * Gets singleton instance, creating and starting it if needed.
+   * 
+   * @returns The global SaveCleaner instance
+   */
+  static getInstance() {
+    if (!_SaveCleaner.instance) {
+      _SaveCleaner.instance = new _SaveCleaner();
+    }
+    return _SaveCleaner.instance;
+  }
+  /**
+   * Triggers cleanup for both storage locations in parallel.
+   * 
+   * Fire-and-forget pattern with error handling. Cleanup failures
+   * are logged but don't block the interval or crash the app.
+   */
+  clean() {
+    const timestamp2 = Date.now();
+    this.cleanSolid(timestamp2).catch(
+      (err) => console.error("Solid cleanup failed:", err)
+    );
+    this.cleanLocal(timestamp2).catch(
+      (err) => console.error("Local cleanup failed:", err)
+    );
+  }
+  /**
+   * Cleans Solid Pod backups using time-bracket retention strategy.
+   * 
+   * Treats primary/duplicate pairs as single units. Lists only primaries (.sp.)
+   * for bracket logic, but deletes both primary and duplicate together.
+   * 
+   * Enforces minimum 4 backup pairs. Applies conditional deletion to preserve
+   * temporal diversity during transition periods.
+   * 
+   * After bracket-based cleanup, removes orphaned duplicates older than 24 hours.
+   * 
+   * @param timestamp - Current time in milliseconds for age calculation
+   */
+  async cleanSolid(timestamp2) {
+    const bridge = MeraBridge.getInstance();
+    const result = await bridge.solidList("mera.*.*.*.sp.*.json");
+    if (!result.success || !result.data) {
+      console.error("Failed to list Solid backups:", result.error);
+      return;
+    }
+    const primaryFiles = result.data;
+    if (primaryFiles.length <= 4) {
+      console.log("Skipping Solid cleanup: minimum 4 backups maintained");
+      return;
+    }
+    const backups = this.parseBackupFiles(primaryFiles, timestamp2);
+    const toDelete = this.selectFilesForDeletion(backups);
+    for (const primaryFilename of toDelete) {
+      if (await this.canDeleteSolid()) {
+        const dupFilename = primaryFilename.replace(".sp.", ".sd.");
+        const primaryResult = await bridge.solidDelete(primaryFilename);
+        if (!primaryResult.success) {
+          console.error(`Failed to delete ${primaryFilename}:`, primaryResult.error);
+        }
+        const dupResult = await bridge.solidDelete(dupFilename);
+        if (!dupResult.success) {
+          console.error(`Failed to delete ${dupFilename}:`, dupResult.error);
+        }
+      } else {
+        break;
+      }
+    }
+    await this.cleanOrphanedDuplicates("solid", timestamp2);
+  }
+  /**
+   * Cleans localStorage backups using time-bracket retention strategy.
+   * 
+   * Treats primary/duplicate pairs as single units. Lists both offline (.lofp.)
+   * and online (.lonp.) primaries together, as both represent local backup history.
+   * 
+   * Why treat them together: Offline files persist if device stays offline,
+   * online files replace them after Pod sync. Both contribute to the same
+   * local recovery point timeline.
+   * 
+   * Enforces minimum 4 backup pairs. Applies conditional deletion strategy.
+   * 
+   * After bracket-based cleanup, removes orphaned duplicates older than 24 hours.
+   * 
+   * @param timestamp - Current time in milliseconds for age calculation
+   */
+  async cleanLocal(timestamp2) {
+    const bridge = MeraBridge.getInstance();
+    const offlineResult = await bridge.localList("mera.*.*.*.lofp.*.json");
+    const onlineResult = await bridge.localList("mera.*.*.*.lonp.*.json");
+    if (!offlineResult.success || !offlineResult.data) {
+      console.error("Failed to list local offline backups:", offlineResult.error);
+      return;
+    }
+    if (!onlineResult.success || !onlineResult.data) {
+      console.error("Failed to list local online backups:", onlineResult.error);
+      return;
+    }
+    const primaryFiles = [...offlineResult.data, ...onlineResult.data];
+    if (primaryFiles.length <= 4) {
+      console.log("Skipping local cleanup: minimum 4 backups maintained");
+      return;
+    }
+    const backups = this.parseBackupFiles(primaryFiles, timestamp2);
+    const toDelete = this.selectFilesForDeletion(backups);
+    for (const primaryFilename of toDelete) {
+      if (await this.canDeleteLocal()) {
+        const dupFilename = primaryFilename.replace(".lofp.", ".lofd.").replace(".lonp.", ".lond.");
+        const primaryResult = await bridge.localDelete(primaryFilename);
+        if (!primaryResult.success) {
+          console.error(`Failed to delete ${primaryFilename}:`, primaryResult.error);
+        }
+        const dupResult = await bridge.localDelete(dupFilename);
+        if (!dupResult.success) {
+          console.error(`Failed to delete ${dupFilename}:`, dupResult.error);
+        }
+      } else {
+        break;
+      }
+    }
+    await this.cleanOrphanedDuplicates("local", timestamp2);
+  }
+  /**
+   * Parses backup filenames into structured objects with age calculation.
+   * 
+   * Extracts Unix timestamp from filename pattern:
+   * "mera.{major}.{minor}.{patch}.{type}.{timestamp}.json"
+   * 
+   * Examples:
+   * - mera.0.1.0.sp.1234567890.json (Solid primary)
+   * - mera.0.1.0.lofp.1234567890.json (Local offline primary)
+   * - mera.0.1.0.lonp.1234567890.json (Local online primary)
+   * 
+   * Calculates age relative to current time. Invalid filenames are filtered out.
+   * 
+   * @param filenames - Array of backup filenames to parse
+   * @param currentTime - Current timestamp for age calculation
+   * @returns Sorted array of backup objects, oldest first
+   */
+  parseBackupFiles(filenames, currentTime) {
+    return filenames.map((filename) => {
+      const match = filename.match(/mera\.\d+\.\d+\.\d+\.[a-z]+\.(\d+)\.json/);
+      if (!match) return null;
+      const timestamp2 = parseInt(match[1]);
+      const ageMs = currentTime - timestamp2;
+      return { filename, timestamp: timestamp2, ageMs };
+    }).filter((backup) => backup !== null).sort((a, b) => a.timestamp - b.timestamp);
+  }
+  /**
+   * Selects files for deletion using conditional time-bracket strategy.
+   * 
+   * Time brackets (newest to oldest):
+   * - <1 minute: Keep ALL (active saves, never delete)
+   * - 1-10 minutes: Keep newest only (consolidate when recent bracket populated)
+   * - 10 minutes-1 hour: Keep newest only (consolidate when 1-10min bracket populated)
+   * - 1-24 hours: Keep newest only (consolidate when 10min-1hr bracket populated)
+   * - >24 hours: Delete all (consolidate when 1-24hr bracket populated)
+   * 
+   * This conditional deletion preserves temporal diversity during idle-to-active
+   * transitions. Old stratified backups remain until new recovery points establish.
+   * 
+   * @param backups - Sorted array of backup files with age data
+   * @returns Array of filenames selected for deletion
+   */
+  selectFilesForDeletion(backups) {
+    const oneMin = 60 * 1e3;
+    const tenMin = 10 * oneMin;
+    const oneHour = 60 * oneMin;
+    const twentyFourHours = 24 * oneHour;
+    const brackets = {
+      ancient: backups.filter((b) => b.ageMs > twentyFourHours),
+      day: backups.filter((b) => b.ageMs > oneHour && b.ageMs <= twentyFourHours),
+      hour: backups.filter((b) => b.ageMs > tenMin && b.ageMs <= oneHour),
+      tenMin: backups.filter((b) => b.ageMs > oneMin && b.ageMs <= tenMin),
+      recent: backups.filter((b) => b.ageMs <= oneMin)
+    };
+    const toDelete = [];
+    if (brackets.day.length > 0) {
+      toDelete.push(...brackets.ancient);
+    }
+    if (brackets.hour.length > 0) {
+      toDelete.push(...brackets.day.slice(0, -1));
+    }
+    if (brackets.tenMin.length > 0) {
+      toDelete.push(...brackets.hour.slice(0, -1));
+    }
+    if (brackets.recent.length > 0) {
+      toDelete.push(...brackets.tenMin.slice(0, -1));
+    }
+    return toDelete.map((b) => b.filename);
+  }
+  /**
+   * Removes orphaned duplicate files older than 24 hours.
+   * 
+   * Duplicates are orphaned when their primary doesn't exist (failed delete,
+   * corruption, etc). Wait 24 hours before deleting in case they're the only
+   * surviving copy.
+   * 
+   * @param storageType - 'solid' or 'local'
+   * @param currentTime - Current timestamp for age calculation
+   */
+  async cleanOrphanedDuplicates(storageType, currentTime) {
+    const bridge = MeraBridge.getInstance();
+    const twentyFourHours = 24 * 60 * 60 * 1e3;
+    const patterns = storageType === "solid" ? ["mera.*.*.*.sd.*.json"] : ["mera.*.*.*.lofd.*.json", "mera.*.*.*.lond.*.json"];
+    const listFn = storageType === "solid" ? bridge.solidList : bridge.localList;
+    const loadFn = storageType === "solid" ? bridge.solidLoad : bridge.localLoad;
+    const deleteFn = storageType === "solid" ? bridge.solidDelete : bridge.localDelete;
+    const toPrimary = (dup) => dup.replace(".sd.", ".sp.").replace(".lofd.", ".lofp.").replace(".lond.", ".lonp.");
+    const allDups = [];
+    for (const pattern of patterns) {
+      const result = await listFn.call(bridge, pattern);
+      if (result.success && result.data) {
+        allDups.push(...result.data);
+      }
+    }
+    for (const dup of allDups) {
+      const match = dup.match(/\.(\d+)\.json$/);
+      if (!match) continue;
+      const age = currentTime - parseInt(match[1]);
+      if (age <= twentyFourHours) continue;
+      const primary = toPrimary(dup);
+      const primaryExists = await loadFn.call(bridge, primary);
+      if (!primaryExists.success) {
+        await deleteFn.call(bridge, dup);
+      }
+    }
+  }
+  /**
+   * Checks if Solid Pod backup deletion is safe.
+   * 
+   * Re-lists primary files to verify count hasn't dropped below minimum.
+   * This check happens before each deletion to handle concurrent
+   * operations or failed deletes.
+   * 
+   * @returns True if more than 4 backup pairs exist, false otherwise
+   */
+  async canDeleteSolid() {
+    const bridge = MeraBridge.getInstance();
+    const result = await bridge.solidList("mera.*.*.*.sp.*.json");
+    if (!result.success || !result.data) {
+      return false;
+    }
+    return result.data.length > 4;
+  }
+  /**
+   * Checks if localStorage backup deletion is safe.
+   * 
+   * Re-lists both offline and online primary files to verify count hasn't
+   * dropped below minimum. This check happens before each deletion to handle
+   * concurrent operations or failed deletes.
+   * 
+   * @returns True if more than 4 backup pairs exist, false otherwise
+   */
+  async canDeleteLocal() {
+    const bridge = MeraBridge.getInstance();
+    const offlineResult = await bridge.localList("mera.*.*.*.lofp.*.json");
+    const onlineResult = await bridge.localList("mera.*.*.*.lonp.*.json");
+    if (!offlineResult.success || !offlineResult.data || !onlineResult.success || !onlineResult.data) {
+      return false;
+    }
+    const totalPrimaries = offlineResult.data.length + onlineResult.data.length;
+    return totalPrimaries > 4;
+  }
+};
+
+// src/ts/core/core.ts
+async function startCore(bundle, lessonConfigs) {
+  console.log("\u{1F680} Starting Main Application Core...");
+  console.log("  Progress bundle:", {
+    webId: bundle.metadata.webId,
+    lessonsCompleted: Object.keys(bundle.overallProgress.lessonCompletions).length,
+    settings: Object.keys(bundle.settings).length,
+    components: Object.keys(bundle.combinedComponentProgress.components).length
+  });
+  console.log("  Lesson configs:", lessonConfigs.size, "lessons");
+  console.warn("\u26A0\uFE0F  startCore() is a stub - core implementation needed");
+  await new Promise(() => {
+  });
+}
+
 // src/ts/initialization/initializationOrchestrator.ts
 async function initializationOrchestrator() {
   console.log("\u{1F3AF} Starting initialization orchestration...");
   console.log("\u{1F4DA} Phase 0: Loading lesson configurations...");
   const rawLessons = await loadAndParseAllLessons();
-  const lessonConfigs = /* @__PURE__ */ new Map();
-  for (const [id, lesson] of rawLessons.entries()) {
-    const components = lesson.pages.flatMap((page) => page.components);
-    lessonConfigs.set(id, {
-      metadata: lesson.metadata,
-      pages: lesson.pages,
-      components
-    });
-  }
+  const lessonConfigs = new Map(
+    Array.from(rawLessons.entries()).map(([id, lesson]) => {
+      const components = lesson.pages.flatMap((page) => page.components);
+      return [id, {
+        metadata: lesson.metadata,
+        pages: lesson.pages,
+        components
+      }];
+    })
+  );
   console.log(`\u2705 Loaded ${lessonConfigs.size} lesson configurations`);
-  console.log("\u{1F4E6} Phase 1: Loading progress...");
-  const progressResult = await orchestrateProgressLoading(lessonConfigs);
-  if (!progressResult) {
-    console.log("\u{1F464} No valid backups found, initializing as new user");
-    await initializeNewUser(lessonConfigs);
+  console.log("\u{1F50D} Phase 1: Checking session protection file...");
+  const sessionFileExists = await checkSessionFileExists();
+  console.log(`Session file exists: ${sessionFileExists}`);
+  console.log("\u{1F4E6} Phase 2: Loading progress...");
+  const loadResult = await orchestrateProgressLoading(lessonConfigs);
+  if (loadResult === null) {
+    showCriticalError({
+      title: "Authentication Failure",
+      message: "Cannot proceed - user authentication state is invalid. This indicates a critical bootstrap failure.",
+      technicalDetails: "progressLoader returned null despite bootstrap authentication check"
+    });
+    throw new Error("Authentication failure after bootstrap - critical error");
+  }
+  console.log("\u{1F914} Phase 3: Evaluating recovery scenario...");
+  const shouldProceed = await handleRecoveryScenario(loadResult, sessionFileExists);
+  if (!shouldProceed) {
+    await showStopDialog();
     return;
   }
-  if (progressResult.perfectlyValidInput) {
-    console.log("\u2705 Loaded perfect same-version backup");
-  } else {
-    console.log("\u26A0\uFE0F Loaded backup with migration/recovery:", {
-      lessonsLostToCorruption: progressResult.recoveryMetrics.overallProgress.lessonsLostToCorruption,
-      lessonsDroppedRatio: progressResult.recoveryMetrics.overallProgress.lessonsDroppedRatio,
-      componentsDefaulted: progressResult.recoveryMetrics.combinedComponentProgress.componentsDefaulted
-    });
+  console.log("\u2699\uFE0F Phase 4: Starting background services...");
+  SaveManager.getInstance();
+  SaveCleaner.getInstance();
+  console.log("\u2705 Background services started");
+  console.log("\u{1F680} Phase 5: Launching core...");
+  startCore(loadResult.bundle, lessonConfigs).then(
+    () => {
+      console.log("\u2705 Core started successfully");
+    },
+    (error46) => {
+      console.error("\u274C Core initialization failed:", error46);
+      showCriticalError({
+        title: "Core Initialization Failed",
+        message: "The application failed to start.",
+        technicalDetails: error46 instanceof Error ? error46.message : String(error46)
+      });
+    }
+  );
+  console.log("\u2705 Initialization complete - core launching independently");
+}
+async function checkSessionFileExists() {
+  const bridge = MeraBridge.getInstance();
+  const SESSION_FILE_PATH = "mera_concurrent_session_protection.json";
+  try {
+    const result = await bridge.solidLoad(SESSION_FILE_PATH);
+    return result.success;
+  } catch (error46) {
+    return false;
   }
-  console.log("\u{1F680} Phase 2: Launching core...");
-  await launchCore(progressResult.bundle, lessonConfigs);
-  console.log("\u2705 Initialization complete - app running");
 }
-async function launchCore(bundle, lessonConfigs) {
-  console.warn("launchCore() not yet implemented - core launch is TODO");
-  console.log("Core would launch with:", {
-    webId: bundle.metadata.webId,
-    lessonsCompleted: Object.keys(bundle.overallProgress.lessonCompletions).length,
-    componentsCount: Object.keys(bundle.combinedComponentProgress.components).length,
-    lessonConfigsAvailable: lessonConfigs.size
-  });
+async function handleRecoveryScenario(loadResult, sessionFileExists) {
+  const { scenario, recoveryMetrics } = loadResult;
+  if (scenario === "DEFAULT_NO_SAVES" /* DEFAULT_NO_SAVES */ && sessionFileExists) {
+    return await handleCatastrophicLoss();
+  }
+  if (scenario === "DEFAULT_FAILED_RECOVERY" /* DEFAULT_FAILED_RECOVERY */ && sessionFileExists) {
+    return await handleCatastrophicLoss();
+  }
+  if (scenario === "DEFAULT_WEBID_MISMATCH" /* DEFAULT_WEBID_MISMATCH */ && sessionFileExists) {
+    return await handleCatastrophicLoss();
+  }
+  if (scenario === "IMPERFECT_RECOVERY_CORRUPTION" /* IMPERFECT_RECOVERY_CORRUPTION */) {
+    return await handleDegradedRecovery(recoveryMetrics);
+  }
+  if (scenario === "PERFECT_RECOVERY" /* PERFECT_RECOVERY */) {
+    await flashSuccess("Progress loaded \u2713", 1500);
+    return true;
+  }
+  if (scenario === "IMPERFECT_RECOVERY_MIGRATION" /* IMPERFECT_RECOVERY_MIGRATION */) {
+    await flashSuccess("Progress loaded \u2713", 1500);
+    return true;
+  }
+  if (scenario === "DEFAULT_NO_SAVES" /* DEFAULT_NO_SAVES */ && !sessionFileExists) {
+    console.log("New user - proceeding with default progress");
+    return true;
+  }
+  console.warn(`Unhandled recovery scenario: ${scenario}`);
+  return true;
 }
-async function initializeNewUser(lessonConfigs) {
-  console.warn("initializeNewUser() not yet implemented - new user flow is TODO");
-  console.log("Would initialize new user with default progress");
-  console.log("Lesson configs available:", lessonConfigs.size);
+async function handleCatastrophicLoss() {
+  const choice = await showUserMessage(
+    "Data Recovery Failed",
+    "We found evidence you've used Mera before, but couldn't recover any of your progress. This is unusual and may indicate a serious issue.\n\nYou can start fresh with empty progress, or stop Mera to prevent further changes and contact support for manual recovery assistance.",
+    "Start Fresh",
+    "Stop Mera"
+  );
+  return choice === "primary";
+}
+async function handleDegradedRecovery(metrics) {
+  const issues = [];
+  if (metrics.overallProgress.lessonsLostToCorruption > 0) {
+    issues.push(`${metrics.overallProgress.lessonsLostToCorruption} lessons lost to corruption`);
+  }
+  if (metrics.combinedComponentProgress.componentsDefaulted > 0) {
+    issues.push(`${metrics.combinedComponentProgress.componentsDefaulted} components reset to defaults`);
+  }
+  if (metrics.settings.defaultedRatio > 0) {
+    issues.push("Some settings were reset");
+  }
+  const issuesSummary = issues.length > 0 ? issues.join(", ") : "Some data required recovery";
+  const choice = await showUserMessage(
+    "Progress Recovered with Issues",
+    `We recovered your progress but encountered some problems:
+
+${issuesSummary}
+
+You can proceed with this recovered data, or stop Mera to contact support for manual recovery assistance. If you proceed, we'll save your current state as a backup, so manual recovery will still be possible later if needed.`,
+    "Proceed",
+    "Stop Mera"
+  );
+  return choice === "primary";
+}
+async function showStopDialog() {
+  await showUserMessage(
+    "Mera Stopped",
+    "Stopping Mera prevents further changes to your data.\n\nFor manual recovery help, email support@meralearn.org.\n\nNote: If you choose to try recovery later, we'll save your current state as a backup before proceeding, so manual recovery will still be possible.",
+    "Refresh to Restart"
+  );
+  window.location.reload();
 }
 
 // src/ts/initialization/bootstrap.ts

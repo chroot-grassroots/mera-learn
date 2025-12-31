@@ -74,17 +74,46 @@ export type CompletionData = z.infer<typeof CompletionDataSchema>;
  * - lastStreakCheck: When streak was last validated
  * - totalLessonsCompleted: Corruption detection counter (must equal count of non-null timeCompleted)
  * - totalDomainsCompleted: Corruption detection counter (must equal count of non-null timeCompleted)
+ * 
+ * NOTE: No .default() on counters - progressIntegrity.ts handles defaulting explicitly
+ * with proper metrics tracking.
  */
 export const OverallProgressDataSchema = z.object({
   lessonCompletions: z.record(z.string(), CompletionDataSchema),
   domainCompletions: z.record(z.string(), CompletionDataSchema),
   currentStreak: z.number().min(0).max(1000),
   lastStreakCheck: z.number().int().min(0),
-  totalLessonsCompleted: z.number().int().min(0).max(1000).default(0),
-  totalDomainsCompleted: z.number().int().min(0).max(1000).default(0),
+  totalLessonsCompleted: z.number().int().min(0).max(1000),
+  totalDomainsCompleted: z.number().int().min(0).max(1000),
 });
 
 export type OverallProgressData = z.infer<typeof OverallProgressDataSchema>;
+
+// ============================================================================
+// DEFAULT VALUES
+// ============================================================================
+
+/**
+ * Get default overall progress for new users or recovery.
+ * 
+ * Used by:
+ * - progressIntegrity.ts for data recovery
+ * - New user initialization
+ * 
+ * Returns progress with empty completions and zero counters/streak.
+ * 
+ * @returns Complete OverallProgressData with defaults
+ */
+export function getDefaultOverallProgress(): OverallProgressData {
+  return {
+    lessonCompletions: {},
+    domainCompletions: {},
+    currentStreak: 0,
+    lastStreakCheck: 0,
+    totalLessonsCompleted: 0,
+    totalDomainsCompleted: 0,
+  };
+}
 
 // ============================================================================
 // MANAGER
@@ -504,7 +533,6 @@ export class OverallProgressMessageQueueManager {
    * Queue a streak update message.
    *
    * @param newStreak - New streak value
-   * @throws Error if invalid arguments
    */
   queueUpdateStreak(newStreak: number): void {
     const message: OverallProgressMessage = {
@@ -517,9 +545,7 @@ export class OverallProgressMessageQueueManager {
     }
 
     if (typeof newStreak !== "number" || newStreak < 0) {
-      throw new Error(
-        `newStreak must be a non-negative number, got: ${newStreak}`
-      );
+      throw new Error("newStreak must be a non-negative number");
     }
 
     this.messageQueue.push(message);

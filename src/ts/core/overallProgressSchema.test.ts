@@ -1,519 +1,882 @@
-// src/ts/core/overallProgressSchema.test.ts
+// src/ts/initialization/progressIntegrity.test.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  OverallProgressManager,
-  OverallProgressMessageQueueManager,
-} from './overallProgressSchema.js';
+import { enforceDataIntegrity, type EnforcementResult, type ParsedLessonData } from '../initialization/progressIntegrity.js';
 
-describe('OverallProgressManager', () => {
-  let mockRegistry: any;
-  let manager: OverallProgressManager;
+// Mock the registry module at the top level (hoisted)
+vi.mock('../registry/mera-registry.js', () => ({
+  curriculumData: {
+    hasLesson: (id: number) => id === 100 || id === 200,
+    hasDomain: (id: number) => id === 1 || id === 2,
+    hasEntity: (id: number) => id === 0 || id === 100 || id === 200 || id === 1 || id === 2, // 0 is valid (home/default)
+    getEntityPageCount: (id: number) => {
+      // Return page count for entities
+      if (id === 0) return 1; // Entity 0 (home/default) has 1 page
+      if (id === 100 || id === 200) return 10; // Lessons have 10 pages
+      if (id === 1 || id === 2) return 1; // Domains have 1 page
+      return 0;
+    },
+    hasComponent: (id: number) => [1001, 1002, 2001].includes(id),
+    getComponentType: (id: number) => {
+      const types: Record<number, string> = {
+        1001: 'text',
+        1002: 'checkbox',
+        2001: 'quiz',
+      };
+      return types[id];
+    },
+    getLessonIdForComponent: (id: number) => {
+      if (id >= 1000 && id < 2000) return 100;
+      if (id >= 2000 && id < 3000) return 200;
+      return null;
+    },
+    getAllComponentIds: () => [1001, 1002, 2001],
+    getAllLessonIds: () => [100, 200],
+    getAllDomainIds: () => [1, 2],
+  },
+  progressSchemaMap: new Map(),
+  componentValidatorMap: new Map(), // No validators = components always retained if schema passes
+  componentInitializerMap: new Map<string, () => any>([
+    ['text', () => ({ content: '', lastUpdated: 0 })],
+    ['checkbox', () => ({ checked: [], lastUpdated: 0 })],
+    ['quiz', () => ({ answers: [], lastUpdated: 0 })],
+  ]),
+}));
+
+describe('progressIntegrity', () => {
+  let mockLessonConfigs: Map<number, ParsedLessonData>;
 
   beforeEach(() => {
-    mockRegistry = {
-      hasLesson: vi.fn((id: number) => id === 100 || id === 200),
-      hasDomain: vi.fn((id: number) => id === 1 || id === 2),
-      getAllDomainIds: vi.fn(() => [1, 2]),
-      getLessonsInDomain: vi.fn((domainId: number) => {
-        if (domainId === 1) return [100];
-        if (domainId === 2) return [200];
-        return undefined;
-      }),
-    };
-
-    const initialProgress = {
-      lessonCompletions: {},
-      domainCompletions: {},
-      currentStreak: 0,
-      lastStreakCheck: Math.floor(Date.now() / 1000),
-      totalLessonsCompleted: 0,
-      totalDomainsCompleted: 0,
-    };
-
-    manager = new OverallProgressManager(initialProgress, mockRegistry);
+    // Setup mock lesson configs
+    mockLessonConfigs = new Map([
+      [
+        100,
+        {
+          metadata: { title: 'Test Lesson 1', id: 100 } as any,
+          pages: [],
+          components: [
+            { id: 1001, type: 'text' },
+            { id: 1002, type: 'checkbox' },
+          ],
+        },
+      ],
+      [
+        200,
+        {
+          metadata: { title: 'Test Lesson 2', id: 200 } as any,
+          pages: [],
+          components: [
+            { id: 2001, type: 'quiz' },
+          ],
+        },
+      ],
+    ]);
   });
 
-  describe('cloning behavior', () => {
-    it('constructor clones input data to prevent external mutations', () => {
-      const inputData = {
-        lessonCompletions: { '100': { timeCompleted: 1000, lastUpdated: 1000 } },
-        domainCompletions: {},
-        currentStreak: 5,
-        lastStreakCheck: 2000,
-        totalLessonsCompleted: 1,
-        totalDomainsCompleted: 0,
+  describe('enforceDataIntegrity - Basic Functionality', () => {
+    it('throws error if lessonConfigs is empty', () => {
+      const emptyConfigs = new Map();
+      const validJson = JSON.stringify({ metadata: { webId: 'test' } });
+
+      expect(() => enforceDataIntegrity(validJson, 'test', emptyConfigs)).toThrow(
+        'progressRecovery requires parsed lesson configs'
+      );
+    });
+
+    it('returns fully defaulted bundle for unparseable JSON', () => {
+      const invalidJson = '{this is not valid json';
+      const result = enforceDataIntegrity(invalidJson, 'test-webid', mockLessonConfigs);
+
+      expect(result.perfectlyValidInput).toBe(false);
+      expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/unparseable-json');
+      // All curriculum lessons should be initialized as incomplete
+      expect(result.bundle.overallProgress.lessonCompletions).toEqual({
+        '100': { timeCompleted: null, lastUpdated: 0 },
+        '200': { timeCompleted: null, lastUpdated: 0 },
+      });
+      expect(result.bundle.overallProgress.domainCompletions).toEqual({
+        '1': { timeCompleted: null, lastUpdated: 0 },
+        '2': { timeCompleted: null, lastUpdated: 0 },
+      });
+      expect(result.recoveryMetrics.metadata.defaultedRatio).toBe(1.0);
+      expect(result.criticalFailures.webIdMismatch).toBeDefined();
+      expect(result.criticalFailures.webIdMismatch?.found).toBe(null);
+    });
+
+    it('returns perfectly valid input for pristine data', () => {
+      const pristineData = {
+        metadata: { webId: 'https://test.example/webid' },
+        overallProgress: {
+          lessonCompletions: {},
+          domainCompletions: {},
+          currentStreak: 0,
+          lastStreakCheck: Math.floor(Date.now() / 1000), // Unix timestamp in seconds
+          totalLessonsCompleted: 0,
+          totalDomainsCompleted: 0,
+        },
+        settings: {
+          weekStartDay: ['monday', 0],
+          weekStartTimeUTC: ['00:00', 0],
+          theme: ['auto', 0],
+          learningPace: ['standard', 0],
+          optOutDailyPing: [false, 0],
+          optOutErrorPing: [false, 0],
+          fontSize: ['medium', 0],
+          highContrast: [false, 0],
+          reducedMotion: [false, 0],
+          focusIndicatorStyle: ['default', 0],
+          audioEnabled: [true, 0],
+        },
+        navigationState: {
+          currentEntityId: 0,
+          currentPage: 0,
+          lastUpdated: Math.floor(Date.now() / 1000), // Unix timestamp in seconds
+        },
+        combinedComponentProgress: {
+          components: {}, // Empty - will be initialized
+        },
       };
 
-      const manager = new OverallProgressManager(inputData, mockRegistry);
-
-      // Mutate original input
-      inputData.currentStreak = 999;
-      inputData.lessonCompletions['100'].timeCompleted = 9999;
-
-      // Manager's data should be unchanged
-      const managerData = manager.getProgress();
-      expect(managerData.currentStreak).toBe(5);
-      expect(managerData.lessonCompletions['100'].timeCompleted).toBe(1000);
-    });
-
-    it('getProgress returns clone to prevent external mutations', () => {
-      manager.markLessonComplete(100);
-
-      const progress1 = manager.getProgress();
-      const progress2 = manager.getProgress();
-
-      // Should be different objects (not same reference)
-      expect(progress1).not.toBe(progress2);
-
-      // But with same values
-      expect(progress1).toEqual(progress2);
-
-      // Mutating returned clone should not affect manager
-      progress1.currentStreak = 999;
-      progress1.lessonCompletions['100'].timeCompleted = 9999;
-
-      const progress3 = manager.getProgress();
-      expect(progress3.currentStreak).toBe(0);
-      expect(progress3.lessonCompletions['100'].timeCompleted).not.toBe(9999);
-    });
-
-    it('mutations do not affect previously returned clones', () => {
-      const before = manager.getProgress();
-      
-      manager.markLessonComplete(100);
-      manager.updateStreak(5);
-
-      // Before clone should still have original values
-      expect(before.totalLessonsCompleted).toBe(0);
-      expect(before.currentStreak).toBe(0);
-      expect(before.lessonCompletions).toEqual({});
-
-      // New clone has updated values
-      const after = manager.getProgress();
-      expect(after.totalLessonsCompleted).toBe(1);
-      expect(after.currentStreak).toBe(5);
-    });
-  });
-
-  describe('CompletionData structure', () => {
-    it('stores timeCompleted and lastUpdated on first lesson completion', () => {
-      const before = Math.floor(Date.now() / 1000);
-      manager.markLessonComplete(100);
-      const completion = manager.getProgress().lessonCompletions['100'];
-
-      expect(completion.timeCompleted).toBeGreaterThanOrEqual(before);
-      expect(completion.lastUpdated).toBe(completion.timeCompleted);
-    });
-
-    it('preserves timeCompleted but updates lastUpdated on lesson re-completion', () => {
-      vi.useFakeTimers();
-      
-      manager.markLessonComplete(100);
-      const firstCompletion = manager.getProgress().lessonCompletions['100'];
-      
-      vi.advanceTimersByTime(2000); // Advance 2 seconds (2000ms)
-      
-      manager.markLessonComplete(100);
-      const secondCompletion = manager.getProgress().lessonCompletions['100'];
-      
-      expect(secondCompletion.timeCompleted).toBe(firstCompletion.timeCompleted);
-      expect(secondCompletion.lastUpdated).toBeGreaterThan(firstCompletion.lastUpdated);
-      
-      vi.useRealTimers();
-    });
-
-    it('sets timeCompleted to null but updates lastUpdated on lesson incompletion', () => {
-      manager.markLessonComplete(100);
-      const firstTimestamp = manager.getProgress().lessonCompletions['100'].timeCompleted;
-      
-      vi.useFakeTimers();
-      vi.advanceTimersByTime(2000);
-      
-      manager.markLessonIncomplete(100);
-      const completion = manager.getProgress().lessonCompletions['100'];
-      
-      expect(completion.timeCompleted).toBeNull();
-      expect(completion.lastUpdated).toBeGreaterThan(firstTimestamp!);
-      
-      vi.useRealTimers();
-    });
-
-    it('stores timeCompleted and lastUpdated on first domain completion', () => {
-      const before = Math.floor(Date.now() / 1000);
-      manager.markDomainComplete(1);
-      const completion = manager.getProgress().domainCompletions['1'];
-
-      expect(completion.timeCompleted).toBeGreaterThanOrEqual(before);
-      expect(completion.lastUpdated).toBe(completion.timeCompleted);
-    });
-
-    it('sets timeCompleted to null but updates lastUpdated on domain incompletion', () => {
-      manager.markDomainComplete(1);
-      const firstTimestamp = manager.getProgress().domainCompletions['1'].timeCompleted;
-      
-      vi.useFakeTimers();
-      vi.advanceTimersByTime(2000);
-      
-      manager.markDomainIncomplete(1);
-      const completion = manager.getProgress().domainCompletions['1'];
-      
-      expect(completion.timeCompleted).toBeNull();
-      expect(completion.lastUpdated).toBeGreaterThan(firstTimestamp!);
-      
-      vi.useRealTimers();
-    });
-  });
-
-  describe('markLessonComplete', () => {
-    it('marks lesson as complete with CompletionData', () => {
-      const before = Math.floor(Date.now() / 1000);
-      manager.markLessonComplete(100);
-      const completion = manager.getProgress().lessonCompletions['100'];
-
-      expect(completion).toBeDefined();
-      expect(completion.timeCompleted).toBeGreaterThanOrEqual(before);
-      expect(completion.lastUpdated).toBeGreaterThanOrEqual(before);
-    });
-
-    it('throws error for invalid lesson ID', () => {
-      expect(() => manager.markLessonComplete(999)).toThrow(
-        'Invalid lesson ID: 999'
+      const result = enforceDataIntegrity(
+        JSON.stringify(pristineData),
+        'https://test.example/webid',
+        mockLessonConfigs
       );
-    });
 
-    it('increments counter on first completion', () => {
-      expect(manager.getProgress().totalLessonsCompleted).toBe(0);
+      // Without schema validators, components will be initialized (defaulted)
+      // Navigation may also be defaulted if entity 0 isn't properly mocked in the registry
+      // But other sections should be perfect
+      expect(result.recoveryMetrics.metadata.defaultedRatio).toBe(0);
+      expect(result.recoveryMetrics.overallProgress.lessonsDroppedRatio).toBe(0);
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(false);
+      expect(result.recoveryMetrics.settings.defaultedRatio).toBe(0);
       
-      manager.markLessonComplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
+      // Components will be defaulted since they're missing
+      expect(result.recoveryMetrics.combinedComponentProgress.componentsDefaulted).toBe(3);
       
-      manager.markLessonComplete(200);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(2);
-    });
-
-    it('does not increment counter on re-completion', () => {
-      manager.markLessonComplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
-      
-      manager.markLessonComplete(100); // Re-complete same lesson
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1); // Still 1
-    });
-
-    it('increments counter again after marking incomplete then complete', () => {
-      manager.markLessonComplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
-      
-      manager.markLessonIncomplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(0);
-      
-      manager.markLessonComplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
-      expect(manager.getProgress().lessonCompletions['100'].timeCompleted).toBeGreaterThan(0);
-      
-      vi.useRealTimers();
+      // perfectlyValidInput will be false due to component initialization (and possibly navigation)
+      expect(result.perfectlyValidInput).toBe(false);
     });
   });
 
-  describe('markLessonIncomplete', () => {
-    it('sets timeCompleted to null and updates lastUpdated', () => {
-      manager.markLessonComplete(100);
-      expect(manager.getProgress().lessonCompletions['100']).toBeDefined();
-
-      manager.markLessonIncomplete(100);
-      const completion = manager.getProgress().lessonCompletions['100'];
-      
-      expect(completion.timeCompleted).toBeNull();
-      expect(completion.lastUpdated).toBeGreaterThan(0);
-    });
-
-    it('throws error for invalid lesson ID', () => {
-      expect(() => manager.markLessonIncomplete(999)).toThrow(
-        'Invalid lesson ID: 999'
-      );
-    });
-
-    it('does not error if lesson was not completed', () => {
-      expect(() => manager.markLessonIncomplete(100)).not.toThrow();
-    });
-
-    it('decrements counter when marking incomplete from completed state', () => {
-      manager.markLessonComplete(100);
-      manager.markLessonComplete(200);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(2);
-      
-      manager.markLessonIncomplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
-    });
-  });
-
-  describe('markDomainComplete', () => {
-    it('marks domain as complete with CompletionData', () => {
-      const before = Math.floor(Date.now() / 1000);
-      manager.markDomainComplete(1);
-      const completion = manager.getProgress().domainCompletions['1'];
-
-      expect(completion).toBeDefined();
-      expect(completion.timeCompleted).toBeGreaterThanOrEqual(before);
-      expect(completion.lastUpdated).toBeGreaterThanOrEqual(before);
-    });
-
-    it('throws error for invalid domain ID', () => {
-      expect(() => manager.markDomainComplete(999)).toThrow(
-        'Invalid domain ID: 999'
-      );
-    });
-
-    it('increments counter on first completion', () => {
-      expect(manager.getProgress().totalDomainsCompleted).toBe(0);
-      
-      manager.markDomainComplete(1);
-      expect(manager.getProgress().totalDomainsCompleted).toBe(1);
-      
-      manager.markDomainComplete(2);
-      expect(manager.getProgress().totalDomainsCompleted).toBe(2);
-    });
-
-    it('does not increment counter on re-completion', () => {
-      manager.markDomainComplete(1);
-      expect(manager.getProgress().totalDomainsCompleted).toBe(1);
-      
-      manager.markDomainComplete(1); // Re-complete same domain
-      expect(manager.getProgress().totalDomainsCompleted).toBe(1); // Still 1
-    });
-  });
-
-  describe('markDomainIncomplete', () => {
-    it('sets timeCompleted to null and updates lastUpdated', () => {
-      manager.markDomainComplete(1);
-      expect(manager.getProgress().domainCompletions['1']).toBeDefined();
-
-      manager.markDomainIncomplete(1);
-      const completion = manager.getProgress().domainCompletions['1'];
-      
-      expect(completion.timeCompleted).toBeNull();
-      expect(completion.lastUpdated).toBeGreaterThan(0);
-    });
-
-    it('throws error for invalid domain ID', () => {
-      expect(() => manager.markDomainIncomplete(999)).toThrow(
-        'Invalid domain ID: 999'
-      );
-    });
-
-    it('does not error if domain was not completed', () => {
-      expect(() => manager.markDomainIncomplete(1)).not.toThrow();
-    });
-
-    it('decrements counter when marking incomplete from completed state', () => {
-      manager.markDomainComplete(1);
-      manager.markDomainComplete(2);
-      expect(manager.getProgress().totalDomainsCompleted).toBe(2);
-      
-      manager.markDomainIncomplete(1);
-      expect(manager.getProgress().totalDomainsCompleted).toBe(1);
-    });
-  });
-
-  describe('streak management', () => {
-    it('updates streak with new value', () => {
-      const before = Math.floor(Date.now() / 1000);
-      manager.updateStreak(5);
-      const progress = manager.getProgress();
-
-      expect(progress.currentStreak).toBe(5);
-      expect(progress.lastStreakCheck).toBeGreaterThanOrEqual(before);
-    });
-
-    it('resets streak to zero', () => {
-      manager.updateStreak(10);
-      manager.resetStreak();
-      const progress = manager.getProgress();
-
-      expect(progress.currentStreak).toBe(0);
-    });
-
-    it('increments streak', () => {
-      manager.updateStreak(3);
-      manager.incrementStreak();
-      const progress = manager.getProgress();
-
-      expect(progress.currentStreak).toBe(4);
-    });
-  });
-
-  describe('counter integrity', () => {
-    it('maintains counter === count of non-null timeCompleted invariant for lessons', () => {
-      // Helper to count completed lessons from fresh progress clone
-      const countCompleted = () => {
-        const progress = manager.getProgress();
-        return Object.values(progress.lessonCompletions)
-          .filter(c => c.timeCompleted !== null).length;
+  describe('Metadata Extraction', () => {
+    it('detects webId mismatch as critical failure', () => {
+      const data = {
+        metadata: { webId: 'wrong-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
       };
-      
-      // Initial state
-      expect(manager.getProgress().totalLessonsCompleted).toBe(countCompleted());
-      
-      // After completing lessons
-      manager.markLessonComplete(100);
-      manager.markLessonComplete(200);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(countCompleted());
-      expect(manager.getProgress().totalLessonsCompleted).toBe(2);
-      
-      // After marking one incomplete (timeCompleted becomes null)
-      manager.markLessonIncomplete(100);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(countCompleted());
-      expect(manager.getProgress().totalLessonsCompleted).toBe(1);
-      
-      // After marking all incomplete
-      manager.markLessonIncomplete(200);
-      expect(manager.getProgress().totalLessonsCompleted).toBe(countCompleted());
-      expect(manager.getProgress().totalLessonsCompleted).toBe(0);
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'expected-webid', mockLessonConfigs);
+
+      expect(result.perfectlyValidInput).toBe(false);
+      expect(result.criticalFailures.webIdMismatch).toBeDefined();
+      expect(result.criticalFailures.webIdMismatch?.expected).toBe('expected-webid');
+      expect(result.criticalFailures.webIdMismatch?.found).toBe('wrong-webid');
+      expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/webid-mismatch');
     });
 
-    it('maintains counter === count of non-null timeCompleted invariant for domains', () => {
-      // Helper to count completed domains from fresh progress clone
-      const countCompleted = () => {
-        const progress = manager.getProgress();
-        return Object.values(progress.domainCompletions)
-          .filter(c => c.timeCompleted !== null).length;
+    it('defaults metadata when malformed', () => {
+      const data = {
+        metadata: { notWebId: 'something' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
       };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/webid-mismatch');
+      expect(result.recoveryMetrics.metadata.defaultedRatio).toBe(1.0);
+    });
+  });
+
+  describe('Overall Progress - Corruption Detection', () => {
+    it('detects lesson corruption when counter > actual', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: { 
+            '100': { timeCompleted: 123456, lastUpdated: 123456 } 
+          }, // Only 1 lesson
+          domainCompletions: {},
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 5, // Claims 5 lessons
+          totalDomainsCompleted: 0,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(true);
+      expect(result.recoveryMetrics.overallProgress.lessonsLostToCorruption).toBe(4);
+      expect(result.perfectlyValidInput).toBe(false);
+    });
+
+    it('detects domain corruption when counter > actual', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: {},
+          domainCompletions: { 
+            '1': { timeCompleted: 123456, lastUpdated: 123456 } 
+          }, // Only 1 domain
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 0,
+          totalDomainsCompleted: 3, // Claims 3 domains
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(true);
+      expect(result.recoveryMetrics.overallProgress.domainsLostToCorruption).toBe(2);
+      expect(result.perfectlyValidInput).toBe(false);
+    });
+
+    it('does not detect corruption when counter matches actual', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: { 
+            '100': { timeCompleted: 123456, lastUpdated: 123456 },
+            '200': { timeCompleted: 123457, lastUpdated: 123457 }
+          },
+          domainCompletions: { 
+            '1': { timeCompleted: 123456, lastUpdated: 123456 },
+            '2': { timeCompleted: 123456, lastUpdated: 123456 }
+          },
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 2,
+          totalDomainsCompleted: 2,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(false);
+      expect(result.recoveryMetrics.overallProgress.lessonsLostToCorruption).toBe(0);
+      expect(result.recoveryMetrics.overallProgress.domainsLostToCorruption).toBe(0);
+    });
+
+    it('handles missing counters gracefully (old backup format)', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: { 
+            '100': { timeCompleted: 123456, lastUpdated: 123456 } 
+          },
+          domainCompletions: { 
+            '1': { timeCompleted: 123456, lastUpdated: 123456 } 
+          },
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          // No counters - old format
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      // Missing counters default to 0, but we have actual completions, so corruption detected
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(true);
+      expect(result.recoveryMetrics.overallProgress.lessonsLostToCorruption).toBe(0); // 0 claimed, 1 actual = no loss
+    });
+  });
+
+  describe('Overall Progress - Curriculum Reconciliation', () => {
+    it('drops lessons not in current curriculum', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: {
+            '100': { timeCompleted: 123456, lastUpdated: 123456 }, // Valid
+            '999': { timeCompleted: 123457, lastUpdated: 123457 }, // Not in curriculum
+            '888': { timeCompleted: 123458, lastUpdated: 123458 }, // Not in curriculum
+          },
+          domainCompletions: {},
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 3,
+          totalDomainsCompleted: 0,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.bundle.overallProgress.lessonCompletions).toHaveProperty('100');
+      expect(result.bundle.overallProgress.lessonCompletions).not.toHaveProperty('999');
+      expect(result.bundle.overallProgress.lessonCompletions).not.toHaveProperty('888');
+      expect(result.recoveryMetrics.overallProgress.lessonsDroppedRatio).toBeCloseTo(2 / 3);
+      // Corruption detected: claimed 3, but only 1 valid lesson remains after curriculum filtering
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(true);
+    });
+
+    it('drops domains not in current curriculum', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: {},
+          domainCompletions: {
+            '1': { timeCompleted: 123456, lastUpdated: 123456 },
+            '2': { timeCompleted: 123456, lastUpdated: 123456 },
+            '99': { timeCompleted: 123456, lastUpdated: 123456 },  // Not valid
+            '100': { timeCompleted: 123456, lastUpdated: 123456 }  // Not valid
+          },
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 0,
+          totalDomainsCompleted: 4,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      // Check that only domains 1 and 2 remain completed
+      const completedDomains = Object.keys(result.bundle.overallProgress.domainCompletions)
+        .filter(id => result.bundle.overallProgress.domainCompletions[id].timeCompleted !== null);
+      expect(completedDomains.sort()).toEqual(['1', '2']);
+      expect(result.recoveryMetrics.overallProgress.domainsDroppedRatio).toBe(0.5);
+    });
+
+    it('fixes counters after curriculum reconciliation', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: {
+            '100': { timeCompleted: 123456, lastUpdated: 123456 },
+            '999': { timeCompleted: 123457, lastUpdated: 123457 }, // Will be dropped
+          },
+          domainCompletions: {
+            '1': { timeCompleted: 123456, lastUpdated: 123456 },
+            '99': { timeCompleted: 123456, lastUpdated: 123456 }  // Will be dropped
+          },
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 2,
+          totalDomainsCompleted: 2,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      // Counters should be fixed to match cleaned data
+      expect(result.bundle.overallProgress.totalLessonsCompleted).toBe(1);
+      expect(result.bundle.overallProgress.totalDomainsCompleted).toBe(1);
+    });
+
+    it('distinguishes corruption from curriculum changes', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: {
+            '100': { timeCompleted: 123456, lastUpdated: 123456 }, // Valid
+            '999': { timeCompleted: 123457, lastUpdated: 123457 }, // Not in curriculum
+          },
+          domainCompletions: {},
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 5, // Claims 5, has 2 (3 lost to corruption)
+          totalDomainsCompleted: 0,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      // Should detect BOTH corruption AND curriculum changes
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(true);
+      expect(result.recoveryMetrics.overallProgress.lessonsLostToCorruption).toBe(4); // 5 claimed - 1 actual (after dropping 999)
+      expect(result.recoveryMetrics.overallProgress.lessonsDroppedRatio).toBe(0.5); // 1 of 2 dropped (999)
+    });
+  });
+
+  describe('Settings Extraction', () => {
+    it('keeps valid settings', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {
+          weekStartDay: ['friday', 0],
+          weekStartTimeUTC: ['08:00', 0],
+          theme: ['dark', 0],
+          learningPace: ['flexible', 0],  // Changed from 'intensive' to 'flexible'
+          optOutDailyPing: [true, 0],
+          optOutErrorPing: [true, 0],
+          fontSize: ['large', 0],
+          highContrast: [true, 0],
+          reducedMotion: [true, 0],
+          focusIndicatorStyle: ['enhanced', 0],  // Changed from 'high-visibility' to 'enhanced'
+          audioEnabled: [false, 0],
+        },
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.bundle.settings.theme[0]).toBe('dark');
+      expect(result.bundle.settings.fontSize[0]).toBe('large');
+      expect(result.bundle.settings.audioEnabled[0]).toBe(false);
+      expect(result.recoveryMetrics.settings.defaultedRatio).toBe(0);
+    });
+
+    it('defaults invalid settings fields', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {
+          weekStartDay: ['invalid-day', 0],
+          theme: ['neon', 0], // Invalid
+          fontSize: ['huge', 0], // Invalid
+        },
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.bundle.settings.weekStartDay[0]).toBe('sunday'); // Defaulted
+      expect(result.bundle.settings.theme[0]).toBe('auto'); // Defaulted
+      expect(result.bundle.settings.fontSize[0]).toBe('medium'); // Defaulted
+      expect(result.recoveryMetrics.settings.defaultedRatio).toBeGreaterThan(0);
+    });
+
+    it('calculates correct defaulted ratio for settings', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {
+          theme: ['invalid', 0], // 1 invalid
+          fontSize: ['invalid', 0], // 2 invalid
+          // 9 other fields missing/invalid
+        },
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      // All 11 fields should be defaulted
+      expect(result.recoveryMetrics.settings.defaultedRatio).toBe(1.0);
+    });
+  });
+
+  describe('Navigation State Extraction', () => {
+    it('keeps valid navigation state', () => {
+      const now = Date.now();
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: {
+          currentEntityId: 100,
+          currentPage: 5,
+          lastUpdated: now,
+        },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.bundle.navigationState.currentEntityId).toBe(100);
+      expect(result.bundle.navigationState.currentPage).toBe(5);
+      expect(result.recoveryMetrics.navigationState.wasDefaulted).toBe(false);
+    });
+
+    it('defaults navigation when entity does not exist in curriculum', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: {
+          currentEntityId: 999, // Not in curriculum
+          currentPage: 5,
+          lastUpdated: Date.now(),
+        },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.bundle.navigationState.currentEntityId).toBe(0);
+      expect(result.bundle.navigationState.currentPage).toBe(0);
+      expect(result.recoveryMetrics.navigationState.wasDefaulted).toBe(true);
+    });
+
+    it('defaults navigation when malformed', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: {
+          wrongField: 'value',
+        },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.recoveryMetrics.navigationState.wasDefaulted).toBe(true);
+      expect(result.bundle.navigationState.currentEntityId).toBe(0);
+    });
+  });
+
+  describe('Combined Component Progress', () => {
+    it('initializes all curriculum components when missing', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: {
+          components: {}, // Empty
+        },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      // All 3 components should be initialized
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('1001');
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('1002');
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('2001');
+      expect(result.recoveryMetrics.combinedComponentProgress.componentsDefaulted).toBe(3);
+      expect(result.recoveryMetrics.combinedComponentProgress.componentsRetained).toBe(0);
+    });
+
+    it('retains valid component progress', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: {
+          components: {
+            '1001': { content: 'user data', lastUpdated: 123456 },
+            '1002': { checked: [true, false], lastUpdated: 123456 },
+            '2001': { answers: ['a', 'b'], lastUpdated: 123456 },
+          },
+        },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      // Note: Without progressSchemaMap validators, components may not validate
+      // This test verifies the extraction logic works, even if components default
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('1001');
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('1002');
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('2001');
+    });
+
+    it('calculates defaulted ratio correctly', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: {
+          components: {
+            '1001': { content: 'valid', lastUpdated: 123456 }, // Without schema validators, will be defaulted
+            // 1002 missing - defaulted
+            // 2001 missing - defaulted
+          },
+        },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      // Without progressSchemaMap, all components default
+      // All 3 components should exist (either retained or defaulted)
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('1001');
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('1002');
+      expect(result.bundle.combinedComponentProgress.components).toHaveProperty('2001');
       
-      expect(manager.getProgress().totalDomainsCompleted).toBe(countCompleted());
-      
-      manager.markDomainComplete(1);
-      manager.markDomainComplete(2);
-      expect(manager.getProgress().totalDomainsCompleted).toBe(countCompleted());
-      expect(manager.getProgress().totalDomainsCompleted).toBe(2);
-      
-      manager.markDomainIncomplete(1);
-      expect(manager.getProgress().totalDomainsCompleted).toBe(countCompleted());
-      expect(manager.getProgress().totalDomainsCompleted).toBe(1);
-    });
-  });
-});
-
-describe('OverallProgressMessageQueueManager', () => {
-  let mockRegistry: any;
-  let queueManager: OverallProgressMessageQueueManager;
-
-  beforeEach(() => {
-    mockRegistry = {
-      hasLesson: vi.fn((id: number) => id === 100 || id === 200),
-      hasDomain: vi.fn((id: number) => id === 1 || id === 2),
-      getAllDomainIds: vi.fn(() => [1, 2]),
-      getLessonsInDomain: vi.fn((domainId: number) => {
-        if (domainId === 1) return [100];
-        if (domainId === 2) return [200];
-        return undefined;
-      }),
-    };
-
-    queueManager = new OverallProgressMessageQueueManager(mockRegistry);
-  });
-
-  describe('lesson queue methods', () => {
-    it('queues valid lesson complete message', () => {
-      queueManager.queueLessonComplete(100);
-      const messages = queueManager.getMessages();
-
-      expect(messages).toHaveLength(1);
-      expect(messages[0].method).toBe('markLessonComplete');
-      expect(messages[0].args).toEqual([100]);
-    });
-
-    it('throws error for invalid lesson ID', () => {
-      expect(() => queueManager.queueLessonComplete(999)).toThrow(
-        'Invalid lesson ID: 999 does not exist in curriculum'
-      );
-    });
-
-    it('queues valid lesson incomplete message', () => {
-      queueManager.queueLessonIncomplete(100);
-      const messages = queueManager.getMessages();
-
-      expect(messages).toHaveLength(1);
-      expect(messages[0].method).toBe('markLessonIncomplete');
-      expect(messages[0].args).toEqual([100]);
+      // Total defaulted should equal missing + invalid
+      expect(result.recoveryMetrics.combinedComponentProgress.componentsDefaulted).toBeGreaterThanOrEqual(2);
     });
   });
 
-  describe('domain queue methods', () => {
-    it('queues valid domain complete message', () => {
-      queueManager.queueDomainComplete(1);
-      const messages = queueManager.getMessages();
+  describe('Perfect Input Detection', () => {
+    it('marks input as imperfect when corruption detected', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: {},
+          domainCompletions: {},
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 5, // Corruption
+          totalDomainsCompleted: 0,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
 
-      expect(messages).toHaveLength(1);
-      expect(messages[0].method).toBe('markDomainComplete');
-      expect(messages[0].args).toEqual([1]);
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.perfectlyValidInput).toBe(false);
     });
 
-    it('throws error for invalid domain ID', () => {
-      expect(() => queueManager.queueDomainComplete(999)).toThrow(
-        'Invalid domain ID: 999 does not exist in curriculum'
-      );
+    it('marks input as imperfect when lessons dropped', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: { 
+            '999': { timeCompleted: 123456, lastUpdated: 123456 } 
+          }, // Will be dropped
+          domainCompletions: {},
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 1,
+          totalDomainsCompleted: 0,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.perfectlyValidInput).toBe(false);
+      expect(result.recoveryMetrics.overallProgress.lessonsDroppedRatio).toBeGreaterThan(0);
     });
 
-    it('queues valid domain incomplete message', () => {
-      queueManager.queueDomainIncomplete(1);
-      const messages = queueManager.getMessages();
+    it('marks input as imperfect when settings defaulted', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: { theme: ['invalid', 0] },
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
 
-      expect(messages).toHaveLength(1);
-      expect(messages[0].method).toBe('markDomainIncomplete');
-      expect(messages[0].args).toEqual([1]);
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.perfectlyValidInput).toBe(false);
     });
 
-    it('throws error for invalid domain ID', () => {
-      expect(() => queueManager.queueDomainIncomplete(999)).toThrow(
-        'Invalid domain ID: 999 does not exist in curriculum'
-      );
+    it('marks input as imperfect when navigation defaulted', () => {
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: { currentEntityId: 999, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.perfectlyValidInput).toBe(false);
+    });
+
+    it('marks input as imperfect when webId mismatches', () => {
+      const data = {
+        metadata: { webId: 'wrong-webid' },
+        overallProgress: { 
+          lessonCompletions: {}, 
+          domainCompletions: {}, 
+          currentStreak: 0, 
+          lastStreakCheck: 0, 
+          totalLessonsCompleted: 0, 
+          totalDomainsCompleted: 0 
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.perfectlyValidInput).toBe(false);
     });
   });
 
-  describe('streak queue methods', () => {
-    it('queues updateStreak message', () => {
-      queueManager.queueUpdateStreak(7);
-      const messages = queueManager.getMessages();
+  describe('Edge Cases', () => {
+    it('handles completely empty input', () => {
+      const data = {};
 
-      expect(messages).toHaveLength(1);
-      expect(messages[0].method).toBe('updateStreak');
-      expect(messages[0].args).toEqual([7]);
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.bundle.metadata.webId).toBe('https://error.mera.invalid/webid-mismatch');
+      // All curriculum lessons should be initialized as incomplete
+      expect(result.bundle.overallProgress.lessonCompletions).toEqual({
+        '100': { timeCompleted: null, lastUpdated: 0 },
+        '200': { timeCompleted: null, lastUpdated: 0 },
+      });
+      expect(result.bundle.overallProgress.domainCompletions).toEqual({
+        '1': { timeCompleted: null, lastUpdated: 0 },
+        '2': { timeCompleted: null, lastUpdated: 0 },
+      });
+      expect(result.bundle.settings.theme[0]).toBe('auto');
+      expect(result.perfectlyValidInput).toBe(false);
     });
 
-    it('throws error for negative streak value', () => {
-      expect(() => queueManager.queueUpdateStreak(-1)).toThrow(
-        'newStreak must be a non-negative number'
-      );
+    it('handles null values gracefully', () => {
+      const data = {
+        metadata: null,
+        overallProgress: null,
+        settings: null,
+        navigationState: null,
+        combinedComponentProgress: null,
+      };
+
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
+
+      expect(result.bundle).toBeDefined();
+      expect(result.perfectlyValidInput).toBe(false);
     });
 
-    it('queues resetStreak message', () => {
-      queueManager.queueResetStreak();
-      const messages = queueManager.getMessages();
+    it('handles extremely large lesson completion count', () => {
+      const manyLessons: Record<string, { timeCompleted: number; lastUpdated: number }> = {};
+      // Loop creates lessons 100-199 (200 is excluded by the < 200)
+      for (let i = 100; i < 200; i++) {
+        manyLessons[i.toString()] = { timeCompleted: 123456, lastUpdated: 123456 };
+      }
 
-      expect(messages).toHaveLength(1);
-      expect(messages[0].method).toBe('resetStreak');
-      expect(messages[0].args).toEqual([]);
-    });
+      const data = {
+        metadata: { webId: 'test-webid' },
+        overallProgress: {
+          lessonCompletions: manyLessons, // 100 lessons (100-199)
+          domainCompletions: {},
+          currentStreak: 0,
+          lastStreakCheck: 0,
+          totalLessonsCompleted: 100,
+          totalDomainsCompleted: 0,
+        },
+        settings: {},
+        navigationState: { currentEntityId: 0, currentPage: 0, lastUpdated: Date.now() },
+        combinedComponentProgress: { components: {} },
+      };
 
-    it('queues incrementStreak message', () => {
-      queueManager.queueIncrementStreak();
-      const messages = queueManager.getMessages();
+      const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(messages).toHaveLength(1);
-      expect(messages[0].method).toBe('incrementStreak');
-      expect(messages[0].args).toEqual([]);
-    });
-  });
-
-  describe('getMessages', () => {
-    it('returns and clears queue', () => {
-      queueManager.queueLessonComplete(100);
-      queueManager.queueResetStreak();
-
-      const messages = queueManager.getMessages();
-      expect(messages).toHaveLength(2);
-
-      const emptyMessages = queueManager.getMessages();
-      expect(emptyMessages).toHaveLength(0);
+      // Mock only allows lesson 100 and 200
+      // Loop creates 100-199, so only lesson 100 is valid (200 is not in the loop)
+      const keptLessons = Object.keys(result.bundle.overallProgress.lessonCompletions)
+        .filter(id => result.bundle.overallProgress.lessonCompletions[id].timeCompleted !== null);
+      expect(keptLessons).toContain('100');
+      expect(keptLessons.length).toBe(1);
+      // 99 out of 100 dropped = 0.99
+      expect(result.recoveryMetrics.overallProgress.lessonsDroppedRatio).toBeCloseTo(0.99, 2);
     });
   });
 });

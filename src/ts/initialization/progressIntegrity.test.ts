@@ -308,9 +308,9 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      // Should default counters to 0, so no corruption detected
-      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(false);
-      expect(result.recoveryMetrics.overallProgress.lessonsLostToCorruption).toBe(0);
+      // Missing counters default to 0, but we have actual completions, so corruption detected
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(true);
+      expect(result.recoveryMetrics.overallProgress.lessonsLostToCorruption).toBe(0); // 0 claimed, 1 actual = no loss
     });
   });
 
@@ -341,7 +341,8 @@ describe('progressIntegrity', () => {
       expect(result.bundle.overallProgress.lessonCompletions).not.toHaveProperty('999');
       expect(result.bundle.overallProgress.lessonCompletions).not.toHaveProperty('888');
       expect(result.recoveryMetrics.overallProgress.lessonsDroppedRatio).toBeCloseTo(2 / 3);
-      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(false);
+      // Corruption detected: claimed 3, but only 1 valid lesson remains after curriculum filtering
+      expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(true);
     });
 
     it('drops domains not in current curriculum', () => {
@@ -426,7 +427,7 @@ describe('progressIntegrity', () => {
 
       // Should detect BOTH corruption AND curriculum changes
       expect(result.recoveryMetrics.overallProgress.corruptionDetected).toBe(true);
-      expect(result.recoveryMetrics.overallProgress.lessonsLostToCorruption).toBe(3); // 5 claimed - 2 actual
+      expect(result.recoveryMetrics.overallProgress.lessonsLostToCorruption).toBe(4); // 5 claimed - 1 actual (after dropping 999)
       expect(result.recoveryMetrics.overallProgress.lessonsDroppedRatio).toBe(0.5); // 1 of 2 dropped (999)
     });
   });
@@ -490,7 +491,7 @@ describe('progressIntegrity', () => {
 
       const result = enforceDataIntegrity(JSON.stringify(data), 'test-webid', mockLessonConfigs);
 
-      expect(result.bundle.settings.weekStartDay[0]).toBe('monday'); // Defaulted
+      expect(result.bundle.settings.weekStartDay[0]).toBe('sunday'); // Defaulted
       expect(result.bundle.settings.theme[0]).toBe('auto'); // Defaulted
       expect(result.bundle.settings.fontSize[0]).toBe('medium'); // Defaulted
       expect(result.recoveryMetrics.settings.defaultedRatio).toBeGreaterThan(0);

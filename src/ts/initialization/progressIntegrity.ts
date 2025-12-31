@@ -43,10 +43,14 @@ import {
   OverallProgressData,
   OverallProgressDataSchema,
   CompletionData,
-  isValidLessonId,
-  isValidDomainId,
+  CompletionDataSchema,
+  getDefaultOverallProgress,
 } from "../core/overallProgressSchema.js";
-import { SettingsData, SettingsDataSchema } from "../core/settingsSchema.js";
+import { 
+  SettingsData, 
+  SettingsDataSchema, 
+  getDefaultSettings 
+} from "../core/settingsSchema.js";
 import {
   NavigationState,
   NavigationStateSchema,
@@ -65,6 +69,9 @@ import {
 } from "../registry/mera-registry.js";
 
 import type { ParsedLessonData } from "../core/parsedLessonData.js";
+
+// Re-export for consumers who use enforceDataIntegrity
+export type { ParsedLessonData };
 
 /**
  * Result of extracting a section with quality metrics
@@ -327,15 +334,15 @@ function extractMetadata(
 }
 
 /**
- * Extract overall progress with corruption detection and curriculum reconciliation.
+ * Extract overall progress with curriculum reconciliation.
  *
- * Strategy: Reconcile completed lessons/domains against current curriculum.
- * Only keep completions for entities that exist in registry.
+ * Strategy: Salvage lessonCompletions/domainCompletions where possible,
+ * default counters and streak info.
  *
- * Uses shared validator from overallProgressSchema for consistency.
+ * Always calls reconcileOverallProgress to validate against current curriculum.
  *
  * @param parsed - Raw parsed JSON
- * @returns OverallProgress + retained ratios + corruption metrics
+ * @returns Progress data + curriculum reconciliation metrics
  */
 function extractOverallProgress(parsed: any): OverallProgressExtractionResult {
   // Try Zod parse first
@@ -350,14 +357,7 @@ function extractOverallProgress(parsed: any): OverallProgressExtractionResult {
   // Zod failed - extract what we can with defaults
   const candidate = parsed?.overallProgress || {};
 
-  const overallProgress: OverallProgressData = {
-    lessonCompletions: {},
-    domainCompletions: {},
-    currentStreak: 0,
-    lastStreakCheck: 0,
-    totalLessonsCompleted: 0,
-    totalDomainsCompleted: 0,
-  };
+  const overallProgress: OverallProgressData = getDefaultOverallProgress();
 
   // Extract lessonCompletions (should be CompletionData format)
   if (
@@ -420,137 +420,144 @@ function extractOverallProgress(parsed: any): OverallProgressExtractionResult {
  *
  * Process:
  * 1. Detect corruption by comparing counters to actual completion data
- * 2. Initialize result with valid schema defaults
- * 3. For each curriculum lesson/domain:
- *    - If exists in backup and valid → copy it
- *    - Otherwise → leave as default (incomplete)
- * 4. Selectively copy other fields only if they pass validation
- * 5. Track how many completed items were dropped (curriculum reconciliation)
+ * 2. Drop lessons/domains not in current curriculum (clean old data)
+ * 3. Initialize missing curriculum entities as incomplete
+ * 4. Recalculate counters from actual data (self-healing)
  *
- * @param progress - Progress data to reconcile
- * @returns Reconciled progress + corruption detection + dropped ratios
+ * Counters work as corruption detectors:
+ * - totalLessonsCompleted tracks count of non-null timeCompleted
+ * - If counter != actual → data was corrupted, report lost lessons/domains
+ * - After reconciliation: counter always matches actual (self-healing)
+ *
+ * @param progress - Progress data to reconcile (potentially corrupted)
+ * @returns Reconciled progress + curriculum drop metrics + corruption detection
  */
 function reconcileOverallProgress(
   progress: OverallProgressData
 ): OverallProgressExtractionResult {
-  // STEP 0: Start with valid schema defaults
+  // Initialize result with empty completions
   const result: OverallProgressData = {
     lessonCompletions: {},
     domainCompletions: {},
-    currentStreak: 0,
-    lastStreakCheck: 0,
+    currentStreak: progress.currentStreak,
+    lastStreakCheck: progress.lastStreakCheck,
     totalLessonsCompleted: 0,
     totalDomainsCompleted: 0,
   };
 
-  // STEP 1: Detect corruption BEFORE curriculum reconciliation
-  // Current-count trackers should match actual completed count in valid data
+  // Track what was claimed vs what we actually have
   const claimedLessons = progress.totalLessonsCompleted ?? 0;
   const claimedDomains = progress.totalDomainsCompleted ?? 0;
 
-  // Count items where timeCompleted !== null (not just object keys)
-  const actualLessons = Object.values(progress.lessonCompletions).filter(
-    (completion) => completion.timeCompleted !== null
-  ).length;
-  const actualDomains = Object.values(progress.domainCompletions).filter(
-    (completion) => completion.timeCompleted !== null
-  ).length;
+  let actualCompletedLessons = 0;
+  let actualCompletedDomains = 0;
+  let lessonsDropped = 0;
+  let domainsDropped = 0;
 
-  const lessonsLostToCorruption = Math.max(0, claimedLessons - actualLessons);
-  const domainsLostToCorruption = Math.max(0, claimedDomains - actualDomains);
-  const corruptionDetected =
-    lessonsLostToCorruption > 0 || domainsLostToCorruption > 0;
+  // Phase 1: Process lessons - validate and count
+  for (const [lessonIdStr, completion] of Object.entries(
+    progress.lessonCompletions
+  )) {
+    const lessonId = parseInt(lessonIdStr, 10);
 
-  // STEP 2: Build lesson completions by iterating curriculum
+    // Validate lesson exists in curriculum
+    if (!curriculumData.hasLesson(lessonId)) {
+      // Lesson no longer in curriculum - drop it
+      lessonsDropped++;
+      continue;
+    }
+
+    // Validate completion data structure
+    const zodResult = CompletionDataSchema.safeParse(completion);
+    if (!zodResult.success) {
+      // Invalid completion data - skip this lesson
+      lessonsDropped++;
+      continue;
+    }
+
+    // Valid lesson - copy to result
+    result.lessonCompletions[lessonIdStr] = zodResult.data;
+
+    // Count if completed
+    if (zodResult.data.timeCompleted !== null) {
+      actualCompletedLessons++;
+    }
+  }
+
+  // Phase 2: Process domains - validate and count
+  for (const [domainIdStr, completion] of Object.entries(
+    progress.domainCompletions
+  )) {
+    const domainId = parseInt(domainIdStr, 10);
+
+    // Validate domain exists in curriculum
+    if (!curriculumData.hasDomain(domainId)) {
+      // Domain no longer in curriculum - drop it
+      domainsDropped++;
+      continue;
+    }
+
+    // Validate completion data structure
+    const zodResult = CompletionDataSchema.safeParse(completion);
+    if (!zodResult.success) {
+      // Invalid completion data - skip this domain
+      domainsDropped++;
+      continue;
+    }
+
+    // Valid domain - copy to result
+    result.domainCompletions[domainIdStr] = zodResult.data;
+
+    // Count if completed
+    if (zodResult.data.timeCompleted !== null) {
+      actualCompletedDomains++;
+    }
+  }
+
+  // Phase 3: Initialize missing curriculum entities
   const allLessonIds = curriculumData.getAllLessonIds();
-  let lessonsKept = 0;
-
   for (const lessonId of allLessonIds) {
     const key = lessonId.toString();
-    const existing = progress.lessonCompletions[key];
-
-    // Validate structure before copying
-    if (
-      existing &&
-      typeof existing === "object" &&
-      existing !== null &&
-      "timeCompleted" in existing &&
-      "lastUpdated" in existing &&
-      (existing.timeCompleted === null ||
-        typeof existing.timeCompleted === "number") &&
-      typeof existing.lastUpdated === "number"
-    ) {
-      // Valid - copy it
-      result.lessonCompletions[key] = existing;
-      if (existing.timeCompleted !== null) {
-        lessonsKept++;
-      }
-    } else {
-      // Invalid or missing - use default
-      result.lessonCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
+    if (!result.lessonCompletions[key]) {
+      result.lessonCompletions[key] = {
+        timeCompleted: null,
+        lastUpdated: 0,
+      };
     }
   }
 
-  // STEP 3: Build domain completions by iterating curriculum
   const allDomainIds = curriculumData.getAllDomainIds();
-  let domainsKept = 0;
-
   for (const domainId of allDomainIds) {
     const key = domainId.toString();
-    const existing = progress.domainCompletions[key];
-
-    // Validate structure before copying
-    if (
-      existing &&
-      typeof existing === "object" &&
-      existing !== null &&
-      "timeCompleted" in existing &&
-      "lastUpdated" in existing &&
-      (existing.timeCompleted === null ||
-        typeof existing.timeCompleted === "number") &&
-      typeof existing.lastUpdated === "number"
-    ) {
-      // Valid - copy it
-      result.domainCompletions[key] = existing;
-      if (existing.timeCompleted !== null) {
-        domainsKept++;
-      }
-    } else {
-      // Invalid or missing - use default
-      result.domainCompletions[key] = { timeCompleted: null, lastUpdated: 0 };
+    if (!result.domainCompletions[key]) {
+      result.domainCompletions[key] = {
+        timeCompleted: null,
+        lastUpdated: 0,
+      };
     }
   }
 
-  // STEP 4: Selectively copy other fields only if valid
-  // currentStreak: must be number between 0 and 1000
-  if (
-    typeof progress.currentStreak === "number" &&
-    progress.currentStreak >= 0 &&
-    progress.currentStreak <= 1000
-  ) {
-    result.currentStreak = progress.currentStreak;
-  }
-  // else: stays at default 0
+  // Phase 4: Detect corruption and set corrected counters
+  const corruptionDetected =
+    claimedLessons !== actualCompletedLessons ||
+    claimedDomains !== actualCompletedDomains;
 
-  // lastStreakCheck: must be non-negative integer
-  if (
-    typeof progress.lastStreakCheck === "number" &&
-    Number.isInteger(progress.lastStreakCheck) &&
-    progress.lastStreakCheck >= 0
-  ) {
-    result.lastStreakCheck = progress.lastStreakCheck;
-  }
-  // else: stays at default 0
+  const lessonsLostToCorruption = Math.max(
+    0,
+    claimedLessons - actualCompletedLessons
+  );
+  const domainsLostToCorruption = Math.max(
+    0,
+    claimedDomains - actualCompletedDomains
+  );
 
-  // totalLessonsCompleted and totalDomainsCompleted are recalculated from kept counts
-  result.totalLessonsCompleted = lessonsKept;
-  result.totalDomainsCompleted = domainsKept;
+  // Set corrected counters (self-healing)
+  result.totalLessonsCompleted = actualCompletedLessons;
+  result.totalDomainsCompleted = actualCompletedDomains;
 
-  // STEP 5: Calculate dropped ratios
-  const lessonsDropped = Math.max(0, actualLessons - lessonsKept);
-  const domainsDropped = Math.max(0, actualDomains - domainsKept);
-  const originalLessonCount = actualLessons;
-  const originalDomainCount = actualDomains;
+  // Calculate drop ratios
+  const originalLessonCount = Object.keys(progress.lessonCompletions).length;
+  const originalDomainCount = Object.keys(progress.domainCompletions).length;
 
   return {
     data: result,
@@ -574,25 +581,21 @@ function reconcileOverallProgress(
  * Strategy: Settings are user preferences - salvage each field independently.
  * If field invalid, default it but keep rest.
  *
+ * Uses getDefaultSettings() from settingsSchema as single source of truth
+ * for default values.
+ *
  * @param parsed - Raw parsed JSON
  * @returns Settings + defaultedRatio
  */
 function extractSettings(parsed: any): ExtractionResult<SettingsData> {
-  // Try Zod parse first
-  const zodResult = SettingsDataSchema.safeParse(parsed?.settings);
-  if (zodResult.success) {
-    return {
-      data: zodResult.data,
-      defaultedRatio: 0.0,
-    };
-  }
-
-  // Zod failed - extract field-by-field with defaults
+  // Get defaults from schema module (single source of truth)
+  const defaults = getDefaultSettings();
+  
+  // Extract field-by-field with defaults
   const candidate = parsed?.settings || {};
   const settings: Partial<SettingsData> = {};
   const totalFields = 11;
   let defaultedFields = 0;
-  const defaultTimestamp = 0;
 
   // Field 1: weekStartDay
   if (
@@ -609,10 +612,10 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   ) {
     settings.weekStartDay = [
       candidate.weekStartDay[0],
-      candidate.weekStartDay[1] ?? defaultTimestamp,
+      candidate.weekStartDay[1] ?? 0,
     ];
   } else {
-    settings.weekStartDay = ["monday", defaultTimestamp];
+    settings.weekStartDay = defaults.weekStartDay;
     defaultedFields++;
   }
 
@@ -624,10 +627,10 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   ) {
     settings.weekStartTimeUTC = [
       candidate.weekStartTimeUTC[0],
-      candidate.weekStartTimeUTC[1] ?? defaultTimestamp,
+      candidate.weekStartTimeUTC[1] ?? 0,
     ];
   } else {
-    settings.weekStartTimeUTC = ["00:00", defaultTimestamp];
+    settings.weekStartTimeUTC = defaults.weekStartTimeUTC;
     defaultedFields++;
   }
 
@@ -638,24 +641,24 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   ) {
     settings.theme = [
       candidate.theme[0],
-      candidate.theme[1] ?? defaultTimestamp,
+      candidate.theme[1] ?? 0,
     ];
   } else {
-    settings.theme = ["auto", defaultTimestamp];
+    settings.theme = defaults.theme;
     defaultedFields++;
   }
 
   // Field 4: learningPace
   if (
     Array.isArray(candidate.learningPace) &&
-    ["relaxed", "standard", "intensive"].includes(candidate.learningPace[0])
+    ["accelerated", "standard", "flexible"].includes(candidate.learningPace[0])
   ) {
     settings.learningPace = [
       candidate.learningPace[0],
-      candidate.learningPace[1] ?? defaultTimestamp,
+      candidate.learningPace[1] ?? 0,
     ];
   } else {
-    settings.learningPace = ["standard", defaultTimestamp];
+    settings.learningPace = defaults.learningPace;
     defaultedFields++;
   }
 
@@ -666,10 +669,10 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   ) {
     settings.optOutDailyPing = [
       candidate.optOutDailyPing[0],
-      candidate.optOutDailyPing[1] ?? defaultTimestamp,
+      candidate.optOutDailyPing[1] ?? 0,
     ];
   } else {
-    settings.optOutDailyPing = [false, defaultTimestamp];
+    settings.optOutDailyPing = defaults.optOutDailyPing;
     defaultedFields++;
   }
 
@@ -680,24 +683,24 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   ) {
     settings.optOutErrorPing = [
       candidate.optOutErrorPing[0],
-      candidate.optOutErrorPing[1] ?? defaultTimestamp,
+      candidate.optOutErrorPing[1] ?? 0,
     ];
   } else {
-    settings.optOutErrorPing = [false, defaultTimestamp];
+    settings.optOutErrorPing = defaults.optOutErrorPing;
     defaultedFields++;
   }
 
   // Field 7: fontSize
   if (
     Array.isArray(candidate.fontSize) &&
-    ["small", "medium", "large", "x-large"].includes(candidate.fontSize[0])
+    ["small", "medium", "large"].includes(candidate.fontSize[0])
   ) {
     settings.fontSize = [
       candidate.fontSize[0],
-      candidate.fontSize[1] ?? defaultTimestamp,
+      candidate.fontSize[1] ?? 0,
     ];
   } else {
-    settings.fontSize = ["medium", defaultTimestamp];
+    settings.fontSize = defaults.fontSize;
     defaultedFields++;
   }
 
@@ -708,10 +711,10 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   ) {
     settings.highContrast = [
       candidate.highContrast[0],
-      candidate.highContrast[1] ?? defaultTimestamp,
+      candidate.highContrast[1] ?? 0,
     ];
   } else {
-    settings.highContrast = [false, defaultTimestamp];
+    settings.highContrast = defaults.highContrast;
     defaultedFields++;
   }
 
@@ -722,26 +725,24 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   ) {
     settings.reducedMotion = [
       candidate.reducedMotion[0],
-      candidate.reducedMotion[1] ?? defaultTimestamp,
+      candidate.reducedMotion[1] ?? 0,
     ];
   } else {
-    settings.reducedMotion = [false, defaultTimestamp];
+    settings.reducedMotion = defaults.reducedMotion;
     defaultedFields++;
   }
 
   // Field 10: focusIndicatorStyle
   if (
     Array.isArray(candidate.focusIndicatorStyle) &&
-    ["default", "high-visibility", "outline"].includes(
-      candidate.focusIndicatorStyle[0]
-    )
+    ["default", "enhanced"].includes(candidate.focusIndicatorStyle[0])
   ) {
     settings.focusIndicatorStyle = [
       candidate.focusIndicatorStyle[0],
-      candidate.focusIndicatorStyle[1] ?? defaultTimestamp,
+      candidate.focusIndicatorStyle[1] ?? 0,
     ];
   } else {
-    settings.focusIndicatorStyle = ["default", defaultTimestamp];
+    settings.focusIndicatorStyle = defaults.focusIndicatorStyle;
     defaultedFields++;
   }
 
@@ -752,10 +753,10 @@ function extractSettings(parsed: any): ExtractionResult<SettingsData> {
   ) {
     settings.audioEnabled = [
       candidate.audioEnabled[0],
-      candidate.audioEnabled[1] ?? defaultTimestamp,
+      candidate.audioEnabled[1] ?? 0,
     ];
   } else {
-    settings.audioEnabled = [true, defaultTimestamp];
+    settings.audioEnabled = defaults.audioEnabled;
     defaultedFields++;
   }
 
@@ -1014,6 +1015,9 @@ function initializeAllComponentsWithDefaults(): Record<string, any> {
 /**
  * Create fully defaulted result for catastrophic failures (unparseable JSON).
  *
+ * Uses getDefaultSettings() and getDefaultOverallProgress() as single source
+ * of truth for default values.
+ *
  * @param expectedWebId - WebId that should be in backup
  * @param foundWebId - WebId found (null if unparseable)
  * @returns Recovery result with all sections defaulted
@@ -1026,31 +1030,20 @@ function createFullyDefaultedResult(
   const { lessonCompletions, domainCompletions } =
     initializeAllLessonsAndDomainsWithDefaults();
 
+  // Get defaults from schema modules (single source of truth)
+  const defaultSettings = getDefaultSettings();
+  const defaultProgress = getDefaultOverallProgress();
+
   let bundle: PodStorageBundle = {
     metadata: {
       webId: "https://error.mera.invalid/unparseable-json", // Security: Unparseable = treat as mismatch
     },
     overallProgress: {
+      ...defaultProgress,
       lessonCompletions,
       domainCompletions,
-      currentStreak: 0,
-      lastStreakCheck: 0,
-      totalLessonsCompleted: 0,
-      totalDomainsCompleted: 0,
     },
-    settings: {
-      weekStartDay: ["monday", 0],
-      weekStartTimeUTC: ["00:00", 0],
-      theme: ["auto", 0],
-      learningPace: ["standard", 0],
-      optOutDailyPing: [false, 0],
-      optOutErrorPing: [false, 0],
-      fontSize: ["medium", 0],
-      highContrast: [false, 0],
-      reducedMotion: [false, 0],
-      focusIndicatorStyle: ["default", 0],
-      audioEnabled: [true, 0],
-    },
+    settings: defaultSettings,
     navigationState: {
       currentEntityId: 0, // Main menu
       currentPage: 0,

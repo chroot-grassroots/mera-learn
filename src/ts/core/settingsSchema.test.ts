@@ -269,32 +269,6 @@ describe('SettingsDataManager', () => {
     });
   });
 
-  describe('setDefaultsIfBlank', () => {
-    it('fills in missing fields with defaults', () => {
-      // Create settings with some fields missing
-      const partialSettings: any = {
-        theme: ['dark', 1000] as const,
-        learningPace: ['accelerated', 2000] as const,
-      };
-      
-      const partialManager = new SettingsDataManager(partialSettings);
-      partialManager.setDefaultsIfBlank();
-      const settings = partialManager.getSettings();
-
-      // Missing fields get defaults (with timestamp 0)
-      expect(settings.weekStartDay[0]).toBe('sunday');
-      expect(settings.weekStartDay[1]).toBe(0);
-      expect(settings.weekStartTimeUTC[0]).toBe('00:00');
-      expect(settings.optOutDailyPing[0]).toBe(false);
-      
-      // Existing fields stay unchanged
-      expect(settings.theme[0]).toBe('dark');
-      expect(settings.theme[1]).toBe(1000);
-      expect(settings.learningPace[0]).toBe('accelerated');
-      expect(settings.learningPace[1]).toBe(2000);
-    });
-  });
-
   describe('getLastWeekStart', () => {
     it('calculates week start based on settings', () => {
       manager.setWeekStartDay('monday');

@@ -2,8 +2,10 @@
  * @fileoverview Base classes for all interactive learning components with timestamp support
  * @module components/cores/baseComponentCore
  *
- * REFACTORED: Added lastUpdated timestamp to BaseComponentProgressSchema.
- * All component progress now inherits timestamp tracking for conflict resolution.
+ * REFACTORED: 
+ * - Removed .default(0) from BaseComponentProgressSchema
+ * - Added input/output cloning to BaseComponentProgressManager
+ * - Made progress field private to enforce cloning boundaries
  *
  * Defines the Core/Interface component architecture that enables:
  * - Separation of data logic (Core) from UI rendering (Interface)
@@ -16,7 +18,7 @@
  * Architecture Pattern:
  * - BaseComponentCore: Data validation, state management, message queuing
  * - BaseComponentInterface: DOM manipulation, user interaction handling
- * - BaseComponentProgressManager: Validated progress mutations and trump strategies
+ * - BaseComponentProgressManager: Validated progress mutations with cloning
  *
  * Components cannot directly mutate shared application state. All changes flow
  * through validated message queues that Main Core processes during polling cycles.
@@ -79,7 +81,7 @@ export type BaseComponentConfig = z.infer<typeof BaseComponentConfigSchema>;
 /**
  * Base progress schema that all component progress must extend.
  *
- * REFACTORED: Now includes lastUpdated timestamp for all components.
+ * REFACTORED: Removed .default(0) from lastUpdated.
  * 
  * MERGE STRATEGY: Component-level timestamp means during offline/online sync,
  * the ENTIRE component progress from whichever version has the newest lastUpdated
@@ -92,9 +94,14 @@ export type BaseComponentConfig = z.infer<typeof BaseComponentConfigSchema>;
  * 
  * All component-specific progress schemas extend this, inheriting the timestamp.
  * Concrete components add their own fields (checkboxes, answers, scores, etc.).
+ * 
+ * TIMESTAMP SEMANTICS:
+ * - 0 = never set by user (default/initial state)
+ * - >0 = user-modified (Unix timestamp in seconds)
+ * - During merge, timestamp 0 always loses to any timestamp > 0
  */
 export const BaseComponentProgressSchema = z.object({
-  lastUpdated: z.number().int().min(0).default(0), // Unix timestamp in seconds
+  lastUpdated: z.number().int().min(0), // NO .default() - explicit defaulting only
 });
 
 export type BaseComponentProgress = z.infer<typeof BaseComponentProgressSchema>;
@@ -106,11 +113,19 @@ export type BaseComponentProgress = z.infer<typeof BaseComponentProgressSchema>;
 /**
  * Abstract base class for component progress management.
  *
- * REFACTORED: Component-level timestamp eliminates need for field-level trump strategies.
+ * REFACTORED: Added input/output cloning to prevent data corruption.
+ * 
+ * CLONING STRATEGY:
+ * - Constructor clones input to own internal copy
+ * - getProgress() returns clone to prevent external mutations
+ * - Mutations only affect internal copy
+ * - Main Core cannot be corrupted by buggy component code
+ *
+ * MERGE STRATEGY: Component-level timestamp eliminates need for field-level trump strategies.
  * During merge, the entire component progress with newest lastUpdated wins.
  *
  * Responsibilities:
- * - Store current progress state
+ * - Store current progress state (cloned and isolated)
  * - Provide validated mutation methods
  * - Define initial progress structure based on config
  * - Update timestamps on all mutations
@@ -123,20 +138,39 @@ export type BaseComponentProgress = z.infer<typeof BaseComponentProgressSchema>;
  * - Audit trail of mutations (future logging)
  * - Side effects like completion checking
  * - Easy testing via method mocking
+ * - Data isolation via cloning
  */
 export abstract class BaseComponentProgressManager<
   TComponentProgress extends BaseComponentProgress
 > {
-  constructor(protected progress: TComponentProgress) {}
+  protected progress: TComponentProgress; // Protected - child classes can mutate, external code cannot
 
   /**
-   * Get current progress state.
+   * Construct manager with cloned progress data.
+   * 
+   * CLONING: Input data is cloned to prevent external mutations from
+   * corrupting the manager's internal state. Main Core passes data in,
+   * but cannot accidentally mutate it afterward.
+   * 
+   * @param initialProgress - Progress data from Main Core (will be cloned)
+   */
+  constructor(initialProgress: TComponentProgress) {
+    // Clone input - manager owns its own copy
+    this.progress = structuredClone(initialProgress);
+  }
+
+  /**
+   * Get current progress state (cloned).
    *
-   * Returns readonly reference to prevent direct mutation.
-   * All changes must go through validated setter methods.
+   * CLONING: Returns clone to prevent external code from mutating the
+   * manager's internal state. Component Core and Interface receive a
+   * snapshot they can read but cannot corrupt.
+   * 
+   * @returns Cloned progress state
    */
   getProgress(): TComponentProgress {
-    return this.progress;
+    // Return clone to prevent external mutations
+    return structuredClone(this.progress);
   }
 
   /**
@@ -159,7 +193,8 @@ export abstract class BaseComponentProgressManager<
    * Progress structure must align with config (e.g., if config has 3 checkboxes,
    * progress must have array of 3 boolean states).
    *
-   * Subclasses should initialize lastUpdated to 0 for new progress.
+   * IMPORTANT: Subclasses MUST initialize lastUpdated to 0 for new progress.
+   * Timestamp 0 semantics: never set by user, loses in all merge conflicts.
    *
    * @param config Component configuration from YAML
    * @returns Fresh progress object with all fields initialized
@@ -221,7 +256,7 @@ export abstract class BaseComponentCore<
    * Construct component core with readonly references to shared state.
    *
    * @param config Component configuration from YAML (readonly)
-   * @param progressManager Validated progress mutations
+   * @param progressManager Validated progress mutations with cloning
    * @param timeline Container for component rendering
    * @param overallProgress Readonly lesson completion state
    * @param navigationState Readonly current page/lesson position
@@ -363,15 +398,5 @@ export abstract class BaseComponentCore<
    */
   getOverallProgressMessages(): OverallProgressMessage[] {
     return this._overallProgressQueueManager.getMessages();
-  }
-
-  /**
-   * Destroy component and clean up resources.
-   *
-   * Called when component is removed from timeline.
-   * Delegates to interface for DOM cleanup.
-   */
-  destroy(): void {
-    this._interface.destroy();
   }
 }

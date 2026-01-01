@@ -2,8 +2,10 @@
  * @fileoverview Basic task component with checkbox-based interactions
  * @module components/cores/basicTaskCore
  *
- * REFACTORED: Updated to use inherited lastUpdated timestamp from BaseComponentProgress.
- * Minimal changes - just calls updateTimestamp() and implements getComponentSpecificStrategies().
+ * REFACTORED: Updated to remove .default() from schema and ensure consistent default handling.
+ * - Removed .default([]) from BasicTaskComponentProgressSchema
+ * - Validators use explicit defaults
+ * - createInitialProgress() explicitly sets lastUpdated: 0
  *
  * Implements a simple checkbox task component where users check off items
  * to complete activities. Supports required vs optional checkboxes.
@@ -65,12 +67,16 @@ export type BasicTaskComponentConfig = z.infer<
 /**
  * Basic task component progress schema
  * 
- * REFACTORED: Extends BaseComponentProgressSchema which now includes lastUpdated.
+ * REFACTORED: 
+ * - Extends BaseComponentProgressSchema which includes lastUpdated (no .default())
+ * - Removed .default([]) from checkbox_checked
+ * - Explicit defaulting happens in createInitialProgress() and validators
+ * 
  * No need to add lastUpdated here - it's inherited automatically!
  */
 export const BasicTaskComponentProgressSchema =
   BaseComponentProgressSchema.extend({
-    checkbox_checked: z.array(z.boolean()).default([]),
+    checkbox_checked: z.array(z.boolean()), // NO .default() - explicit defaulting only
   });
 
 export type BasicTaskComponentProgress = z.infer<
@@ -139,7 +145,7 @@ export interface ValidationResult<T> {
  * returns fresh default progress.
  *
  * Used by:
- * - progressRecovery: Gracefully handles config changes
+ * - progressIntegrity: Gracefully handles config changes
  * - BasicTaskProgressManager: Defensive check (throws if defaulted)
  *
  * @param progress - Progress data to validate
@@ -152,11 +158,11 @@ export function validateBasicTaskStructure(
 ): ValidationResult<BasicTaskComponentProgress> {
   // Check if structure matches
   if (!isValidProgressStructure(progress, config)) {
-    // Structure mismatch - return fresh default
+    // Structure mismatch - return fresh default (explicit defaulting)
     return {
       cleaned: {
         checkbox_checked: new Array(config.checkboxes.length).fill(false),
-        lastUpdated: 0, // Inherited field from base
+        lastUpdated: 0, // Explicit timestamp 0 = never set
       },
       defaultedRatio: 1.0,
     };
@@ -176,20 +182,17 @@ export function validateBasicTaskStructure(
 /**
  * Progress manager for basic task component
  * 
- * REFACTORED: Simplified - no trump strategies needed!
- * Component-level lastUpdated means entire component progress is taken
- * from whichever version has the newest timestamp during merge.
- * 
- * Just calls updateTimestamp() after mutations.
+ * REFACTORED: 
+ * - Inherits input/output cloning from BaseComponentProgressManager
+ * - Protected progress field allows direct mutation
+ * - Component-level timestamp merge (newest wins entire component)
  */
 export class BasicTaskProgressManager extends BaseComponentProgressManager<BasicTaskComponentProgress> {
   /**
    * Set individual checkbox state with validation
    *
-   * REFACTORED: Now calls updateTimestamp() after mutation.
-   *
    * Uses shared validation helpers to ensure index is valid and
-   * progress structure matches config.
+   * progress structure matches config. Calls updateTimestamp() after mutation.
    *
    * @param config - Component configuration
    * @param index - Checkbox index to update
@@ -213,7 +216,7 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<Basic
       throw new Error(`Checkbox index ${index} out of range`);
     }
 
-    // Mutation is safe
+    // Mutation is safe - mutate protected field directly
     this.progress.checkbox_checked[index] = checked;
     
     // Update timestamp (inherited helper from base class)
@@ -226,7 +229,7 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<Basic
    * Called for new users or when component is first encountered.
    * Creates array of false values matching checkbox count.
    * 
-   * REFACTORED: Now initializes lastUpdated to 0 (inherited field).
+   * IMPORTANT: Explicitly sets lastUpdated to 0 (timestamp 0 = never set by user).
    *
    * @param config Component configuration with checkbox definitions
    * @returns Fresh progress object with all checkboxes unchecked
@@ -236,7 +239,7 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<Basic
   ): BasicTaskComponentProgress {
     return {
       checkbox_checked: new Array(config.checkboxes.length).fill(false),
-      lastUpdated: 0, // Inherited field from base
+      lastUpdated: 0, // Explicit timestamp 0 = never set by user
     };
   }
 }

@@ -849,12 +849,12 @@ function extractCombinedComponentProgress(
       const componentType = curriculumData.getComponentType(componentId);
       if (componentType) {
         const initializer = componentInitializerMap.get(componentType);
-        if (initializer) {
-          components[componentIdStr] = initializer();
-        } else {
-          // No initializer registered - use empty object with lastUpdated
-          components[componentIdStr] = { lastUpdated: 0 };
-        }
+        components[componentIdStr] = initializer
+          ? initializer()
+          : { lastUpdated: 0 }; // Ultimate fallback only
+      } else {
+        // No component type - use bare fallback
+        components[componentIdStr] = { lastUpdated: 0 };
       }
       componentsDefaulted++;
       continue;
@@ -990,11 +990,12 @@ function initializeAllComponentsWithDefaults(): Record<string, any> {
 
     if (componentType) {
       const initializer = componentInitializerMap.get(componentType);
-      if (initializer) {
-        components[componentIdStr] = initializer();
-      } else {
-        components[componentIdStr] = { lastUpdated: 0 };
-      }
+      components[componentIdStr] = initializer
+        ? initializer()
+        : { lastUpdated: 0 }; // Ultimate fallback only
+    } else {
+      // No component type - use bare fallback
+      components[componentIdStr] = { lastUpdated: 0 };
     }
   }
 

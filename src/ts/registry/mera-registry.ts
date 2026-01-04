@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2026-01-04T12:07:21.415383
+ * Generated on: 2026-01-04T13:00:22.749654
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.

@@ -34013,6 +34013,15 @@ var TimelineContainer = class {
     };
   }
 };
+var timelineInstance = null;
+function getTimelineInstance() {
+  if (!timelineInstance) {
+    throw new Error(
+      "Timeline not initialized. Call initializeTimeline() in bootstrap first."
+    );
+  }
+  return timelineInstance;
+}
 
 // src/ts/ui/errorDisplay.ts
 var ErrorDisplay = class {
@@ -47087,6 +47096,178 @@ var OverallProgressMessageSchema = external_exports.object({
   ]),
   args: external_exports.array(external_exports.any())
 });
+var OverallProgressMessageQueueManager = class {
+  constructor(curriculumRegistry) {
+    this.curriculumRegistry = curriculumRegistry;
+    this.messageQueue = [];
+  }
+  /**
+   * Queue a lesson completion message.
+   *
+   * Validates lesson ID using shared helper before queueing.
+   *
+   * @param lessonId - Lesson to mark complete
+   * @throws Error if lesson ID invalid or not in curriculum
+   */
+  queueLessonComplete(lessonId) {
+    const message2 = {
+      method: "markLessonComplete",
+      args: [lessonId]
+    };
+    if (message2.args.length !== 1) {
+      throw new Error("markLessonComplete requires exactly 1 argument");
+    }
+    const parseResult = ImmutableId.safeParse(lessonId);
+    if (!parseResult.success) {
+      throw new Error(
+        `lessonId must be a valid immutable ID, got: ${lessonId}`
+      );
+    }
+    if (!isValidLessonId(lessonId, this.curriculumRegistry)) {
+      throw new Error(
+        `Invalid lesson ID: ${lessonId} does not exist in curriculum`
+      );
+    }
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Queue a lesson incomplete message.
+   *
+   * Validates lesson ID using shared helper before queueing.
+   *
+   * @param lessonId - Lesson to mark incomplete
+   * @throws Error if lesson ID invalid or not in curriculum
+   */
+  queueLessonIncomplete(lessonId) {
+    const message2 = {
+      method: "markLessonIncomplete",
+      args: [lessonId]
+    };
+    if (message2.args.length !== 1) {
+      throw new Error("markLessonIncomplete requires exactly 1 argument");
+    }
+    const parseResult = ImmutableId.safeParse(lessonId);
+    if (!parseResult.success) {
+      throw new Error(
+        `lessonId must be a valid immutable ID, got: ${lessonId}`
+      );
+    }
+    if (!isValidLessonId(lessonId, this.curriculumRegistry)) {
+      throw new Error(
+        `Invalid lesson ID: ${lessonId} does not exist in curriculum`
+      );
+    }
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Queue a domain completion message.
+   *
+   * Validates domain ID using shared helper before queueing.
+   *
+   * @param domainId - Domain to mark complete
+   * @throws Error if domain ID invalid or not in curriculum
+   */
+  queueDomainComplete(domainId) {
+    const message2 = {
+      method: "markDomainComplete",
+      args: [domainId]
+    };
+    if (message2.args.length !== 1) {
+      throw new Error("markDomainComplete requires exactly 1 argument");
+    }
+    const parseResult = ImmutableId.safeParse(domainId);
+    if (!parseResult.success) {
+      throw new Error(
+        `domainId must be a valid immutable ID, got: ${domainId}`
+      );
+    }
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(
+        `Invalid domain ID: ${domainId} does not exist in curriculum`
+      );
+    }
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Queue a domain incomplete message.
+   *
+   * Validates domain ID using shared helper before queueing.
+   *
+   * @param domainId - Domain to mark incomplete
+   * @throws Error if domain ID invalid or not in curriculum
+   */
+  queueDomainIncomplete(domainId) {
+    const message2 = {
+      method: "markDomainIncomplete",
+      args: [domainId]
+    };
+    if (message2.args.length !== 1) {
+      throw new Error("markDomainIncomplete requires exactly 1 argument");
+    }
+    const parseResult = ImmutableId.safeParse(domainId);
+    if (!parseResult.success) {
+      throw new Error(
+        `domainId must be a valid immutable ID, got: ${domainId}`
+      );
+    }
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(
+        `Invalid domain ID: ${domainId} does not exist in curriculum`
+      );
+    }
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Queue a streak update message.
+   *
+   * @param newStreak - New streak value
+   */
+  queueUpdateStreak(newStreak) {
+    const message2 = {
+      method: "updateStreak",
+      args: [newStreak]
+    };
+    if (message2.args.length !== 1) {
+      throw new Error("updateStreak requires exactly 1 argument");
+    }
+    if (typeof newStreak !== "number" || newStreak < 0) {
+      throw new Error("newStreak must be a non-negative number");
+    }
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Queue a streak reset message.
+   */
+  queueResetStreak() {
+    const message2 = {
+      method: "resetStreak",
+      args: []
+    };
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Queue a streak increment message.
+   */
+  queueIncrementStreak() {
+    const message2 = {
+      method: "incrementStreak",
+      args: []
+    };
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Get all queued messages and clear the queue.
+   *
+   * Called by Main Core polling cycle to process messages.
+   *
+   * @returns Array of queued messages
+   */
+  getMessages() {
+    const messages = [...this.messageQueue];
+    this.messageQueue = [];
+    return messages;
+  }
+};
 var OverallProgressMessageHandler = class {
   constructor(progressManager, curriculumRegistry) {
     this.progressManager = progressManager;
@@ -47536,6 +47717,112 @@ var SettingsMessageHandler = class {
     }
   }
 };
+var SettingsMessageQueueManager = class {
+  constructor() {
+    this.messageQueue = [];
+  }
+  queueWeekStartDay(day2) {
+    const message2 = { method: "setWeekStartDay", args: [day2] };
+    if (message2.args.length !== 1) {
+      throw new Error("setWeekStartDay requires exactly 1 argument");
+    }
+    external_exports.enum(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]).parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueWeekStartTimeUTC(time3) {
+    const message2 = { method: "setWeekStartTimeUTC", args: [time3] };
+    if (message2.args.length !== 1) {
+      throw new Error("setWeekStartTimeUTC requires exactly 1 argument");
+    }
+    external_exports.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueTheme(theme) {
+    const message2 = { method: "setTheme", args: [theme] };
+    if (message2.args.length !== 1) {
+      throw new Error("setTheme requires exactly 1 argument");
+    }
+    external_exports.enum(["light", "dark", "auto"]).parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueLearningPace(pace) {
+    const message2 = { method: "setLearningPace", args: [pace] };
+    if (message2.args.length !== 1) {
+      throw new Error("setLearningPace requires exactly 1 argument");
+    }
+    external_exports.enum(["accelerated", "standard", "flexible"]).parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueOptOutDailyPing(optOut) {
+    const message2 = { method: "setOptOutDailyPing", args: [optOut] };
+    if (message2.args.length !== 1) {
+      throw new Error("setOptOutDailyPing requires exactly 1 argument");
+    }
+    external_exports.boolean().parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueOptOutErrorPing(optOut) {
+    const message2 = { method: "setOptOutErrorPing", args: [optOut] };
+    if (message2.args.length !== 1) {
+      throw new Error("setOptOutErrorPing requires exactly 1 argument");
+    }
+    external_exports.boolean().parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueFontSize(size) {
+    const message2 = { method: "setFontSize", args: [size] };
+    if (message2.args.length !== 1) {
+      throw new Error("setFontSize requires exactly 1 argument");
+    }
+    external_exports.enum(["small", "medium", "large"]).parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueHighContrast(enabled) {
+    const message2 = { method: "setHighContrast", args: [enabled] };
+    if (message2.args.length !== 1) {
+      throw new Error("setHighContrast requires exactly 1 argument");
+    }
+    external_exports.boolean().parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueReducedMotion(enabled) {
+    const message2 = { method: "setReducedMotion", args: [enabled] };
+    if (message2.args.length !== 1) {
+      throw new Error("setReducedMotion requires exactly 1 argument");
+    }
+    external_exports.boolean().parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueFocusIndicatorStyle(style) {
+    const message2 = { method: "setFocusIndicatorStyle", args: [style] };
+    if (message2.args.length !== 1) {
+      throw new Error("setFocusIndicatorStyle requires exactly 1 argument");
+    }
+    external_exports.enum(["default", "enhanced"]).parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  queueAudioEnabled(enabled) {
+    const message2 = { method: "setAudioEnabled", args: [enabled] };
+    if (message2.args.length !== 1) {
+      throw new Error("setAudioEnabled requires exactly 1 argument");
+    }
+    external_exports.boolean().parse(message2.args[0]);
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Retrieve and clear all queued messages.
+   *
+   * Core polls this method to get pending settings updates.
+   * Messages are removed from queue after retrieval.
+   *
+   * @returns Array of queued messages
+   */
+  getMessages() {
+    const messages = [...this.messageQueue];
+    this.messageQueue = [];
+    return messages;
+  }
+};
 
 // src/ts/core/navigationSchema.ts
 var NavigationStateSchema = external_exports.object({
@@ -47588,7 +47875,7 @@ var NavigationStateManager = class {
    *
    * Clone ensures external code cannot mutate manager's internal state.
    * Validates before returning using private helper.
-   * 
+   *
    * @returns Cloned navigation state
    * @throws Error if current state is invalid (entity/page doesn't exist)
    */
@@ -47600,7 +47887,7 @@ var NavigationStateManager = class {
    * Returns current view for startup after page load.
    *
    * Reverts to main menu if timestamp is older than 30 minutes.
-   * 
+   *
    * @returns Entity ID and page number for startup
    */
   getCurrentViewStartup() {
@@ -47619,7 +47906,7 @@ var NavigationStateManager = class {
    * Returns current view while running.
    *
    * Used by core to check if new page needs to be loaded.
-   * 
+   *
    * @returns Entity ID and page number
    */
   getCurrentViewRunning() {
@@ -47633,7 +47920,7 @@ var NavigationStateManager = class {
    *
    * The only setter available via messages from components.
    * Completely replaces current state with new timestamp.
-   * 
+   *
    * @param entityId - Entity ID to navigate to
    * @param page - Page number within entity
    */
@@ -47714,6 +48001,47 @@ var NavigationMessageHandler = class {
     this.validateMessage(message2);
     const [entityId, page] = message2.args;
     this.navigationManager.setCurrentView(entityId, page);
+  }
+};
+var NavigationMessageQueueManager = class {
+  constructor(curriculumRegistry) {
+    this.curriculumRegistry = curriculumRegistry;
+    this.messageQueue = [];
+  }
+  /**
+   * Queue a navigation message.
+   *
+   * Validates entity and page using shared helpers before queueing.
+   *
+   * @param entityId - Entity to navigate to
+   * @param page - Page number within entity
+   * @throws Error if entity doesn't exist or page is out of bounds
+   */
+  queueNavigationMessage(entityId, page) {
+    const message2 = {
+      method: "setCurrentView",
+      args: [entityId, page]
+    };
+    if (!isValidEntityId(entityId, this.curriculumRegistry)) {
+      throw new Error(`Invalid entity ID: ${entityId}`);
+    }
+    if (!isValidPageNumber(entityId, page, this.curriculumRegistry)) {
+      throw new Error(`Invalid page ${page} for entity ${entityId}`);
+    }
+    this.messageQueue.push(message2);
+  }
+  /**
+   * Retrieve and clear all queued messages.
+   *
+   * Core polls this method to get pending navigation updates.
+   * Messages are removed from queue after retrieval.
+   *
+   * @returns Array of queued messages
+   */
+  getMessages() {
+    const messages = [...this.messageQueue];
+    this.messageQueue = [];
+    return messages;
   }
 };
 
@@ -51546,11 +51874,11 @@ var BaseComponentProgressManager = class {
   // Protected - child classes can mutate, external code cannot
   /**
    * Construct manager with config reference and cloned progress data.
-   * 
+   *
    * CLONING: Progress data is cloned to prevent external mutations from
    * corrupting the manager's internal state. Config is stored as readonly
    * reference since it's immutable.
-   * 
+   *
    * @param config - Component configuration (immutable, safe to share reference)
    * @param initialProgress - Progress data from Main Core (will be cloned)
    */
@@ -51564,7 +51892,7 @@ var BaseComponentProgressManager = class {
    * CLONING: Returns clone to prevent external code from mutating the
    * manager's internal state. Component Core and Interface receive a
    * snapshot they can read but cannot corrupt.
-   * 
+   *
    * @returns Cloned progress state
    */
   getProgress() {
@@ -51581,6 +51909,95 @@ var BaseComponentProgressManager = class {
    */
   updateTimestamp() {
     this.progress.lastUpdated = Math.floor(Date.now() / 1e3);
+  }
+};
+var BaseComponentCore = class {
+  /**
+   * Construct component core with readonly references to shared state.
+   *
+   * @param config Component configuration from YAML (readonly)
+   * @param progressManager Validated progress mutations with cloning
+   * @param timeline Container for component rendering
+   * @param overallProgress Readonly lesson completion state
+   * @param navigationState Readonly current page/lesson position
+   * @param settings Readonly user preferences
+   * @param curriculumRegistry Lesson/domain lookup for validation
+   */
+  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
+    this._config = config2;
+    this._progressManager = progressManager;
+    this._navigationQueueManager = new NavigationMessageQueueManager(
+      curriculumRegistry
+    );
+    this._settingsQueueManager = new SettingsMessageQueueManager();
+    this._overallProgressQueueManager = new OverallProgressMessageQueueManager(
+      curriculumRegistry
+    );
+    this._interface = this.createInterface(timeline2);
+  }
+  // ============================================================================
+  // READONLY ACCESSORS
+  // ============================================================================
+  /**
+   * Get component configuration (readonly)
+   */
+  get config() {
+    return this._config;
+  }
+  /**
+   * Get component interface instance (readonly)
+   */
+  get interface() {
+    return this._interface;
+  }
+  // ============================================================================
+  // MESSAGE QUEUE CONVENIENCE METHODS
+  // ============================================================================
+  /**
+   * Convenience wrapper for queueing lesson completion message.
+   *
+   * Components call this when they trigger lesson completion
+   * (e.g., final quiz question answered correctly).
+   *
+   * @param lessonId Immutable lesson ID
+   */
+  queueLessonComplete(lessonId) {
+    this._overallProgressQueueManager.queueLessonComplete(lessonId);
+  }
+  /**
+   * Convenience wrapper for queueing lesson incompletion message.
+   *
+   * Used when component state changes invalidate lesson completion
+   * (e.g., quiz answer changed after lesson marked complete).
+   *
+   * @param lessonId Immutable lesson ID
+   */
+  queueLessonIncomplete(lessonId) {
+    this._overallProgressQueueManager.queueLessonIncomplete(lessonId);
+  }
+  /**
+   * Retrieve queued navigation messages.
+   *
+   * Main Core polls this during update cycle.
+   */
+  getNavigationMessages() {
+    return this._navigationQueueManager.getMessages();
+  }
+  /**
+   * Retrieve queued settings messages.
+   *
+   * Main Core polls this during update cycle.
+   */
+  getSettingsMessages() {
+    return this._settingsQueueManager.getMessages();
+  }
+  /**
+   * Retrieve queued overall progress messages.
+   *
+   * Main Core polls this during update cycle.
+   */
+  getOverallProgressMessages() {
+    return this._overallProgressQueueManager.getMessages();
   }
 };
 
@@ -51645,6 +52062,95 @@ var BasicTaskProgressManager = class extends BaseComponentProgressManager {
       lastUpdated: 0
       // Explicit timestamp 0 = never set by user
     };
+  }
+};
+var BasicTaskMessageQueueManager = class {
+  constructor(componentId) {
+    this.componentId = componentId;
+    this.messageQueue = [];
+  }
+  /**
+   * Queue checkbox state change message
+   *
+   * @param index Checkbox index
+   * @param checked New checked state
+   */
+  queueCheckboxState(index, checked) {
+    this.messageQueue.push({
+      type: "component_progress",
+      componentId: this.componentId,
+      method: "setCheckboxState",
+      args: [index, checked]
+    });
+  }
+  /**
+   * Retrieve and clear all queued messages.
+   *
+   * Core polls this method to get pending updates.
+   * Messages are removed from queue after retrieval.
+   *
+   * @returns Array of queued messages
+   */
+  getMessages() {
+    const messages = [...this.messageQueue];
+    this.messageQueue = [];
+    return messages;
+  }
+};
+var BasicTaskCore = class extends BaseComponentCore {
+  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
+    super(
+      config2,
+      progressManager,
+      timeline2,
+      overallProgressManager,
+      navigationManager,
+      settingsManager,
+      curriculumRegistry
+    );
+    this._componentProgressQueueManager = new BasicTaskMessageQueueManager(
+      config2.id
+    );
+  }
+  /**
+   * Create the interface for this core
+   */
+  createInterface(timeline2) {
+    throw new Error("BasicTaskInterface not yet implemented");
+  }
+  /**
+   * Set checkbox state and queue message to main core
+   */
+  setCheckboxState(index, checked) {
+    this._progressManager.setCheckboxState(
+      index,
+      checked
+    );
+    this._componentProgressQueueManager.queueCheckboxState(index, checked);
+  }
+  /**
+   * Check if task is complete
+   *
+   * Task is complete when all required checkboxes are checked.
+   * Optional checkboxes don't affect completion status.
+   */
+  isComplete() {
+    const progress = this._progressManager.getProgress();
+    for (let i = 0; i < this._config.checkboxes.length; i++) {
+      const checkbox = this._config.checkboxes[i];
+      if (checkbox.required) {
+        if (i >= progress.checkbox_checked.length || !progress.checkbox_checked[i]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+  /**
+   * Get component progress messages for core polling
+   */
+  getComponentProgressMessages() {
+    return this._componentProgressQueueManager.getMessages();
   }
 };
 var BasicTaskProgressMessageHandler = class {
@@ -52641,9 +53147,226 @@ function createComponentProgressHandlers(componentManagers) {
   return handlers;
 }
 
+// src/ts/components/componentPermissions.ts
+var MESSAGE_TYPE_PERMISSIONS = {
+  "basic_task": {
+    componentProgress: true,
+    // Can update its own state
+    overallProgress: false,
+    // Cannot mark lessons complete
+    navigation: false,
+    // Cannot navigate
+    settings: false
+    // Cannot change settings
+  }
+  // Add additional components here
+};
+function hasPermissions(componentType) {
+  return componentType in MESSAGE_TYPE_PERMISSIONS;
+}
+function getPermissions(componentType) {
+  return MESSAGE_TYPE_PERMISSIONS[componentType];
+}
+
+// src/ts/components/componentCoreFactory.ts
+function createComponentCore(componentType, config2, progressManager, curriculumData2, overallProgressManager, navigationManager, settingsManager) {
+  const timeline2 = getTimelineInstance();
+  switch (componentType) {
+    case "basic_task":
+      return new BasicTaskCore(
+        config2,
+        progressManager,
+        timeline2,
+        overallProgressManager,
+        navigationManager,
+        settingsManager,
+        curriculumData2
+      );
+    // TODO: Add other component types as they're implemented
+    // case 'quiz':
+    //   return new QuizCore(
+    //     config as QuizComponentConfig,
+    //     progressManager as QuizProgressManager,
+    //     curriculumData
+    //   );
+    default:
+      throw new Error(
+        `Unknown component type: '${componentType}'. Add to componentCoreFactory.ts when implementing new component types.`
+      );
+  }
+}
+
+// src/ts/ui/componentCoordinator.ts
+var ComponentCoordinator = class {
+  constructor() {
+    this.componentsToMonitor = /* @__PURE__ */ new Map();
+    this.pageReady = true;
+    // No page load in progress
+    this.loadingCheckInterval = null;
+  }
+  /**
+   * Begin coordinating a new page load.
+   * 
+   * Starts monitoring component readiness and displays loading UI.
+   * Called by componentInstantiator when new components are created.
+   * 
+   * @param cores - Map of component cores to monitor (componentId -> core)
+   */
+  beginPageLoad(cores) {
+    console.log(`\u{1F3AC} ComponentCoordinator: Starting page load with ${cores.size} components`);
+    this.componentsToMonitor = new Map(cores);
+    this.pageReady = false;
+    this.startReadinessCheck();
+  }
+  /**
+   * Poll components for readiness.
+   * Runs every 50ms until all components report ready.
+   */
+  startReadinessCheck() {
+    if (this.loadingCheckInterval !== null) {
+      clearInterval(this.loadingCheckInterval);
+    }
+    this.loadingCheckInterval = window.setInterval(() => {
+      this.checkReadiness();
+    }, 50);
+  }
+  /**
+   * Check if all components are ready.
+   * When ready, release them and hide loading screen.
+   */
+  checkReadiness() {
+    const allReady = Array.from(this.componentsToMonitor.values()).every(
+      (core2) => {
+        try {
+          return true;
+        } catch (err) {
+          console.error("Error checking component readiness:", err);
+          return false;
+        }
+      }
+    );
+    if (allReady) {
+      this.releaseComponents();
+    }
+  }
+  /**
+   * Release all components for operations.
+   * Hides loading screen and enables message queues.
+   */
+  releaseComponents() {
+    console.log("\u2705 ComponentCoordinator: All components ready, releasing");
+    if (this.loadingCheckInterval !== null) {
+      clearInterval(this.loadingCheckInterval);
+      this.loadingCheckInterval = null;
+    }
+    this.pageReady = true;
+    this.componentsToMonitor.clear();
+  }
+  /**
+   * Check if current page is ready.
+   * 
+   * @returns true if no page load in progress
+   */
+  isPageReady() {
+    return this.pageReady;
+  }
+};
+var componentCoordinator = new ComponentCoordinator();
+
 // src/ts/core/componentInstantiator.ts
-function instantiateComponents(navigationState, lessonConfigs, componentManagers, curriculumData2) {
-  throw new Error("instantiateComponents() not yet implemented");
+function instantiateComponents(navigationState, lessonConfigs, componentManagers, curriculumData2, settingsManager, overallProgressManager, navigationManager) {
+  const currentEntityId = navigationState.currentEntityId;
+  const currentPage = navigationState.currentPage;
+  const lessonConfig = lessonConfigs.get(currentEntityId);
+  if (!lessonConfig) {
+    throw new Error(
+      `Lesson config not found for entity ${currentEntityId}. This indicates curriculum/YAML mismatch.`
+    );
+  }
+  const componentsOnPage = lessonConfig.components.filter(
+    (component) => component.page === currentPage
+  );
+  console.log(
+    `\u{1F4C4} Page ${currentPage} of entity ${currentEntityId}: ${componentsOnPage.length} components to instantiate`
+  );
+  const componentCores = /* @__PURE__ */ new Map();
+  const componentProgressPolling = /* @__PURE__ */ new Map();
+  const overallProgressPolling = /* @__PURE__ */ new Map();
+  const navigationPolling = /* @__PURE__ */ new Map();
+  const settingsPolling = /* @__PURE__ */ new Map();
+  for (const componentConfig of componentsOnPage) {
+    const componentId = componentConfig.id;
+    const componentType = componentIdToTypeMap.get(componentId);
+    if (!componentType) {
+      throw new Error(
+        `Component ${componentId} not found in componentIdToTypeMap. This indicates registry generation bug.`
+      );
+    }
+    if (!hasPermissions(componentType)) {
+      throw new Error(
+        `Component type '${componentType}' has no defined permissions. Add to MESSAGE_TYPE_PERMISSIONS in componentPermissions.ts`
+      );
+    }
+    const progressManager = componentManagers.get(componentId);
+    if (!progressManager) {
+      throw new Error(
+        `Progress manager not found for component ${componentId}. This indicates startCore instantiation bug.`
+      );
+    }
+    try {
+      const core2 = createComponentCore(
+        componentType,
+        componentConfig,
+        progressManager,
+        curriculumData2,
+        overallProgressManager,
+        navigationManager,
+        settingsManager
+      );
+      componentCores.set(componentId, core2);
+    } catch (err) {
+      console.error(
+        `Failed to instantiate component ${componentId} (${componentType}):`,
+        err
+      );
+      throw new Error(
+        `Component instantiation failed for ${componentId}. Check componentCoreFactory and component constructor.`
+      );
+    }
+    const permissions = getPermissions(componentType);
+    if (!permissions) {
+      throw new Error(
+        `Permissions unexpectedly undefined for ${componentType}`
+      );
+    }
+    if (permissions.componentProgress) {
+      componentProgressPolling.set(componentId, componentType);
+    }
+    if (permissions.overallProgress) {
+      overallProgressPolling.set(componentId, componentType);
+    }
+    if (permissions.navigation) {
+      navigationPolling.set(componentId, componentType);
+    }
+    if (permissions.settings) {
+      settingsPolling.set(componentId, componentType);
+    }
+  }
+  console.log(`\u2705 Created ${componentCores.size} component cores`);
+  console.log(
+    `   - componentProgress: ${componentProgressPolling.size} allowed`
+  );
+  console.log(`   - overallProgress: ${overallProgressPolling.size} allowed`);
+  console.log(`   - navigation: ${navigationPolling.size} allowed`);
+  console.log(`   - settings: ${settingsPolling.size} allowed`);
+  componentCoordinator.beginPageLoad(componentCores);
+  return {
+    componentCores,
+    componentProgressPolling,
+    overallProgressPolling,
+    navigationPolling,
+    settingsPolling
+  };
 }
 
 // src/ts/core/runCore.ts
@@ -52657,7 +53380,10 @@ async function runCore(params) {
       navigationState,
       params.lessonConfigs,
       params.componentManagers,
-      params.curriculumData
+      params.curriculumData,
+      params.settingsManager,
+      params.overallProgressManager,
+      params.navigationManager
     );
     pageChanged = false;
     console.log(

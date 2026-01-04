@@ -6,9 +6,21 @@
  * Determines which components should be polled for each message type based on
  * permission rules defined in componentPermissions.ts.
  *
+ * Architecture: Primary/Secondary Managers Pattern
+ * - Main Core maintains primary managers (single source of truth)
+ * - Each component receives CLONED secondary manager with isolated state
+ * - Component mutations apply to secondary copy only
+ * - Component queues messages to Main Core
+ * - Main Core replays mutations on primary managers
+ * - Ensures all changes go through message queue (audit trail, validation)
+ *
  * Security: Only components with explicit permission are included in polling maps,
  * preventing unauthorized components from triggering navigation, settings, or
  * overall progress changes.
+ *
+ * Error Handling Strategy:
+ * - Deployment errors (registry bugs, missing managers): Fail-fast with clear diagnostics
+ * - Component code errors (buggy constructors, broken render): Isolate and skip component
  */
 
 import type {
@@ -20,15 +32,14 @@ import type { BaseComponentCore } from "../components/cores/baseComponentCore.js
 import type { BaseComponentProgressManager } from "../components/cores/baseComponentCore.js";
 import type { CurriculumRegistry } from "../registry/mera-registry.js";
 import {
-  MESSAGE_TYPE_PERMISSIONS,
   hasPermissions,
   getPermissions,
 } from "../components/componentPermissions.js";
 import {
   componentIdToTypeMap,
-  componentToLessonMap,
 } from "../registry/mera-registry.js";
 import { createComponentCore } from "../components/componentCoreFactory.js";
+import { createComponentProgressManager } from "../components/componentManagerFactory.js";
 import { componentCoordinator } from "../ui/componentCoordinator.js";
 import { IReadonlySettingsManager } from "./settingsSchema.js";
 import { IReadonlyOverallProgressManager } from "./overallProgressSchema.js";
@@ -58,9 +69,13 @@ export interface InstantiatedComponents {
 /**
  * Instantiate all components for the current page.
  *
+ * Creates isolated component Core instances with cloned secondary managers.
+ * Each component operates on its own secondary manager clone, queueing messages
+ * to synchronize with Main Core's primary managers.
+ *
  * @param navigationState - Current navigation state (determines which page)
  * @param lessonConfigs - Immutable parsed YAML lesson configurations
- * @param componentManagers - Progress managers for all components
+ * @param componentManagers - PRIMARY progress managers (Main Core's single source of truth)
  * @param curriculumData - Curriculum registry for validation
  * @param settingsManager - Readonly access to settings
  * @param overallProgressManager - Readonly access to overall progress
@@ -119,6 +134,10 @@ export function instantiateComponents(
   for (const componentConfig of componentsOnPage) {
     const componentId = componentConfig.id;
 
+    // ======================================================================
+    // Registry Lookups - FAIL FAST (deployment bugs)
+    // ======================================================================
+
     // Look up component type from registry
     const componentType = componentIdToTypeMap.get(componentId);
     if (!componentType) {
@@ -136,22 +155,43 @@ export function instantiateComponents(
       );
     }
 
-    // Get progress manager for this component
-    const progressManager = componentManagers.get(componentId);
-    if (!progressManager) {
+    // Get PRIMARY progress manager (Main Core's single source of truth)
+    const primaryManager = componentManagers.get(componentId);
+    if (!primaryManager) {
       throw new Error(
         `Progress manager not found for component ${componentId}. ` +
           `This indicates startCore instantiation bug.`
       );
     }
 
-    // Create component core via factory
-    // Factory handles type-specific construction
+    // =====================================================================
+    // Create SECONDARY manager with cloned progress data.
+    // Component operates on this isolated copy and queues messages.
+    // Main Core replays messages on primary manager to maintain sync.
+    //
+    // Why clone?
+    // - Prevents component from bypassing message queue
+    // - Ensures all mutations go through validation
+    // - Provides audit trail via message replay
+    // - Isolates component failures (buggy component can't corrupt primary)
+
+    const secondaryManager = createComponentProgressManager(
+      componentType,
+      componentConfig as any, // Type assertion: YAML parser guarantees BaseComponentConfig structure
+      primaryManager.getProgress() // ← Already cloned by getProgress()!
+    );
+
+    // ======================================================================
+    // Component Instantiation - ISOLATE ERRORS (component code bugs)
+    // ======================================================================
+
     try {
+      // Create component core via factory
+      // Factory handles type-specific construction
       const core = createComponentCore(
         componentType,
         componentConfig,
-        progressManager,
+        secondaryManager, // ← Component gets CLONED secondary manager
         curriculumData,
         overallProgressManager,
         navigationManager,
@@ -159,44 +199,45 @@ export function instantiateComponents(
       );
 
       componentCores.set(componentId, core);
+
+      // ====================================================================
+      // PHASE 3: Build permission-filtered polling maps
+      // ====================================================================
+      // Only add successfully instantiated components to polling maps
+
+      const permissions = getPermissions(componentType);
+      if (!permissions) {
+        // Should never happen due to hasPermissions check above
+        throw new Error(
+          `Permissions unexpectedly undefined for ${componentType}`
+        );
+      }
+
+      // Add to polling maps based on permissions
+      if (permissions.componentProgress) {
+        componentProgressPolling.set(componentId, componentType);
+      }
+
+      if (permissions.overallProgress) {
+        overallProgressPolling.set(componentId, componentType);
+      }
+
+      if (permissions.navigation) {
+        navigationPolling.set(componentId, componentType);
+      }
+
+      if (permissions.settings) {
+        settingsPolling.set(componentId, componentType);
+      }
     } catch (err) {
+      // Component code bug - isolate and skip this component
+      // Page continues loading with remaining components
       console.error(
-        `Failed to instantiate component ${componentId} (${componentType}):`,
+        `⚠️ Component ${componentId} (${componentType}) failed to instantiate - skipping:`,
         err
       );
-      throw new Error(
-        `Component instantiation failed for ${componentId}. ` +
-          `Check componentCoreFactory and component constructor.`
-      );
-    }
-
-    // ========================================================================
-    // PHASE 3: Build permission-filtered polling maps
-    // ========================================================================
-
-    const permissions = getPermissions(componentType);
-    if (!permissions) {
-      // Should never happen due to hasPermissions check above
-      throw new Error(
-        `Permissions unexpectedly undefined for ${componentType}`
-      );
-    }
-
-    // Add to polling maps based on permissions
-    if (permissions.componentProgress) {
-      componentProgressPolling.set(componentId, componentType);
-    }
-
-    if (permissions.overallProgress) {
-      overallProgressPolling.set(componentId, componentType);
-    }
-
-    if (permissions.navigation) {
-      navigationPolling.set(componentId, componentType);
-    }
-
-    if (permissions.settings) {
-      settingsPolling.set(componentId, componentType);
+      // Continue to next component without adding to cores or polling maps
+      continue;
     }
   }
 

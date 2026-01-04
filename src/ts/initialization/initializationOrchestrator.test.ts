@@ -25,7 +25,7 @@ vi.mock('./progressLoader.js', () => ({
 }));
 
 // Mock core
-vi.mock('../core/core.js', () => ({
+vi.mock('../core/startCore.js', () => ({
   startCore: vi.fn(),
 }));
 

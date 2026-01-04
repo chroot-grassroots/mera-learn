@@ -2,7 +2,9 @@
  * @fileoverview Basic task component with checkbox-based interactions
  * @module components/cores/basicTaskCore
  *
- * REFACTORED: Updated to remove .default() from schema and ensure consistent default handling.
+ * REFACTORED: 
+ * - Updated to remove .default() from schema and ensure consistent default handling
+ * - Manager now stores config internally - removed config parameter from methods
  * - Removed .default([]) from BasicTaskComponentProgressSchema
  * - Validators use explicit defaults
  * - createInitialProgress() explicitly sets lastUpdated: 0
@@ -24,6 +26,7 @@ import {
   BaseComponentProgress,
   BaseComponentProgressSchema,
   BaseComponentProgressManager,
+  IComponentProgressMessageHandler,
 } from "./baseComponentCore.js";
 import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import { TimelineContainer } from "../../ui/timelineContainer.js";
@@ -184,35 +187,34 @@ export function validateBasicTaskStructure(
  * 
  * REFACTORED: 
  * - Inherits input/output cloning from BaseComponentProgressManager
+ * - Stores config reference internally (no longer passed to methods)
  * - Protected progress field allows direct mutation
  * - Component-level timestamp merge (newest wins entire component)
  */
-export class BasicTaskProgressManager extends BaseComponentProgressManager<BasicTaskComponentProgress> {
+export class BasicTaskProgressManager extends BaseComponentProgressManager<
+  BasicTaskComponentConfig,
+  BasicTaskComponentProgress
+> {
   /**
    * Set individual checkbox state with validation
    *
    * Uses shared validation helpers to ensure index is valid and
    * progress structure matches config. Calls updateTimestamp() after mutation.
    *
-   * @param config - Component configuration
    * @param index - Checkbox index to update
    * @param checked - New checked state
    * @throws Error if index out of bounds or structure mismatch
    */
-  setCheckboxState(
-    config: BasicTaskComponentConfig,
-    index: number,
-    checked: boolean
-  ): void {
-    // Validate structure using shared helper
-    if (!isValidProgressStructure(this.progress, config)) {
+  setCheckboxState(index: number, checked: boolean): void {
+    // Validate structure using shared helper (uses this.config)
+    if (!isValidProgressStructure(this.progress, this.config)) {
       throw new Error(
-        `Progress has ${this.progress.checkbox_checked.length} checkboxes, config expects ${config.checkboxes.length}`
+        `Progress has ${this.progress.checkbox_checked.length} checkboxes, config expects ${this.config.checkboxes.length}`
       );
     }
 
-    // Validate index using shared helper
-    if (!isValidCheckboxIndex(index, config)) {
+    // Validate index using shared helper (uses this.config)
+    if (!isValidCheckboxIndex(index, this.config)) {
       throw new Error(`Checkbox index ${index} out of range`);
     }
 
@@ -342,8 +344,8 @@ export class BasicTaskCore extends BaseComponentCore<
    * Set checkbox state and queue message to main core
    */
   setCheckboxState(index: number, checked: boolean): void {
+    // Manager now has config internally - no need to pass it
     (this._progressManager as BasicTaskProgressManager).setCheckboxState(
-      this._config,
       index,
       checked
     );
@@ -379,5 +381,50 @@ export class BasicTaskCore extends BaseComponentCore<
    */
   getComponentProgressMessages(): ComponentProgressMessage[] {
     return this._componentProgressQueueManager.getMessages();
+  }
+}
+
+// ============================================================================
+// MESSAGE HANDLER
+// ============================================================================
+
+/**
+ * Validates and executes basic task progress messages in Main Core.
+ * 
+ * Routes validated messages to appropriate BasicTaskProgressManager methods.
+ * Only whitelisted methods can be called via messages - security boundary.
+ */
+export class BasicTaskProgressMessageHandler implements IComponentProgressMessageHandler {
+  constructor(
+    private componentManagers: Map<number, BaseComponentProgressManager<any, any>>
+  ) {}
+  
+  getComponentType(): string {
+    return 'basic_task';
+  }
+  
+  handleMessage(message: ComponentProgressMessage): void {
+    // Get the manager for this component
+    const manager = this.componentManagers.get(message.componentId) as BasicTaskProgressManager;
+    
+    if (!manager) {
+      throw new Error(`No manager found for component ${message.componentId}`);
+    }
+    
+    // Whitelist of allowed methods for BasicTask components - security boundary
+    switch (message.method) {
+      case 'setCheckboxState':
+        // Manager has config internally now - just pass the args
+        manager.setCheckboxState(
+          message.args[0] as number,
+          message.args[1] as boolean
+        );
+        break;
+      
+      default:
+        throw new Error(
+          `BasicTask components only support: setCheckboxState. Got: ${message.method}`
+        );
+    }
   }
 }

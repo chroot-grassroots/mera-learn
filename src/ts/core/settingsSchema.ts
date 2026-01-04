@@ -386,7 +386,7 @@ export type SettingsMessage = z.infer<typeof SettingsMessageSchema>;
  * Used by Main Core to process queued messages from components.
  * All messages validated before routing to ensure type safety.
  */
-export class SettingsMessageManager {
+export class SettingsMessageHandler {
   constructor(private settingsManager: SettingsDataManager) {}
 
   /**

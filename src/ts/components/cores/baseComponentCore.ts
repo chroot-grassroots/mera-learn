@@ -6,6 +6,7 @@
  * - Removed .default(0) from BaseComponentProgressSchema
  * - Added input/output cloning to BaseComponentProgressManager
  * - Made progress field private to enforce cloning boundaries
+ * - Manager now stores config reference (immutable, safe to share)
  *
  * Defines the Core/Interface component architecture that enables:
  * - Separation of data logic (Core) from UI rendering (Interface)
@@ -113,12 +114,15 @@ export type BaseComponentProgress = z.infer<typeof BaseComponentProgressSchema>;
 /**
  * Abstract base class for component progress management.
  *
- * REFACTORED: Added input/output cloning to prevent data corruption.
+ * REFACTORED: 
+ * - Added input/output cloning to prevent data corruption
+ * - Manager now stores config reference (immutable, safe to share between Core and Component)
  * 
  * CLONING STRATEGY:
- * - Constructor clones input to own internal copy
+ * - Constructor clones input progress to own internal copy
+ * - Constructor stores config reference (immutable, no cloning needed)
  * - getProgress() returns clone to prevent external mutations
- * - Mutations only affect internal copy
+ * - Mutations only affect internal progress copy
  * - Main Core cannot be corrupted by buggy component code
  *
  * MERGE STRATEGY: Component-level timestamp eliminates need for field-level trump strategies.
@@ -126,6 +130,7 @@ export type BaseComponentProgress = z.infer<typeof BaseComponentProgressSchema>;
  *
  * Responsibilities:
  * - Store current progress state (cloned and isolated)
+ * - Store config reference (immutable, shared)
  * - Provide validated mutation methods
  * - Define initial progress structure based on config
  * - Update timestamps on all mutations
@@ -141,22 +146,25 @@ export type BaseComponentProgress = z.infer<typeof BaseComponentProgressSchema>;
  * - Data isolation via cloning
  */
 export abstract class BaseComponentProgressManager<
+  TConfig extends BaseComponentConfig,
   TComponentProgress extends BaseComponentProgress
 > {
+  protected config: Readonly<TConfig>; // Immutable config - safe to share reference
   protected progress: TComponentProgress; // Protected - child classes can mutate, external code cannot
 
   /**
-   * Construct manager with cloned progress data.
+   * Construct manager with config reference and cloned progress data.
    * 
-   * CLONING: Input data is cloned to prevent external mutations from
-   * corrupting the manager's internal state. Main Core passes data in,
-   * but cannot accidentally mutate it afterward.
+   * CLONING: Progress data is cloned to prevent external mutations from
+   * corrupting the manager's internal state. Config is stored as readonly
+   * reference since it's immutable.
    * 
+   * @param config - Component configuration (immutable, safe to share reference)
    * @param initialProgress - Progress data from Main Core (will be cloned)
    */
-  constructor(initialProgress: TComponentProgress) {
-    // Clone input - manager owns its own copy
-    this.progress = structuredClone(initialProgress);
+  constructor(config: TConfig, initialProgress: TComponentProgress) {
+    this.config = config; // Store reference - config is immutable
+    this.progress = structuredClone(initialProgress); // Clone progress
   }
 
   /**
@@ -200,7 +208,7 @@ export abstract class BaseComponentProgressManager<
    * @returns Fresh progress object with all fields initialized
    */
   abstract createInitialProgress(
-    config: BaseComponentConfig
+    config: TConfig
   ): TComponentProgress;
 }
 
@@ -239,7 +247,7 @@ export abstract class BaseComponentCore<
   TComponentProgress extends BaseComponentProgress
 > {
   protected _config: TConfig;
-  protected _progressManager: BaseComponentProgressManager<TComponentProgress>;
+  protected _progressManager: BaseComponentProgressManager<TConfig, TComponentProgress>;
   
   // Standard queue managers available to all components
   // Components queue messages here; Main Core polls and processes them
@@ -265,7 +273,7 @@ export abstract class BaseComponentCore<
    */
   constructor(
     config: Readonly<TConfig>,
-    progressManager: BaseComponentProgressManager<TComponentProgress>,
+    progressManager: BaseComponentProgressManager<TConfig, TComponentProgress>,
     timeline: TimelineContainer,
     readonly overallProgress: Readonly<OverallProgressData>,
     readonly navigationState: Readonly<NavigationState>,
@@ -399,4 +407,15 @@ export abstract class BaseComponentCore<
   getOverallProgressMessages(): OverallProgressMessage[] {
     return this._overallProgressQueueManager.getMessages();
   }
+}
+
+/**
+ * Interface all component progress message handlers must implement.
+ * 
+ * Each component type (BasicTask, Quiz, etc.) has a handler that validates
+ * and routes messages to the appropriate manager methods.
+ */
+export interface IComponentProgressMessageHandler {
+  handleMessage(message: ComponentProgressMessage): void;
+  getComponentType(): string;
 }

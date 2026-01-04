@@ -22,7 +22,6 @@ import { MeraBridge } from '../solid/meraBridge.js';
 import { SaveManager } from '../persistence/saveManager.js';
 import { SaveCleaner } from '../persistence/saveCleaner.js';
 import { showCriticalError } from '../ui/errorDisplay.js';
-import type { PodStorageBundle } from '../persistence/podStorageSchema.js';
 import { startCore } from '../core/core.js';
 
 // ============================================================================

@@ -331,7 +331,7 @@ export type NavigationMessage = z.infer<typeof NavigationMessageSchema>;
  * to NavigationStateManager. Used by Main Core to handle queued
  * component navigation requests.
  */
-export class NavigationMessageManager {
+export class NavigationMessageHandler {
   constructor(
     private navigationManager: NavigationStateManager,
     private curriculumRegistry: CurriculumRegistry

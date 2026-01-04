@@ -1,8 +1,8 @@
-// src/ts/core/navigationSchema_test.ts
+// src/ts/core/navigationSchema.test.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   NavigationStateManager,
-  NavigationMessageManager,
+  NavigationMessageHandler,
   NavigationMessageQueueManager,
   getDefaultNavigationState,
 } from './navigationSchema.js';
@@ -218,10 +218,10 @@ describe('NavigationMessageQueueManager', () => {
   });
 });
 
-describe('NavigationMessageManager', () => {
+describe('NavigationMessageHandler', () => {
   let mockRegistry: any;
   let mockStateManager: any;
-  let messageManager: NavigationMessageManager;
+  let messageHandler: NavigationMessageHandler;
 
   beforeEach(() => {
     mockRegistry = {
@@ -233,7 +233,7 @@ describe('NavigationMessageManager', () => {
       setCurrentView: vi.fn(),
     };
     
-    messageManager = new NavigationMessageManager(mockStateManager, mockRegistry);
+    messageHandler = new NavigationMessageHandler(mockStateManager, mockRegistry);
   });
 
   describe('handleMessage', () => {
@@ -243,7 +243,7 @@ describe('NavigationMessageManager', () => {
         args: [100, 2] as [number, number],
       };
       
-      messageManager.handleMessage(message);
+      messageHandler.handleMessage(message);
       
       expect(mockStateManager.setCurrentView).toHaveBeenCalledWith(100, 2);
     });
@@ -254,7 +254,7 @@ describe('NavigationMessageManager', () => {
         args: [999, 0] as [number, number],
       };
       
-      expect(() => messageManager.handleMessage(message))
+      expect(() => messageHandler.handleMessage(message))
         .toThrow('Invalid entity ID: 999');
     });
 
@@ -264,7 +264,7 @@ describe('NavigationMessageManager', () => {
         args: [100, 10] as [number, number],
       };
       
-      expect(() => messageManager.handleMessage(message))
+      expect(() => messageHandler.handleMessage(message))
         .toThrow('Invalid page 10 for entity 100');
     });
   });

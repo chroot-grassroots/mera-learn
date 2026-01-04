@@ -28,14 +28,13 @@ import {
 } from "./baseComponentCore.js";
 import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import { TimelineContainer } from "../../ui/timelineContainer.js";
-import { OverallProgressData } from "../../core/overallProgressSchema.js";
-import { NavigationState } from "../../core/navigationSchema.js";
-import { SettingsData } from "../../core/settingsSchema.js";
 import {
   ComponentProgressMessage,
 } from "../../core/coreTypes.js";
 import { CurriculumRegistry } from "../../registry/mera-registry.js";
-
+import type { IReadonlyOverallProgressManager } from '../../core/overallProgressSchema.js';
+import type { IReadonlyNavigationManager } from '../../core/navigationSchema.js';
+import type { IReadonlySettingsManager } from '../../core/settingsSchema.js';
 // ============================================================================
 // SCHEMAS
 // ============================================================================
@@ -300,20 +299,21 @@ export class BasicTaskCore extends BaseComponentCore<
 
   constructor(
     config: BasicTaskComponentConfig,
-    progressManager: BasicTaskProgressManager,
-    timeline: TimelineContainer,
-    overallProgress: Readonly<OverallProgressData>,
-    navigationState: Readonly<NavigationState>,
-    settings: Readonly<SettingsData>,
-    curriculumRegistry: CurriculumRegistry
+  progressManager: BasicTaskProgressManager,
+  timeline: TimelineContainer,
+  overallProgressManager: IReadonlyOverallProgressManager,
+  navigationManager: IReadonlyNavigationManager,
+  settingsManager: IReadonlySettingsManager,
+  curriculumRegistry: CurriculumRegistry
+
   ) {
     super(
       config,
       progressManager,
       timeline,
-      overallProgress,
-      navigationState,
-      settings,
+      overallProgressManager,
+      navigationManager,
+      settingsManager,
       curriculumRegistry
     );
 

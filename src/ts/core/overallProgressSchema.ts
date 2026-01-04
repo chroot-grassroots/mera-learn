@@ -74,7 +74,7 @@ export type CompletionData = z.infer<typeof CompletionDataSchema>;
  * - lastStreakCheck: When streak was last validated
  * - totalLessonsCompleted: Corruption detection counter (must equal count of non-null timeCompleted)
  * - totalDomainsCompleted: Corruption detection counter (must equal count of non-null timeCompleted)
- * 
+ *
  * NOTE: No .default() on counters - progressIntegrity.ts handles defaulting explicitly
  * with proper metrics tracking.
  */
@@ -95,13 +95,13 @@ export type OverallProgressData = z.infer<typeof OverallProgressDataSchema>;
 
 /**
  * Get default overall progress for new users or recovery.
- * 
+ *
  * Used by:
  * - progressIntegrity.ts for data recovery
  * - New user initialization
- * 
+ *
  * Returns progress with empty completions and zero counters/streak.
- * 
+ *
  * @returns Complete OverallProgressData with defaults
  */
 export function getDefaultOverallProgress(): OverallProgressData {
@@ -131,7 +131,16 @@ export function getDefaultOverallProgress(): OverallProgressData {
  * All mutations validate against CurriculumRegistry to prevent
  * corruption from invalid lesson IDs or state inconsistencies.
  */
-export class OverallProgressManager {
+
+/**
+ * Readonly interface for components.
+ * Components can read overall progress but cannot mutate via this interface.
+ */
+export interface IReadonlyOverallProgressManager {
+  getProgress(): Readonly<OverallProgressData>;
+}
+
+export class OverallProgressManager implements IReadonlyOverallProgressManager {
   private progress: OverallProgressData;
 
   constructor(
@@ -189,15 +198,16 @@ export class OverallProgressManager {
     // Check for domain completion
     // Iterate through all domains to find which domain(s) contain this lesson
     for (const domainId of this.curriculumRegistry.getAllDomainIds()) {
-      const lessonIdsInDomain = this.curriculumRegistry.getLessonsInDomain(domainId);
-      
+      const lessonIdsInDomain =
+        this.curriculumRegistry.getLessonsInDomain(domainId);
+
       if (lessonIdsInDomain && lessonIdsInDomain.includes(lessonId)) {
         // Check if ALL lessons in this domain are now complete
-        const allComplete = lessonIdsInDomain.every(lid => {
+        const allComplete = lessonIdsInDomain.every((lid) => {
           const completion = this.progress.lessonCompletions[lid.toString()];
           return completion && completion.timeCompleted !== null;
         });
-        
+
         if (allComplete) {
           this.markDomainComplete(domainId);
         }

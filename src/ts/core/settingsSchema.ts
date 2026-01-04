@@ -153,7 +153,16 @@ export function getDefaultSettings(): SettingsData {
  * Provides readonly access via getter methods that return just the value (not timestamp).
  * Used directly by Main Core for settings updates.
  */
-export class SettingsDataManager {
+
+/**
+ * Readonly interface for components.
+ * Components can read settings but cannot mutate via this interface.
+ */
+export interface IReadonlySettingsManager {
+  getSettings(): Readonly<SettingsData>;
+}
+
+export class SettingsDataManager implements IReadonlySettingsManager {
   private settings: SettingsData;
 
   constructor(initialSettings: SettingsData) {

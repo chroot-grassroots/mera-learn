@@ -52641,16 +52641,35 @@ function createComponentProgressHandlers(componentManagers) {
   return handlers;
 }
 
+// src/ts/core/componentInstantiator.ts
+function instantiateComponents(navigationState, lessonConfigs, componentManagers, curriculumData2) {
+  throw new Error("instantiateComponents() not yet implemented");
+}
+
 // src/ts/core/runCore.ts
 async function runCore(params) {
   console.log("\u{1F504} Starting main polling loop (50ms)...");
-  await new Promise(() => {
-  });
+  let pageChanged = true;
+  let currentComponents = null;
+  while (true) {
+    const navigationState = params.navigationManager.getState();
+    currentComponents = instantiateComponents(
+      navigationState,
+      params.lessonConfigs,
+      params.componentManagers,
+      params.curriculumData
+    );
+    pageChanged = false;
+    console.log(
+      `\u{1F4E6} Instantiated ${currentComponents.componentCores.size} components`
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }
 
 // src/ts/core/startCore.ts
 async function startCore(bundle, lessonConfigs) {
-  console.log("\u{1F680} Starting Main Application Core...");
+  console.log("\u{1F680} Starting Main Application Core initialization...");
   console.log("  Progress bundle:", {
     webId: bundle.metadata.webId,
     lessonsCompleted: Object.keys(bundle.overallProgress.lessonCompletions).length,
@@ -52672,34 +52691,41 @@ async function startCore(bundle, lessonConfigs) {
     bundle.combinedComponentProgress.components
   )) {
     const componentId = Number(componentIdStr);
+    if (!Number.isInteger(componentId)) {
+      throw new Error(
+        `Invalid component ID format in bundle: "${componentIdStr}" (expected integer)`
+      );
+    }
     const componentType = componentIdToTypeMap.get(componentId);
     if (!componentType) {
       throw new Error(
-        `No component type mapping found for component ID ${componentId}. This indicates corrupted registry or progress data.`
+        `No component type mapping found for component ID ${componentId}. This indicates registry generation bug or deployment error. Registry must be regenerated with current curriculum.`
       );
     }
     const lessonId = componentToLessonMap.get(componentId);
     if (!lessonId) {
       throw new Error(
-        `No lesson mapping found for component ID ${componentId}`
+        `No lesson mapping found for component ID ${componentId}. This indicates registry generation bug or corrupted mappings.`
       );
     }
     const lessonConfig = lessonConfigs.get(lessonId);
     if (!lessonConfig) {
-      throw new Error(`No lesson config found for lesson ID ${lessonId}`);
+      throw new Error(
+        `No lesson config found for lesson ID ${lessonId}. This indicates YAML parser failure or orchestration bug. Expected ${lessonConfigs.size} lessons, missing lesson ${lessonId}.`
+      );
     }
     const componentConfig = lessonConfig.components.find(
       (c) => c.id === componentId
     );
     if (!componentConfig) {
       throw new Error(
-        `Component ${componentId} not found in lesson ${lessonId} config`
+        `Component ${componentId} not found in lesson ${lessonId} config. This indicates structure mismatch between registry and YAML. Lesson has ${lessonConfig.components.length} components.`
       );
     }
+    const typedConfig = componentConfig;
     const manager = createComponentProgressManager(
       componentType,
-      componentConfig,
-      // Pass config as second parameter
+      typedConfig,
       progressData
     );
     componentManagers.set(componentId, manager);
@@ -52714,7 +52740,7 @@ async function startCore(bundle, lessonConfigs) {
     curriculumData
   );
   const componentProgressHandlers = createComponentProgressHandlers(componentManagers);
-  console.log("\u2705 All managers and handlers instantiated");
+  console.log("\u2705 All managers and handlers instantiated successfully");
   try {
     await runCore({
       settingsManager,

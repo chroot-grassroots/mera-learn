@@ -232,3 +232,37 @@ export class TimelineContainer {
         };
     }
 }
+
+/**
+ * Singleton instance - created once and shared across application
+ * Bootstrap initializes this before starting core
+ */
+let timelineInstance: TimelineContainer | null = null;
+
+/**
+ * Initialize the singleton timeline instance
+ * Called once by bootstrap during initialization
+ */
+export function initializeTimeline(containerId: string = 'lesson-container'): TimelineContainer {
+  if (timelineInstance) {
+    console.warn('⚠️ Timeline already initialized, returning existing instance');
+    return timelineInstance;
+  }
+  
+  timelineInstance = new TimelineContainer(containerId);
+  console.log('✅ Timeline singleton initialized');
+  return timelineInstance;
+}
+
+/**
+ * Get the singleton timeline instance
+ * @throws Error if timeline not yet initialized
+ */
+export function getTimelineInstance(): TimelineContainer {
+  if (!timelineInstance) {
+    throw new Error(
+      'Timeline not initialized. Call initializeTimeline() in bootstrap first.'
+    );
+  }
+  return timelineInstance;
+}

@@ -10,7 +10,7 @@
  * - Shared validation helpers: Atomic checks used by both validators and managers
  * - Full validators: Pure functions that validate entire navigation state
  * - Manager classes: Use helpers for defensive runtime validation
- * 
+ *
  * CLONING STRATEGY:
  * - Constructor: Clones input data to prevent external mutations
  * - getState(): Returns clone to prevent external access to internal state
@@ -18,7 +18,7 @@
  */
 
 import { z } from "zod";
-import { ImmutableId} from "./coreTypes.js";
+import { ImmutableId } from "./coreTypes.js";
 import { CurriculumRegistry } from "../registry/mera-registry.js";
 
 /**
@@ -26,7 +26,7 @@ import { CurriculumRegistry } from "../registry/mera-registry.js";
  *
  * Stores lesson/menu (entity) immutable ID, current page number,
  * and when it was last updated.
- * 
+ *
  * NOTE: No .default() on lastUpdated - progressIntegrity.ts handles defaulting
  * explicitly with proper metrics tracking.
  */
@@ -44,16 +44,16 @@ export type NavigationState = z.infer<typeof NavigationStateSchema>;
 
 /**
  * Get default navigation state (main menu, timestamp 0).
- * 
+ *
  * Used by:
  * - progressIntegrity.ts for navigation recovery when entity deleted
  * - New user initialization
  * - Stale session reversion (>30 min old)
- * 
+ *
  * Timestamp 0 semantics:
  * - Indicates "never set by user" or "defaulted on load"
  * - Always loses in merge conflict resolution (any timestamp > 0 wins)
- * 
+ *
  * @returns Default NavigationState pointing to main menu
  */
 export function getDefaultNavigationState(): NavigationState {
@@ -176,13 +176,22 @@ export function validateNavigationEntity(
  *
  * All mutations validate against CurriculumRegistry to prevent
  * corruption by ensuring lesson/menu and page exist.
- * 
+ *
  * CLONING STRATEGY:
  * - Constructor clones input to own internal copy
  * - getState() returns clone to prevent external mutations
  * - Mutations only affect internal copy
  */
-export class NavigationStateManager {
+
+/**
+ * Readonly interface for components.
+ * Components can read navigation state but cannot mutate via this interface.
+ */
+export interface IReadonlyNavigationManager {
+  getState(): Readonly<NavigationState>;
+}
+
+export class NavigationStateManager implements IReadonlyNavigationManager {
   private state: NavigationState;
 
   constructor(
@@ -198,7 +207,7 @@ export class NavigationStateManager {
    *
    * Clone ensures external code cannot mutate manager's internal state.
    * Validates before returning using private helper.
-   * 
+   *
    * @returns Cloned navigation state
    * @throws Error if current state is invalid (entity/page doesn't exist)
    */
@@ -212,7 +221,7 @@ export class NavigationStateManager {
    * Returns current view for startup after page load.
    *
    * Reverts to main menu if timestamp is older than 30 minutes.
-   * 
+   *
    * @returns Entity ID and page number for startup
    */
   getCurrentViewStartup(): { entityId: number; page: number } {
@@ -236,7 +245,7 @@ export class NavigationStateManager {
    * Returns current view while running.
    *
    * Used by core to check if new page needs to be loaded.
-   * 
+   *
    * @returns Entity ID and page number
    */
   getCurrentViewRunning(): { entityId: number; page: number } {
@@ -251,7 +260,7 @@ export class NavigationStateManager {
    *
    * The only setter available via messages from components.
    * Completely replaces current state with new timestamp.
-   * 
+   *
    * @param entityId - Entity ID to navigate to
    * @param page - Page number within entity
    */
@@ -287,8 +296,11 @@ export class NavigationStateManager {
       );
     }
 
-    if (!isValidPageNumber(currentEntityId, currentPage, this.curriculumRegistry)) {
-      const pageCount = this.curriculumRegistry.getEntityPageCount(currentEntityId);
+    if (
+      !isValidPageNumber(currentEntityId, currentPage, this.curriculumRegistry)
+    ) {
+      const pageCount =
+        this.curriculumRegistry.getEntityPageCount(currentEntityId);
       throw new Error(
         `Invalid navigation state: Page ${currentPage} exceeds entity ${currentEntityId} page count (${pageCount})`
       );

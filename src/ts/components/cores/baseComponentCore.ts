@@ -2,7 +2,7 @@
  * @fileoverview Base classes for all interactive learning components with timestamp support
  * @module components/cores/baseComponentCore
  *
- * REFACTORED: 
+ * REFACTORED:
  * - Removed .default(0) from BaseComponentProgressSchema
  * - Added input/output cloning to BaseComponentProgressManager
  * - Made progress field private to enforce cloning boundaries
@@ -29,6 +29,7 @@ import { z } from "zod";
 import { TimelineContainer } from "../../ui/timelineContainer.js";
 import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import {
+  IReadonlyOverallProgressManager,
   OverallProgressData,
   OverallProgressMessage,
   OverallProgressMessageQueueManager,
@@ -38,18 +39,17 @@ import {
   NavigationState,
   NavigationMessage,
   NavigationMessageQueueManager,
+  IReadonlyNavigationManager,
 } from "../../core/navigationSchema.js";
 
-import { 
-  SettingsData, 
+import {
+  IReadonlySettingsManager,
+  SettingsData,
   SettingsMessage,
   SettingsMessageQueueManager,
 } from "../../core/settingsSchema.js";
 
-import { 
-  ComponentProgressMessage, 
-  ImmutableId,
-} from "../../core/coreTypes.js";
+import { ComponentProgressMessage, ImmutableId } from "../../core/coreTypes.js";
 
 import { CurriculumRegistry } from "../../registry/mera-registry.js";
 
@@ -82,19 +82,19 @@ export type BaseComponentConfig = z.infer<typeof BaseComponentConfigSchema>;
  * Base progress schema that all component progress must extend.
  *
  * REFACTORED: Removed .default(0) from lastUpdated.
- * 
+ *
  * MERGE STRATEGY: Component-level timestamp means during offline/online sync,
  * the ENTIRE component progress from whichever version has the newest lastUpdated
  * is kept. No field-level merging needed - simple and deterministic.
- * 
+ *
  * Example:
  * - Offline: { checkbox_checked: [true, false], lastUpdated: 1000 }
  * - Online:  { checkbox_checked: [false, true], lastUpdated: 2000 }
  * - Result:  { checkbox_checked: [false, true], lastUpdated: 2000 } (online wins)
- * 
+ *
  * All component-specific progress schemas extend this, inheriting the timestamp.
  * Concrete components add their own fields (checkboxes, answers, scores, etc.).
- * 
+ *
  * TIMESTAMP SEMANTICS:
  * - 0 = never set by user (default/initial state)
  * - >0 = user-modified (Unix timestamp in seconds)
@@ -113,10 +113,10 @@ export type BaseComponentProgress = z.infer<typeof BaseComponentProgressSchema>;
 /**
  * Abstract base class for component progress management.
  *
- * REFACTORED: 
+ * REFACTORED:
  * - Added input/output cloning to prevent data corruption
  * - Manager now stores config reference (immutable, safe to share between Core and Component)
- * 
+ *
  * CLONING STRATEGY:
  * - Constructor clones input progress to own internal copy
  * - Constructor stores config reference (immutable, no cloning needed)
@@ -153,11 +153,11 @@ export abstract class BaseComponentProgressManager<
 
   /**
    * Construct manager with config reference and cloned progress data.
-   * 
+   *
    * CLONING: Progress data is cloned to prevent external mutations from
    * corrupting the manager's internal state. Config is stored as readonly
    * reference since it's immutable.
-   * 
+   *
    * @param config - Component configuration (immutable, safe to share reference)
    * @param initialProgress - Progress data from Main Core (will be cloned)
    */
@@ -172,7 +172,7 @@ export abstract class BaseComponentProgressManager<
    * CLONING: Returns clone to prevent external code from mutating the
    * manager's internal state. Component Core and Interface receive a
    * snapshot they can read but cannot corrupt.
-   * 
+   *
    * @returns Cloned progress state
    */
   getProgress(): TComponentProgress {
@@ -206,9 +206,7 @@ export abstract class BaseComponentProgressManager<
    * @param config Component configuration from YAML
    * @returns Fresh progress object with all fields initialized
    */
-  abstract createInitialProgress(
-    config: TConfig
-  ): TComponentProgress;
+  abstract createInitialProgress(config: TConfig): TComponentProgress;
 }
 
 // ============================================================================
@@ -246,17 +244,20 @@ export abstract class BaseComponentCore<
   TComponentProgress extends BaseComponentProgress
 > {
   protected _config: TConfig;
-  protected _progressManager: BaseComponentProgressManager<TConfig, TComponentProgress>;
-  
+  protected _progressManager: BaseComponentProgressManager<
+    TConfig,
+    TComponentProgress
+  >;
+
   // Standard queue managers available to all components
   // Components queue messages here; Main Core polls and processes them
   private _navigationQueueManager: NavigationMessageQueueManager;
   private _settingsQueueManager: SettingsMessageQueueManager;
   private _overallProgressQueueManager: OverallProgressMessageQueueManager;
-  
+
   // Component-specific progress queue manager
   // Defined by concrete component classes (not in base)
-  
+
   private _interface: BaseComponentInterface<TConfig, TComponentProgress, any>;
 
   /**
@@ -271,12 +272,12 @@ export abstract class BaseComponentCore<
    * @param curriculumRegistry Lesson/domain lookup for validation
    */
   constructor(
-    config: Readonly<TConfig>,
+    config: TConfig,
     progressManager: BaseComponentProgressManager<TConfig, TComponentProgress>,
     timeline: TimelineContainer,
-    readonly overallProgress: Readonly<OverallProgressData>,
-    readonly navigationState: Readonly<NavigationState>,
-    readonly settings: Readonly<SettingsData>,
+    overallProgressManager: IReadonlyOverallProgressManager,
+    navigationManager: IReadonlyNavigationManager,
+    settingsManager: IReadonlySettingsManager,
     curriculumRegistry: CurriculumRegistry
   ) {
     this._config = config;
@@ -348,7 +349,9 @@ export abstract class BaseComponentCore<
   /**
    * Get component interface instance (readonly)
    */
-  get interface(): Readonly<BaseComponentInterface<TConfig, TComponentProgress, any>> {
+  get interface(): Readonly<
+    BaseComponentInterface<TConfig, TComponentProgress, any>
+  > {
     return this._interface;
   }
 
@@ -410,7 +413,7 @@ export abstract class BaseComponentCore<
 
 /**
  * Interface all component progress message handlers must implement.
- * 
+ *
  * Each component type (BasicTask, Quiz, etc.) has a handler that validates
  * and routes messages to the appropriate manager methods.
  */

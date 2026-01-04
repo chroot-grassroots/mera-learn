@@ -18,7 +18,7 @@
  */
 
 import { z } from "zod";
-import { ImmutableId, TrumpStrategy } from "./coreTypes.js";
+import { ImmutableId} from "./coreTypes.js";
 import { CurriculumRegistry } from "../registry/mera-registry.js";
 
 /**
@@ -268,21 +268,6 @@ export class NavigationStateManager {
     this.state.currentEntityId = 0;
     this.state.currentPage = 0;
     this.state.lastUpdated = Math.floor(Date.now() / 1000);
-  }
-
-  /**
-   * Define trump strategies for offline/online conflict resolution.
-   *
-   * Most recent timestamp wins for all fields.
-   * 
-   * @returns Trump strategy map for all navigation fields
-   */
-  getAllTrumpStrategies(): Record<keyof NavigationState, TrumpStrategy<any>> {
-    return {
-      currentEntityId: "LATEST_TIMESTAMP",
-      currentPage: "LATEST_TIMESTAMP",
-      lastUpdated: "LATEST_TIMESTAMP",
-    };
   }
 
   /**

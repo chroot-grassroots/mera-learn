@@ -49,7 +49,6 @@ import {
 import { 
   ComponentProgressMessage, 
   ImmutableId,
-  TrumpStrategy,
 } from "../../core/coreTypes.js";
 
 import { CurriculumRegistry } from "../../registry/mera-registry.js";

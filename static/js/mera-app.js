@@ -46864,6 +46864,12 @@ config(en_default());
 var ImmutableId = external_exports.number().int().min(0).max(999999999999);
 
 // src/ts/core/overallProgressSchema.ts
+function isValidLessonId(lessonId, registry2) {
+  return registry2.hasLesson(lessonId);
+}
+function isValidDomainId(domainId, registry2) {
+  return registry2.hasDomain(domainId);
+}
 var CompletionDataSchema = external_exports.object({
   timeCompleted: external_exports.number().nullable(),
   lastUpdated: external_exports.number()
@@ -46886,6 +46892,189 @@ function getDefaultOverallProgress() {
     totalDomainsCompleted: 0
   };
 }
+var OverallProgressManager = class {
+  constructor(initialProgress, curriculumRegistry) {
+    this.curriculumRegistry = curriculumRegistry;
+    this.progress = structuredClone(initialProgress);
+  }
+  /**
+   * Returns cloned progress data for persistence.
+   *
+   * Clone ensures external code cannot mutate manager's internal state.
+   * Core calls this during save to build the bundle.
+   */
+  getProgress() {
+    return structuredClone(this.progress);
+  }
+  /**
+   * Mark a lesson as complete with current timestamp.
+   *
+   * Validates lesson exists in curriculum using shared helper.
+   * Updates lastUpdated even if already completed (tracks most recent interaction).
+   * Sets timeCompleted only on first completion, increments counter accordingly.
+   *
+   * @param lessonId - Lesson to mark complete
+   * @throws Error if lesson ID not in curriculum
+   */
+  markLessonComplete(lessonId) {
+    if (!isValidLessonId(lessonId, this.curriculumRegistry)) {
+      throw new Error(`Invalid lesson ID: ${lessonId}`);
+    }
+    const lessonKey = lessonId.toString();
+    const timestamp2 = Math.floor(Date.now() / 1e3);
+    const current = this.progress.lessonCompletions[lessonKey];
+    if (!current || current.timeCompleted === null) {
+      this.progress.lessonCompletions[lessonKey] = {
+        timeCompleted: timestamp2,
+        lastUpdated: timestamp2
+      };
+      this.progress.totalLessonsCompleted++;
+    } else {
+      this.progress.lessonCompletions[lessonKey] = {
+        timeCompleted: current.timeCompleted,
+        lastUpdated: timestamp2
+      };
+    }
+    for (const domainId of this.curriculumRegistry.getAllDomainIds()) {
+      const lessonIdsInDomain = this.curriculumRegistry.getLessonsInDomain(domainId);
+      if (lessonIdsInDomain && lessonIdsInDomain.includes(lessonId)) {
+        const allComplete = lessonIdsInDomain.every((lid) => {
+          const completion = this.progress.lessonCompletions[lid.toString()];
+          return completion && completion.timeCompleted !== null;
+        });
+        if (allComplete) {
+          this.markDomainComplete(domainId);
+        }
+      }
+    }
+  }
+  /**
+   * Mark a lesson as incomplete (set timeCompleted to null).
+   *
+   * Validates lesson exists in curriculum using shared helper.
+   * Updates lastUpdated to track when incompletion happened.
+   * Safe to call even if lesson was not completed.
+   * Decrements counter only if lesson was actually completed.
+   *
+   * @param lessonId - Lesson to mark incomplete
+   * @throws Error if lesson ID not in curriculum
+   */
+  markLessonIncomplete(lessonId) {
+    if (!isValidLessonId(lessonId, this.curriculumRegistry)) {
+      throw new Error(`Invalid lesson ID: ${lessonId}`);
+    }
+    const lessonKey = lessonId.toString();
+    const timestamp2 = Math.floor(Date.now() / 1e3);
+    const current = this.progress.lessonCompletions[lessonKey];
+    if (current && current.timeCompleted !== null) {
+      this.progress.lessonCompletions[lessonKey] = {
+        timeCompleted: null,
+        lastUpdated: timestamp2
+      };
+      this.progress.totalLessonsCompleted--;
+    } else if (current) {
+      this.progress.lessonCompletions[lessonKey] = {
+        timeCompleted: null,
+        lastUpdated: timestamp2
+      };
+    } else {
+      this.progress.lessonCompletions[lessonKey] = {
+        timeCompleted: null,
+        lastUpdated: timestamp2
+      };
+    }
+  }
+  /**
+   * Mark a domain as complete with current timestamp.
+   *
+   * Similar logic to markLessonComplete but for domains.
+   *
+   * @param domainId - Domain to mark complete
+   * @throws Error if domain ID not in curriculum
+   */
+  markDomainComplete(domainId) {
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(`Invalid domain ID: ${domainId}`);
+    }
+    const domainKey = domainId.toString();
+    const timestamp2 = Math.floor(Date.now() / 1e3);
+    const current = this.progress.domainCompletions[domainKey];
+    if (!current || current.timeCompleted === null) {
+      this.progress.domainCompletions[domainKey] = {
+        timeCompleted: timestamp2,
+        lastUpdated: timestamp2
+      };
+      this.progress.totalDomainsCompleted++;
+    } else {
+      this.progress.domainCompletions[domainKey] = {
+        timeCompleted: current.timeCompleted,
+        lastUpdated: timestamp2
+      };
+    }
+  }
+  /**
+   * Mark a domain as incomplete (set timeCompleted to null).
+   *
+   * Similar logic to markLessonIncomplete but for domains.
+   *
+   * @param domainId - Domain to mark incomplete
+   * @throws Error if domain ID not in curriculum
+   */
+  markDomainIncomplete(domainId) {
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(`Invalid domain ID: ${domainId}`);
+    }
+    const domainKey = domainId.toString();
+    const timestamp2 = Math.floor(Date.now() / 1e3);
+    const current = this.progress.domainCompletions[domainKey];
+    if (current && current.timeCompleted !== null) {
+      this.progress.domainCompletions[domainKey] = {
+        timeCompleted: null,
+        lastUpdated: timestamp2
+      };
+      this.progress.totalDomainsCompleted--;
+    } else if (current) {
+      this.progress.domainCompletions[domainKey] = {
+        timeCompleted: null,
+        lastUpdated: timestamp2
+      };
+    } else {
+      this.progress.domainCompletions[domainKey] = {
+        timeCompleted: null,
+        lastUpdated: timestamp2
+      };
+    }
+  }
+  /**
+   * Update streak to a specific value.
+   *
+   * Called by motivation component after validating weekly goals.
+   *
+   * @param newStreak - New streak value
+   */
+  updateStreak(newStreak) {
+    this.progress.currentStreak = newStreak;
+    this.progress.lastStreakCheck = Math.floor(Date.now() / 1e3);
+  }
+  /**
+   * Reset streak to zero.
+   *
+   * Called when weekly goal not met.
+   */
+  resetStreak() {
+    this.progress.currentStreak = 0;
+    this.progress.lastStreakCheck = Math.floor(Date.now() / 1e3);
+  }
+  /**
+   * Increment streak by one.
+   *
+   * Called when previous week's goal was met.
+   */
+  incrementStreak() {
+    this.progress.currentStreak += 1;
+    this.progress.lastStreakCheck = Math.floor(Date.now() / 1e3);
+  }
+};
 var OverallProgressMessageSchema = external_exports.object({
   method: external_exports.enum([
     "markLessonComplete",
@@ -46898,6 +47087,75 @@ var OverallProgressMessageSchema = external_exports.object({
   ]),
   args: external_exports.array(external_exports.any())
 });
+var OverallProgressMessageHandler = class {
+  constructor(progressManager, curriculumRegistry) {
+    this.progressManager = progressManager;
+    this.curriculumRegistry = curriculumRegistry;
+  }
+  /**
+   * Validate message structure and arguments.
+   *
+   * Checks method name, argument count, and value types.
+   * Does NOT validate entity IDs - that's done by manager methods.
+   *
+   * @param message - Message to validate
+   * @throws Error if message structure invalid
+   */
+  validateMessage(message2) {
+    const zodResult = OverallProgressMessageSchema.safeParse(message2);
+    if (!zodResult.success) {
+      throw new Error(
+        `Invalid overall progress message: ${zodResult.error.message}`
+      );
+    }
+    const argCounts = {
+      markLessonComplete: 1,
+      markLessonIncomplete: 1,
+      markDomainComplete: 1,
+      markDomainIncomplete: 1,
+      updateStreak: 1,
+      resetStreak: 0,
+      incrementStreak: 0
+    };
+    const expectedCount = argCounts[message2.method];
+    if (message2.args.length !== expectedCount) {
+      throw new Error(
+        `${message2.method} requires ${expectedCount} argument(s), got ${message2.args.length}`
+      );
+    }
+  }
+  /**
+   * Handle validated message by routing to manager.
+   *
+   * Routes validated message to appropriate OverallProgressManager method.
+   */
+  handleMessage(message2) {
+    this.validateMessage(message2);
+    switch (message2.method) {
+      case "markLessonComplete":
+        this.progressManager.markLessonComplete(message2.args[0]);
+        break;
+      case "markLessonIncomplete":
+        this.progressManager.markLessonIncomplete(message2.args[0]);
+        break;
+      case "markDomainComplete":
+        this.progressManager.markDomainComplete(message2.args[0]);
+        break;
+      case "markDomainIncomplete":
+        this.progressManager.markDomainIncomplete(message2.args[0]);
+        break;
+      case "updateStreak":
+        this.progressManager.updateStreak(message2.args[0]);
+        break;
+      case "resetStreak":
+        this.progressManager.resetStreak();
+        break;
+      case "incrementStreak":
+        this.progressManager.incrementStreak();
+        break;
+    }
+  }
+};
 
 // src/ts/core/settingsSchema.ts
 var SettingsDataSchema = external_exports.object({
@@ -46975,6 +47233,166 @@ function getDefaultSettings() {
     audioEnabled: [true, 0]
   };
 }
+var SettingsDataManager = class {
+  constructor(initialSettings) {
+    this.settings = structuredClone(initialSettings);
+  }
+  // Readonly getters for all settings (return value only, not timestamp)
+  getWeekStartDay() {
+    return this.settings.weekStartDay[0];
+  }
+  getWeekStartTimeUTC() {
+    return this.settings.weekStartTimeUTC[0];
+  }
+  getTheme() {
+    return this.settings.theme[0];
+  }
+  getLearningPace() {
+    return this.settings.learningPace[0];
+  }
+  getOptOutDailyPing() {
+    return this.settings.optOutDailyPing[0];
+  }
+  getOptOutErrorPing() {
+    return this.settings.optOutErrorPing[0];
+  }
+  getFontSize() {
+    return this.settings.fontSize[0];
+  }
+  getHighContrast() {
+    return this.settings.highContrast[0];
+  }
+  getReducedMotion() {
+    return this.settings.reducedMotion[0];
+  }
+  getFocusIndicatorStyle() {
+    return this.settings.focusIndicatorStyle[0];
+  }
+  getAudioEnabled() {
+    return this.settings.audioEnabled[0];
+  }
+  /**
+   * Returns cloned settings data for persistence.
+   *
+   * Clone ensures external code cannot mutate manager's internal state.
+   * Core calls this during save to build the bundle.
+   */
+  getSettings() {
+    return structuredClone(this.settings);
+  }
+  // Setters construct tuple and validate against schema (ensures schema consistency)
+  setWeekStartDay(day2) {
+    const validated = SettingsDataSchema.shape.weekStartDay.parse([
+      day2,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.weekStartDay = validated;
+  }
+  setWeekStartTimeUTC(time3) {
+    const validated = SettingsDataSchema.shape.weekStartTimeUTC.parse([
+      time3,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.weekStartTimeUTC = validated;
+  }
+  setTheme(theme) {
+    const validated = SettingsDataSchema.shape.theme.parse([
+      theme,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.theme = validated;
+  }
+  setLearningPace(pace) {
+    const validated = SettingsDataSchema.shape.learningPace.parse([
+      pace,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.learningPace = validated;
+  }
+  setOptOutDailyPing(optOut) {
+    const validated = SettingsDataSchema.shape.optOutDailyPing.parse([
+      optOut,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.optOutDailyPing = validated;
+  }
+  setOptOutErrorPing(optOut) {
+    const validated = SettingsDataSchema.shape.optOutErrorPing.parse([
+      optOut,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.optOutErrorPing = validated;
+  }
+  setFontSize(size) {
+    const validated = SettingsDataSchema.shape.fontSize.parse([
+      size,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.fontSize = validated;
+  }
+  setHighContrast(enabled) {
+    const validated = SettingsDataSchema.shape.highContrast.parse([
+      enabled,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.highContrast = validated;
+  }
+  setReducedMotion(enabled) {
+    const validated = SettingsDataSchema.shape.reducedMotion.parse([
+      enabled,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.reducedMotion = validated;
+  }
+  setFocusIndicatorStyle(style) {
+    const validated = SettingsDataSchema.shape.focusIndicatorStyle.parse([
+      style,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.focusIndicatorStyle = validated;
+  }
+  setAudioEnabled(enabled) {
+    const validated = SettingsDataSchema.shape.audioEnabled.parse([
+      enabled,
+      Math.floor(Date.now() / 1e3)
+    ]);
+    this.settings.audioEnabled = validated;
+  }
+  /**
+   * Calculate Unix timestamp of last week start based on user's week preferences.
+   *
+   * Used by streak tracking to determine if user completed learning goals.
+   * Accounts for custom week start day and time in UTC.
+   */
+  getLastWeekStart() {
+    const now = /* @__PURE__ */ new Date();
+    const currentDay = now.getUTCDay();
+    const [weekStartTimeStr] = this.settings.weekStartTimeUTC;
+    const [hourStr, minuteStr] = weekStartTimeStr.split(":");
+    const weekStartHour = parseInt(hourStr, 10);
+    const weekStartMinute = parseInt(minuteStr, 10);
+    const weekStartDayMap = {
+      sunday: 0,
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6
+    };
+    const [weekStartDayValue] = this.settings.weekStartDay;
+    const targetDay = weekStartDayMap[weekStartDayValue];
+    let daysSinceWeekStart = currentDay - targetDay;
+    if (daysSinceWeekStart < 0) daysSinceWeekStart += 7;
+    const lastWeekStart = new Date(now);
+    lastWeekStart.setUTCDate(now.getUTCDate() - daysSinceWeekStart);
+    lastWeekStart.setUTCHours(weekStartHour, weekStartMinute, 0, 0);
+    if (lastWeekStart.getTime() > now.getTime()) {
+      lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
+    }
+    return Math.floor(lastWeekStart.getTime() / 1e3);
+  }
+};
 var SettingsMessageSchema = external_exports.object({
   method: external_exports.enum([
     "setWeekStartDay",
@@ -46992,6 +47410,132 @@ var SettingsMessageSchema = external_exports.object({
   args: external_exports.array(external_exports.any())
   // Validate per-method
 });
+var SettingsMessageHandler = class {
+  constructor(settingsManager) {
+    this.settingsManager = settingsManager;
+  }
+  /**
+   * Validate a settings message.
+   *
+   * Per-method validation of argument count and types.
+   *
+   * @param message - Settings message to validate
+   * @throws Error if message invalid
+   */
+  validateMessage(message2) {
+    switch (message2.method) {
+      case "setWeekStartDay":
+        if (message2.args.length !== 1) {
+          throw new Error("setWeekStartDay requires exactly 1 argument");
+        }
+        external_exports.enum(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]).parse(message2.args[0]);
+        break;
+      case "setWeekStartTimeUTC":
+        if (message2.args.length !== 1) {
+          throw new Error("setWeekStartTimeUTC requires exactly 1 argument");
+        }
+        external_exports.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).parse(message2.args[0]);
+        break;
+      case "setTheme":
+        if (message2.args.length !== 1) {
+          throw new Error("setTheme requires exactly 1 argument");
+        }
+        external_exports.enum(["light", "dark", "auto"]).parse(message2.args[0]);
+        break;
+      case "setLearningPace":
+        if (message2.args.length !== 1) {
+          throw new Error("setLearningPace requires exactly 1 argument");
+        }
+        external_exports.enum(["accelerated", "standard", "flexible"]).parse(message2.args[0]);
+        break;
+      case "setOptOutDailyPing":
+        if (message2.args.length !== 1) {
+          throw new Error("setOptOutDailyPing requires exactly 1 argument");
+        }
+        external_exports.boolean().parse(message2.args[0]);
+        break;
+      case "setOptOutErrorPing":
+        if (message2.args.length !== 1) {
+          throw new Error("setOptOutErrorPing requires exactly 1 argument");
+        }
+        external_exports.boolean().parse(message2.args[0]);
+        break;
+      case "setFontSize":
+        if (message2.args.length !== 1) {
+          throw new Error("setFontSize requires exactly 1 argument");
+        }
+        external_exports.enum(["small", "medium", "large"]).parse(message2.args[0]);
+        break;
+      case "setHighContrast":
+        if (message2.args.length !== 1) {
+          throw new Error("setHighContrast requires exactly 1 argument");
+        }
+        external_exports.boolean().parse(message2.args[0]);
+        break;
+      case "setReducedMotion":
+        if (message2.args.length !== 1) {
+          throw new Error("setReducedMotion requires exactly 1 argument");
+        }
+        external_exports.boolean().parse(message2.args[0]);
+        break;
+      case "setFocusIndicatorStyle":
+        if (message2.args.length !== 1) {
+          throw new Error("setFocusIndicatorStyle requires exactly 1 argument");
+        }
+        external_exports.enum(["default", "enhanced"]).parse(message2.args[0]);
+        break;
+      case "setAudioEnabled":
+        if (message2.args.length !== 1) {
+          throw new Error("setAudioEnabled requires exactly 1 argument");
+        }
+        external_exports.boolean().parse(message2.args[0]);
+        break;
+    }
+  }
+  /**
+   * Handle validated message.
+   *
+   * Routes validated message to appropriate SettingsDataManager method.
+   */
+  handleMessage(message2) {
+    this.validateMessage(message2);
+    switch (message2.method) {
+      case "setWeekStartDay":
+        this.settingsManager.setWeekStartDay(message2.args[0]);
+        break;
+      case "setWeekStartTimeUTC":
+        this.settingsManager.setWeekStartTimeUTC(message2.args[0]);
+        break;
+      case "setTheme":
+        this.settingsManager.setTheme(message2.args[0]);
+        break;
+      case "setLearningPace":
+        this.settingsManager.setLearningPace(message2.args[0]);
+        break;
+      case "setOptOutDailyPing":
+        this.settingsManager.setOptOutDailyPing(message2.args[0]);
+        break;
+      case "setOptOutErrorPing":
+        this.settingsManager.setOptOutErrorPing(message2.args[0]);
+        break;
+      case "setFontSize":
+        this.settingsManager.setFontSize(message2.args[0]);
+        break;
+      case "setHighContrast":
+        this.settingsManager.setHighContrast(message2.args[0]);
+        break;
+      case "setReducedMotion":
+        this.settingsManager.setReducedMotion(message2.args[0]);
+        break;
+      case "setFocusIndicatorStyle":
+        this.settingsManager.setFocusIndicatorStyle(message2.args[0]);
+        break;
+      case "setAudioEnabled":
+        this.settingsManager.setAudioEnabled(message2.args[0]);
+        break;
+    }
+  }
+};
 
 // src/ts/core/navigationSchema.ts
 var NavigationStateSchema = external_exports.object({
@@ -47001,6 +47545,13 @@ var NavigationStateSchema = external_exports.object({
   lastUpdated: external_exports.number().int().min(0)
   // Unix timestamp
 });
+function getDefaultNavigationState() {
+  return {
+    currentEntityId: 0,
+    currentPage: 0,
+    lastUpdated: 0
+  };
+}
 function isValidEntityId(entityId, curriculum) {
   return entityId === 0 || curriculum.hasEntity(entityId);
 }
@@ -47012,21 +47563,13 @@ function validateNavigationEntity(data, curriculum) {
   const entityId = data.currentEntityId;
   if (!isValidEntityId(entityId, curriculum)) {
     return {
-      cleaned: {
-        currentEntityId: 0,
-        currentPage: 0,
-        lastUpdated: Date.now()
-      },
+      cleaned: getDefaultNavigationState(),
       wasDefaulted: true
     };
   }
   if (!isValidPageNumber(entityId, data.currentPage, curriculum)) {
     return {
-      cleaned: {
-        currentEntityId: 0,
-        currentPage: 0,
-        lastUpdated: Date.now()
-      },
+      cleaned: getDefaultNavigationState(),
       wasDefaulted: true
     };
   }
@@ -47035,10 +47578,144 @@ function validateNavigationEntity(data, curriculum) {
     wasDefaulted: false
   };
 }
+var NavigationStateManager = class {
+  constructor(initialState, curriculumRegistry) {
+    this.curriculumRegistry = curriculumRegistry;
+    this.state = structuredClone(initialState);
+  }
+  /**
+   * Returns cloned state for persistence.
+   *
+   * Clone ensures external code cannot mutate manager's internal state.
+   * Validates before returning using private helper.
+   * 
+   * @returns Cloned navigation state
+   * @throws Error if current state is invalid (entity/page doesn't exist)
+   */
+  getState() {
+    this.validateCurrentView();
+    return structuredClone(this.state);
+  }
+  /**
+   * Returns current view for startup after page load.
+   *
+   * Reverts to main menu if timestamp is older than 30 minutes.
+   * 
+   * @returns Entity ID and page number for startup
+   */
+  getCurrentViewStartup() {
+    const now = Math.floor(Date.now() / 1e3);
+    const thirtyMinutesAgo = now - 30 * 60;
+    if (this.state.lastUpdated < thirtyMinutesAgo) {
+      return { entityId: 0, page: 0 };
+    }
+    this.validateCurrentView();
+    return {
+      entityId: this.state.currentEntityId,
+      page: this.state.currentPage
+    };
+  }
+  /**
+   * Returns current view while running.
+   *
+   * Used by core to check if new page needs to be loaded.
+   * 
+   * @returns Entity ID and page number
+   */
+  getCurrentViewRunning() {
+    return {
+      entityId: this.state.currentEntityId,
+      page: this.state.currentPage
+    };
+  }
+  /**
+   * Set navigation to specific entity and page.
+   *
+   * The only setter available via messages from components.
+   * Completely replaces current state with new timestamp.
+   * 
+   * @param entityId - Entity ID to navigate to
+   * @param page - Page number within entity
+   */
+  setCurrentView(entityId, page) {
+    this.state.currentEntityId = entityId;
+    this.state.currentPage = page;
+    this.state.lastUpdated = Math.floor(Date.now() / 1e3);
+  }
+  /**
+   * Reset navigation to main menu with current timestamp.
+   */
+  setDefaults() {
+    this.state.currentEntityId = 0;
+    this.state.currentPage = 0;
+    this.state.lastUpdated = Math.floor(Date.now() / 1e3);
+  }
+  /**
+   * Validate current navigation state.
+   *
+   * Uses shared validation helpers to ensure entity and page are valid.
+   * Throws if validation fails (defensive runtime check).
+   *
+   * @throws Error if entity doesn't exist or page is out of bounds
+   */
+  validateCurrentView() {
+    const { currentEntityId, currentPage } = this.state;
+    if (!isValidEntityId(currentEntityId, this.curriculumRegistry)) {
+      throw new Error(
+        `Invalid navigation state: Entity ${currentEntityId} does not exist in registry`
+      );
+    }
+    if (!isValidPageNumber(currentEntityId, currentPage, this.curriculumRegistry)) {
+      const pageCount = this.curriculumRegistry.getEntityPageCount(currentEntityId);
+      throw new Error(
+        `Invalid navigation state: Page ${currentPage} exceeds entity ${currentEntityId} page count (${pageCount})`
+      );
+    }
+  }
+};
 var NavigationMessageSchema = external_exports.object({
   method: external_exports.literal("setCurrentView"),
   args: external_exports.tuple([ImmutableId, external_exports.number().min(0)])
 });
+var NavigationMessageHandler = class {
+  constructor(navigationManager, curriculumRegistry) {
+    this.navigationManager = navigationManager;
+    this.curriculumRegistry = curriculumRegistry;
+  }
+  /**
+   * Validate a navigation message.
+   *
+   * Uses shared validation helpers to ensure entity and page are valid.
+   *
+   * @param message - Navigation message to validate
+   * @throws Error if entity doesn't exist or page is out of bounds
+   */
+  validateMessage(message2) {
+    const [entityId, page] = message2.args;
+    if (!isValidEntityId(entityId, this.curriculumRegistry)) {
+      throw new Error(`Invalid entity ID: ${entityId}`);
+    }
+    if (!isValidPageNumber(entityId, page, this.curriculumRegistry)) {
+      const pageCount = this.curriculumRegistry.getEntityPageCount(entityId);
+      throw new Error(
+        `Invalid page ${page} for entity ${entityId} (max: ${pageCount - 1})`
+      );
+    }
+  }
+  /**
+   * Validate and handle a navigation message.
+   *
+   * Validates message, then forwards to navigation manager if valid.
+   *
+   * @param message - Navigation message to handle
+   * @throws Error if validation fails
+   */
+  handleMessage(message2) {
+    this.validateMessage(message2);
+    const [entityId, page] = message2.args;
+    this.navigationManager.setCurrentView(entityId, page);
+  }
+};
 
 // src/ts/core/combinedComponentProgressSchema.ts
 var CombinedComponentProgressSchema = external_exports.object({
@@ -47425,10 +48102,7 @@ function extractSettings(parsed) {
     defaultedFields++;
   }
   if (Array.isArray(candidate.theme) && ["light", "dark", "auto"].includes(candidate.theme[0])) {
-    settings.theme = [
-      candidate.theme[0],
-      candidate.theme[1] ?? 0
-    ];
+    settings.theme = [candidate.theme[0], candidate.theme[1] ?? 0];
   } else {
     settings.theme = defaults.theme;
     defaultedFields++;
@@ -47461,10 +48135,7 @@ function extractSettings(parsed) {
     defaultedFields++;
   }
   if (Array.isArray(candidate.fontSize) && ["small", "medium", "large"].includes(candidate.fontSize[0])) {
-    settings.fontSize = [
-      candidate.fontSize[0],
-      candidate.fontSize[1] ?? 0
-    ];
+    settings.fontSize = [candidate.fontSize[0], candidate.fontSize[1] ?? 0];
   } else {
     settings.fontSize = defaults.fontSize;
     defaultedFields++;
@@ -47524,12 +48195,8 @@ function extractNavigationState(parsed) {
     };
   }
   return {
-    data: {
-      currentEntityId: 0,
-      // Main menu
-      currentPage: 0,
-      lastUpdated: Math.floor(Date.now() / 1e3)
-    },
+    data: getDefaultNavigationState(),
+    // <-- Use centralized default function
     defaultedRatio: 1,
     wasDefaulted: true
   };
@@ -47548,11 +48215,9 @@ function extractCombinedComponentProgress(parsed, lessonConfigs) {
       const componentType2 = curriculumData.getComponentType(componentId);
       if (componentType2) {
         const initializer3 = componentInitializerMap.get(componentType2);
-        if (initializer3) {
-          components[componentIdStr] = initializer3();
-        } else {
-          components[componentIdStr] = { lastUpdated: 0 };
-        }
+        components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
+      } else {
+        components[componentIdStr] = { lastUpdated: 0 };
       }
       componentsDefaulted++;
       continue;
@@ -47633,11 +48298,9 @@ function initializeAllComponentsWithDefaults() {
     const componentType = curriculumData.getComponentType(componentId);
     if (componentType) {
       const initializer3 = componentInitializerMap.get(componentType);
-      if (initializer3) {
-        components[componentIdStr] = initializer3();
-      } else {
-        components[componentIdStr] = { lastUpdated: 0 };
-      }
+      components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
+    } else {
+      components[componentIdStr] = { lastUpdated: 0 };
     }
   }
   return components;
@@ -47658,12 +48321,7 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
       domainCompletions
     },
     settings: defaultSettings,
-    navigationState: {
-      currentEntityId: 0,
-      // Main menu
-      currentPage: 0,
-      lastUpdated: Math.floor(Date.now() / 1e3)
-    },
+    navigationState: getDefaultNavigationState(),
     combinedComponentProgress: {
       components: initializeAllComponentsWithDefaults()
     }
@@ -50881,9 +51539,50 @@ var BaseComponentConfigSchema = external_exports.object({
   // Display order: 100, 200, 300, etc.
 });
 var BaseComponentProgressSchema = external_exports.object({
-  lastUpdated: external_exports.number().int().min(0).default(0)
-  // Unix timestamp in seconds
+  lastUpdated: external_exports.number().int().min(0)
+  // NO .default() - explicit defaulting only
 });
+var BaseComponentProgressManager = class {
+  // Protected - child classes can mutate, external code cannot
+  /**
+   * Construct manager with config reference and cloned progress data.
+   * 
+   * CLONING: Progress data is cloned to prevent external mutations from
+   * corrupting the manager's internal state. Config is stored as readonly
+   * reference since it's immutable.
+   * 
+   * @param config - Component configuration (immutable, safe to share reference)
+   * @param initialProgress - Progress data from Main Core (will be cloned)
+   */
+  constructor(config2, initialProgress) {
+    this.config = config2;
+    this.progress = structuredClone(initialProgress);
+  }
+  /**
+   * Get current progress state (cloned).
+   *
+   * CLONING: Returns clone to prevent external code from mutating the
+   * manager's internal state. Component Core and Interface receive a
+   * snapshot they can read but cannot corrupt.
+   * 
+   * @returns Cloned progress state
+   */
+  getProgress() {
+    return structuredClone(this.progress);
+  }
+  /**
+   * Update lastUpdated timestamp to current time.
+   *
+   * IMPORTANT: All mutation methods in subclasses MUST call this
+   * after modifying progress state to maintain accurate timestamps
+   * for conflict resolution.
+   *
+   * Protected helper - only accessible to subclass mutation methods.
+   */
+  updateTimestamp() {
+    this.progress.lastUpdated = Math.floor(Date.now() / 1e3);
+  }
+};
 
 // src/ts/components/cores/basicTaskCore.ts
 var CheckboxItemSchema = external_exports.object({
@@ -50897,8 +51596,83 @@ var BasicTaskComponentConfigSchema = BaseComponentConfigSchema.extend({
   checkboxes: external_exports.array(CheckboxItemSchema).min(1).max(20)
 });
 var BasicTaskComponentProgressSchema = BaseComponentProgressSchema.extend({
-  checkbox_checked: external_exports.array(external_exports.boolean()).default([])
+  checkbox_checked: external_exports.array(external_exports.boolean())
+  // NO .default() - explicit defaulting only
 });
+function isValidCheckboxIndex(index, config2) {
+  return index >= 0 && index < config2.checkboxes.length;
+}
+function isValidProgressStructure(progress, config2) {
+  return progress.checkbox_checked.length === config2.checkboxes.length;
+}
+var BasicTaskProgressManager = class extends BaseComponentProgressManager {
+  /**
+   * Set individual checkbox state with validation
+   *
+   * Uses shared validation helpers to ensure index is valid and
+   * progress structure matches config. Calls updateTimestamp() after mutation.
+   *
+   * @param index - Checkbox index to update
+   * @param checked - New checked state
+   * @throws Error if index out of bounds or structure mismatch
+   */
+  setCheckboxState(index, checked) {
+    if (!isValidProgressStructure(this.progress, this.config)) {
+      throw new Error(
+        `Progress has ${this.progress.checkbox_checked.length} checkboxes, config expects ${this.config.checkboxes.length}`
+      );
+    }
+    if (!isValidCheckboxIndex(index, this.config)) {
+      throw new Error(`Checkbox index ${index} out of range`);
+    }
+    this.progress.checkbox_checked[index] = checked;
+    this.updateTimestamp();
+  }
+  /**
+   * Create initial progress structure matching config requirements.
+   *
+   * Called for new users or when component is first encountered.
+   * Creates array of false values matching checkbox count.
+   * 
+   * IMPORTANT: Explicitly sets lastUpdated to 0 (timestamp 0 = never set by user).
+   *
+   * @param config Component configuration with checkbox definitions
+   * @returns Fresh progress object with all checkboxes unchecked
+   */
+  createInitialProgress(config2) {
+    return {
+      checkbox_checked: new Array(config2.checkboxes.length).fill(false),
+      lastUpdated: 0
+      // Explicit timestamp 0 = never set by user
+    };
+  }
+};
+var BasicTaskProgressMessageHandler = class {
+  constructor(componentManagers) {
+    this.componentManagers = componentManagers;
+  }
+  getComponentType() {
+    return "basic_task";
+  }
+  handleMessage(message2) {
+    const manager = this.componentManagers.get(message2.componentId);
+    if (!manager) {
+      throw new Error(`No manager found for component ${message2.componentId}`);
+    }
+    switch (message2.method) {
+      case "setCheckboxState":
+        manager.setCheckboxState(
+          message2.args[0],
+          message2.args[1]
+        );
+        break;
+      default:
+        throw new Error(
+          `BasicTask components only support: setCheckboxState. Got: ${message2.method}`
+        );
+    }
+  }
+};
 
 // src/ts/core/lessonSchemas.ts
 var LessonMetadataSchema = external_exports.object({
@@ -51842,7 +52616,39 @@ var SaveCleaner = class _SaveCleaner {
   }
 };
 
-// src/ts/core/core.ts
+// src/ts/components/componentManagerFactory.ts
+function createComponentProgressManager(componentType, config2, progressData) {
+  switch (componentType) {
+    case "basic_task": {
+      const validated = BasicTaskComponentProgressSchema.parse(progressData);
+      return new BasicTaskProgressManager(
+        config2,
+        // Pass config first
+        validated
+      );
+    }
+    // Future component types go here
+    default:
+      throw new Error(`Unknown component type: ${componentType}`);
+  }
+}
+
+// src/ts/components/componentProgressHandlerFactory.ts
+function createComponentProgressHandlers(componentManagers) {
+  const handlers = /* @__PURE__ */ new Map();
+  const basicTaskHandler = new BasicTaskProgressMessageHandler(componentManagers);
+  handlers.set("basic_task", basicTaskHandler);
+  return handlers;
+}
+
+// src/ts/core/runCore.ts
+async function runCore(params) {
+  console.log("\u{1F504} Starting main polling loop (50ms)...");
+  await new Promise(() => {
+  });
+}
+
+// src/ts/core/startCore.ts
 async function startCore(bundle, lessonConfigs) {
   console.log("\u{1F680} Starting Main Application Core...");
   console.log("  Progress bundle:", {
@@ -51852,9 +52658,80 @@ async function startCore(bundle, lessonConfigs) {
     components: Object.keys(bundle.combinedComponentProgress.components).length
   });
   console.log("  Lesson configs:", lessonConfigs.size, "lessons");
-  console.warn("\u26A0\uFE0F  startCore() is a stub - core implementation needed");
-  await new Promise(() => {
-  });
+  const settingsManager = new SettingsDataManager(bundle.settings);
+  const navigationManager = new NavigationStateManager(
+    bundle.navigationState,
+    curriculumData
+  );
+  const overallProgressManager = new OverallProgressManager(
+    bundle.overallProgress,
+    curriculumData
+  );
+  const componentManagers = /* @__PURE__ */ new Map();
+  for (const [componentIdStr, progressData] of Object.entries(
+    bundle.combinedComponentProgress.components
+  )) {
+    const componentId = Number(componentIdStr);
+    const componentType = componentIdToTypeMap.get(componentId);
+    if (!componentType) {
+      throw new Error(
+        `No component type mapping found for component ID ${componentId}. This indicates corrupted registry or progress data.`
+      );
+    }
+    const lessonId = componentToLessonMap.get(componentId);
+    if (!lessonId) {
+      throw new Error(
+        `No lesson mapping found for component ID ${componentId}`
+      );
+    }
+    const lessonConfig = lessonConfigs.get(lessonId);
+    if (!lessonConfig) {
+      throw new Error(`No lesson config found for lesson ID ${lessonId}`);
+    }
+    const componentConfig = lessonConfig.components.find(
+      (c) => c.id === componentId
+    );
+    if (!componentConfig) {
+      throw new Error(
+        `Component ${componentId} not found in lesson ${lessonId} config`
+      );
+    }
+    const manager = createComponentProgressManager(
+      componentType,
+      componentConfig,
+      // Pass config as second parameter
+      progressData
+    );
+    componentManagers.set(componentId, manager);
+  }
+  const navigationHandler = new NavigationMessageHandler(
+    navigationManager,
+    curriculumData
+  );
+  const settingsHandler = new SettingsMessageHandler(settingsManager);
+  const overallProgressHandler = new OverallProgressMessageHandler(
+    overallProgressManager,
+    curriculumData
+  );
+  const componentProgressHandlers = createComponentProgressHandlers(componentManagers);
+  console.log("\u2705 All managers and handlers instantiated");
+  try {
+    await runCore({
+      settingsManager,
+      navigationManager,
+      overallProgressManager,
+      componentManagers,
+      navigationHandler,
+      settingsHandler,
+      overallProgressHandler,
+      componentProgressHandlers,
+      curriculumData,
+      lessonConfigs
+    });
+  } catch (err) {
+    console.error("\u{1F4A5} FATAL ERROR in runCore() polling loop:");
+    throw err;
+  }
 }
 
 // src/ts/initialization/initializationOrchestrator.ts

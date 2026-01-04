@@ -22,7 +22,7 @@ import { MeraBridge } from '../solid/meraBridge.js';
 import { SaveManager } from '../persistence/saveManager.js';
 import { SaveCleaner } from '../persistence/saveCleaner.js';
 import { showCriticalError } from '../ui/errorDisplay.js';
-import { startCore } from '../core/core.js';
+import { startCore } from '../core/startCore.js';
 
 // ============================================================================
 // MAIN ORCHESTRATION

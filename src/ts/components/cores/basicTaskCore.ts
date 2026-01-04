@@ -21,9 +21,7 @@
 import { z } from "zod";
 import {
   BaseComponentCore,
-  BaseComponentConfig,
   BaseComponentConfigSchema,
-  BaseComponentProgress,
   BaseComponentProgressSchema,
   BaseComponentProgressManager,
   IComponentProgressMessageHandler,
@@ -35,7 +33,6 @@ import { NavigationState } from "../../core/navigationSchema.js";
 import { SettingsData } from "../../core/settingsSchema.js";
 import {
   ComponentProgressMessage,
-  TrumpStrategy,
 } from "../../core/coreTypes.js";
 import { CurriculumRegistry } from "../../registry/mera-registry.js";
 

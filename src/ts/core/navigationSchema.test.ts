@@ -145,16 +145,6 @@ describe('NavigationStateManager', () => {
     });
   });
 
-  describe('getAllTrumpStrategies', () => {
-    it('returns LATEST_TIMESTAMP for all fields', () => {
-      const strategies = manager.getAllTrumpStrategies();
-      
-      expect(strategies.currentEntityId).toBe('LATEST_TIMESTAMP');
-      expect(strategies.currentPage).toBe('LATEST_TIMESTAMP');
-      expect(strategies.lastUpdated).toBe('LATEST_TIMESTAMP');
-    });
-  });
-
   describe('validation', () => {
     it('throws error for invalid entity ID', () => {
       manager.setCurrentView(999, 0);

@@ -9,19 +9,6 @@ import { OverallProgressDataSchema } from "./overallProgressSchema.js";
 export const ImmutableId = z.number().int().min(0).max(999999999999);
 
 /**
- * Trump strategies for resolving conflicts during data merging
- */
-export type TrumpStrategy<T> =
-  | "NOR"
-  | "OR"
-  | "MAX"
-  | "UNION"
-  | "LATEST_TIMESTAMP"
-  | "PREFER_NON_EMPTY"
-  | "ASSERT_EQUAL"
-  | "ELEMENT_WISE_OR";
-
-/**
  * Generic component progress message structure
  * Individual components define their own specific message types
  */

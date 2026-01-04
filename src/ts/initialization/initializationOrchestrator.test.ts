@@ -68,7 +68,7 @@ vi.mock('../ui/errorDisplay.js', () => ({
 // Import mocked functions
 import { loadAndParseAllLessons } from './yamlParser.js';
 import { orchestrateProgressLoading } from './progressLoader.js';
-import { startCore } from '../core/core.js';
+import { startCore } from '../core/startCore.js';
 import { SaveManager } from '../persistence/saveManager.js';
 import { SaveCleaner } from '../persistence/saveCleaner.js';
 

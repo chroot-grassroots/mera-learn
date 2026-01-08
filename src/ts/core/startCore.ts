@@ -53,6 +53,7 @@ import { createComponentProgressHandlers } from "../components/componentProgress
 import { componentIdToTypeMap } from "../registry/mera-registry.js";
 import { componentToLessonMap } from "../registry/mera-registry.js";
 import { runCore } from "./runCore.js";
+import { PodMetadata } from '../persistence/podStorageSchema';
 
 /**
  * Initialize and start the main application core.
@@ -239,6 +240,8 @@ export async function startCore(
   // Wrap in try/catch to distinguish initialization failures (above) from
   // runtime failures (runCore polling loop).
 
+  const webId = bundle.metadata.webId
+
   try {
     await runCore({
       settingsManager,
@@ -251,6 +254,7 @@ export async function startCore(
       componentProgressHandlers,
       curriculumData,
       lessonConfigs,
+      webId
     });
   } catch (err) {
     console.error("💥 FATAL ERROR in runCore() polling loop:");

@@ -95,7 +95,7 @@ export function instantiateComponents(
   navigationManager: IReadonlyNavigationManager
 ): InstantiatedComponents {
   // ========================================================================
-  // PHASE 1: Determine which components to instantiate
+  // PHASE 1: Determine which components to instantiate 
   // ========================================================================
 
   const currentEntityId = navigationState.currentEntityId;

@@ -161,7 +161,7 @@ export async function startCore(
     // Find which lesson contains this component
     // Registry mapping built at compile-time from YAML structure
     const lessonId = componentToLessonMap.get(componentId);
-    if (!lessonId) {
+    if (lessonId === undefined) {
       throw new Error(
         `No lesson mapping found for component ID ${componentId}. ` +
           `This indicates registry generation bug or corrupted mappings.`

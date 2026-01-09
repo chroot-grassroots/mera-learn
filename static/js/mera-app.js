@@ -53307,49 +53307,55 @@ function instantiateComponents(navigationState, lessonConfigs, componentManagers
         `Component type '${componentType}' has no defined permissions. Add to MESSAGE_TYPE_PERMISSIONS in componentPermissions.ts`
       );
     }
-    const progressManager = componentManagers.get(componentId);
-    if (!progressManager) {
+    const primaryManager = componentManagers.get(componentId);
+    if (!primaryManager) {
       throw new Error(
         `Progress manager not found for component ${componentId}. This indicates startCore instantiation bug.`
       );
     }
+    const secondaryManager = createComponentProgressManager(
+      componentType,
+      componentConfig,
+      // Type assertion: YAML parser guarantees BaseComponentConfig structure
+      primaryManager.getProgress()
+      // ← Already cloned by getProgress()!
+    );
     try {
       const core2 = createComponentCore(
         componentType,
         componentConfig,
-        progressManager,
+        secondaryManager,
+        // ← Component gets CLONED secondary manager
         curriculumData2,
         overallProgressManager,
         navigationManager,
         settingsManager
       );
       componentCores.set(componentId, core2);
+      const permissions = getPermissions(componentType);
+      if (!permissions) {
+        throw new Error(
+          `Permissions unexpectedly undefined for ${componentType}`
+        );
+      }
+      if (permissions.componentProgress) {
+        componentProgressPolling.set(componentId, componentType);
+      }
+      if (permissions.overallProgress) {
+        overallProgressPolling.set(componentId, componentType);
+      }
+      if (permissions.navigation) {
+        navigationPolling.set(componentId, componentType);
+      }
+      if (permissions.settings) {
+        settingsPolling.set(componentId, componentType);
+      }
     } catch (err) {
       console.error(
-        `Failed to instantiate component ${componentId} (${componentType}):`,
+        `\u26A0\uFE0F Component ${componentId} (${componentType}) failed to instantiate - skipping:`,
         err
       );
-      throw new Error(
-        `Component instantiation failed for ${componentId}. Check componentCoreFactory and component constructor.`
-      );
-    }
-    const permissions = getPermissions(componentType);
-    if (!permissions) {
-      throw new Error(
-        `Permissions unexpectedly undefined for ${componentType}`
-      );
-    }
-    if (permissions.componentProgress) {
-      componentProgressPolling.set(componentId, componentType);
-    }
-    if (permissions.overallProgress) {
-      overallProgressPolling.set(componentId, componentType);
-    }
-    if (permissions.navigation) {
-      navigationPolling.set(componentId, componentType);
-    }
-    if (permissions.settings) {
-      settingsPolling.set(componentId, componentType);
+      continue;
     }
   }
   console.log(`\u2705 Created ${componentCores.size} component cores`);
@@ -53374,21 +53380,157 @@ async function runCore(params) {
   console.log("\u{1F504} Starting main polling loop (50ms)...");
   let pageChanged = true;
   let currentComponents = null;
+  let hasChanged = false;
+  const saveManager = SaveManager.getInstance();
   while (true) {
-    const navigationState = params.navigationManager.getState();
-    currentComponents = instantiateComponents(
-      navigationState,
-      params.lessonConfigs,
-      params.componentManagers,
-      params.curriculumData,
-      params.settingsManager,
-      params.overallProgressManager,
-      params.navigationManager
-    );
-    pageChanged = false;
-    console.log(
-      `\u{1F4E6} Instantiated ${currentComponents.componentCores.size} components`
-    );
+    const navStateAtStart = params.navigationManager.getState();
+    if (pageChanged) {
+      const navigationState = params.navigationManager.getState();
+      currentComponents = instantiateComponents(
+        navigationState,
+        params.lessonConfigs,
+        params.componentManagers,
+        params.curriculumData,
+        params.settingsManager,
+        params.overallProgressManager,
+        params.navigationManager
+      );
+      pageChanged = false;
+      console.log(
+        `\u{1F4E6} Instantiated ${currentComponents.componentCores.size} components`
+      );
+    }
+    if (!currentComponents) {
+      throw new Error("No components instantiated - this should never happen");
+    }
+    for (const [componentId, core2] of currentComponents.componentCores) {
+      const componentType = componentIdToTypeMap.get(componentId);
+      if (!componentType) {
+        throw new Error(
+          `CRITICAL: Component ${componentId} exists in componentCores but has no type in registry. This indicates registry corruption or deployment mismatch.`
+        );
+      }
+      if (currentComponents.componentProgressPolling.has(componentId)) {
+        try {
+          const messages = core2.getComponentProgressMessages();
+          if (messages.length > 0) {
+            hasChanged = true;
+            const handler = params.componentProgressHandlers.get(componentType);
+            if (!handler) {
+              throw new Error(
+                `No handler found for component type '${componentType}'`
+              );
+            }
+            for (const msg of messages) {
+              if (msg.componentId !== componentId) {
+                throw new Error(
+                  `Component ${componentId} sent message claiming to be from component ${msg.componentId}`
+                );
+              }
+              handler.handleMessage(msg);
+            }
+          }
+        } catch (error46) {
+          console.error(
+            `\u274C Component ${componentId} (${componentType}) failed during component progress polling/processing:`,
+            error46
+          );
+          try {
+            core2.interface.destroy();
+          } catch (destroyError) {
+            console.error(
+              `Failed to destroy component ${componentId}:`,
+              destroyError
+            );
+          }
+          currentComponents.componentCores.delete(componentId);
+          currentComponents.componentProgressPolling.delete(componentId);
+          currentComponents.overallProgressPolling.delete(componentId);
+          currentComponents.navigationPolling.delete(componentId);
+          currentComponents.settingsPolling.delete(componentId);
+          continue;
+        }
+      }
+      if (currentComponents.settingsPolling.has(componentId)) {
+        const messages = core2.getSettingsMessages();
+        if (messages.length > 0) {
+          hasChanged = true;
+          for (const msg of messages) {
+            params.settingsHandler.handleMessage(msg);
+          }
+        }
+      }
+      if (currentComponents.overallProgressPolling.has(componentId)) {
+        const messages = core2.getOverallProgressMessages();
+        if (messages.length > 0) {
+          hasChanged = true;
+          for (const msg of messages) {
+            params.overallProgressHandler.handleMessage(msg);
+          }
+        }
+      }
+      if (currentComponents.navigationPolling.has(componentId)) {
+        const messages = core2.getNavigationMessages();
+        if (messages.length > 0) {
+          hasChanged = true;
+          for (const msg of messages) {
+            params.navigationHandler.handleMessage(msg);
+          }
+        }
+      }
+    }
+    const navStateAtEnd = params.navigationManager.getState();
+    if (navStateAtEnd.currentEntityId !== navStateAtStart.currentEntityId || navStateAtEnd.currentPage !== navStateAtStart.currentPage) {
+      pageChanged = true;
+    }
+    if (pageChanged && currentComponents !== null) {
+      currentComponents.componentCores.forEach((core2) => {
+        try {
+          core2.interface.destroy();
+        } catch (error46) {
+          console.error(
+            `Error destroying component ${core2.config.id}:`,
+            error46
+          );
+        }
+      });
+      currentComponents = null;
+    }
+    const componentProgressObj = {};
+    for (const [componentId, manager] of params.componentManagers) {
+      componentProgressObj[componentId.toString()] = manager.getProgress();
+    }
+    const bundle = {
+      metadata: { webId: params.webId },
+      overallProgress: params.overallProgressManager.getProgress(),
+      settings: params.settingsManager.getSettings(),
+      navigationState: params.navigationManager.getState(),
+      combinedComponentProgress: {
+        components: componentProgressObj
+      }
+    };
+    const bundleJSON = JSON.stringify(bundle);
+    try {
+      const integrityCheck = enforceDataIntegrity(
+        bundleJSON,
+        params.webId,
+        params.lessonConfigs
+      );
+      if (!integrityCheck.perfectlyValidInput) {
+        console.error(
+          "\u{1F4A5} CRITICAL: Generated corrupt bundle:",
+          integrityCheck
+        );
+        throw new Error(
+          "Bundle failed integrity check - this is a bug in state managers"
+        );
+      }
+    } catch (error46) {
+      console.error("\u{1F4A5} CRITICAL: Bundle integrity validation failed:", error46);
+      throw error46;
+    }
+    saveManager.queueSave(bundleJSON, hasChanged);
+    hasChanged = false;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
@@ -53467,6 +53609,7 @@ async function startCore(bundle, lessonConfigs) {
   );
   const componentProgressHandlers = createComponentProgressHandlers(componentManagers);
   console.log("\u2705 All managers and handlers instantiated successfully");
+  const webId = bundle.metadata.webId;
   try {
     await runCore({
       settingsManager,
@@ -53478,7 +53621,8 @@ async function startCore(bundle, lessonConfigs) {
       overallProgressHandler,
       componentProgressHandlers,
       curriculumData,
-      lessonConfigs
+      lessonConfigs,
+      webId
     });
   } catch (err) {
     console.error("\u{1F4A5} FATAL ERROR in runCore() polling loop:");

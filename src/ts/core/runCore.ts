@@ -83,6 +83,10 @@ export async function runCore(params: RunCoreParams): Promise<void> {
   // Get SaveManager singleton
   const saveManager = SaveManager.getInstance();
 
+  // Track last save queue time for 15-second periodic saves
+  let lastSaveQueueTime = Date.now();
+  const SAVE_QUEUE_INTERVAL_MS = 15000; // 15 seconds
+
   // Core loop that drives app. Runs forever unless hits error or page refresh.
   while (true) {
     // Capture navigation state at start of iteration for change detection
@@ -104,7 +108,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
         params.overallProgressManager,
         params.navigationManager
       );
-      
+
       pageChanged = false;
       console.log(
         `📦 Instantiated ${currentComponents.componentCores.size} components`
@@ -126,7 +130,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
       if (!componentType) {
         throw new Error(
           `CRITICAL: Component ${componentId} exists in componentCores but has no type in registry. ` +
-          `This indicates registry corruption or deployment mismatch.`
+            `This indicates registry corruption or deployment mismatch.`
         );
       }
 
@@ -180,7 +184,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
           currentComponents.overallProgressPolling.delete(componentId);
           currentComponents.navigationPolling.delete(componentId);
           currentComponents.settingsPolling.delete(componentId);
-          
+
           continue; // Skip to next component
         }
       }
@@ -237,16 +241,13 @@ export async function runCore(params: RunCoreParams): Promise<void> {
         try {
           core.interface.destroy();
         } catch (error) {
-          console.error(
-            `Error destroying component ${core.config.id}:`,
-            error
-          );
+          console.error(`Error destroying component ${core.config.id}:`, error);
         }
       });
-      
+
       // TODO: Each destroy() call should internally notify componentCoordinator.removeComponent()
       // This prevents coordinator from holding stale references when page changes
-      
+
       currentComponents = null;
     }
 
@@ -281,10 +282,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
       );
 
       if (!integrityCheck.perfectlyValidInput) {
-        console.error(
-          "💥 CRITICAL: Generated corrupt bundle:",
-          integrityCheck
-        );
+        console.error("💥 CRITICAL: Generated corrupt bundle:", integrityCheck);
         throw new Error(
           "Bundle failed integrity check - this is a bug in state managers"
         );
@@ -294,9 +292,17 @@ export async function runCore(params: RunCoreParams): Promise<void> {
       throw error; // Re-throw to crash
     }
 
-    // Queue save (fire-and-forget)
-    saveManager.queueSave(bundleJSON, hasChanged);
-    hasChanged = false; // Reset for next iteration
+    // Queue save if: (1) state changed, OR (2) 15 seconds elapsed
+    const now = Date.now();
+    const timeSinceLastSave = now - lastSaveQueueTime;
+    const shouldQueueSave =
+      hasChanged || timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS;
+
+    if (shouldQueueSave) {
+      saveManager.queueSave(bundleJSON, hasChanged);
+      lastSaveQueueTime = now;
+      hasChanged = false; // Reset for next iteration
+    }
 
     // ========================================================================
     // PHASE 5: Delay for 50ms cycle

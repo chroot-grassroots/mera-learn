@@ -1308,4 +1308,4 @@ describe('runCore', () => {
       expect(mockNavigationHandler.handleMessage).toHaveBeenCalledTimes(3);
     });
   });
-});q
+});

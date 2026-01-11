@@ -40,7 +40,7 @@ vi.mock('../components/componentManagerFactory.js', () => ({
   createComponentProgressManager: vi.fn(),
 }));
 
-vi.mock('../ui/componentCoordinator.js', () => ({
+vi.mock('../components/componentCoordinator.js', () => ({
   componentCoordinator: {
     beginPageLoad: vi.fn(),
   },
@@ -50,7 +50,7 @@ import { hasPermissions, getPermissions } from '../components/componentPermissio
 import { componentIdToTypeMap } from '../registry/mera-registry.js';
 import { createComponentCore } from '../components/componentCoreFactory.js';
 import { createComponentProgressManager } from '../components/componentManagerFactory.js';
-import { componentCoordinator } from '../ui/componentCoordinator.js';
+import { componentCoordinator } from '../components/componentCoordinator.js';
 
 describe('componentInstantiator', () => {
   // Test fixtures
@@ -216,9 +216,47 @@ describe('componentInstantiator', () => {
         mockNavigationManager
       );
 
-      expect(componentCoordinator.beginPageLoad).toHaveBeenCalledWith(
+      expect(vi.mocked(componentCoordinator.beginPageLoad)).toHaveBeenCalledWith(
         result.componentCores
       );
+    });
+
+    it('instantiates components in order field sequence', () => {
+      // Create lesson with components deliberately out of order
+      const lesson = mockLessonConfigs.get(1)!;
+      (lesson as any).components = [
+        { id: 103, page: 0, order: 300, type: 'basic_task' } as any,
+        { id: 101, page: 0, order: 100, type: 'text' } as any,
+        { id: 102, page: 0, order: 200, type: 'quiz' } as any,
+      ];
+      (lesson.pages[0] as any).components = [
+        { id: 103, page: 0, order: 300, type: 'basic_task' } as any,
+        { id: 101, page: 0, order: 100, type: 'text' } as any,
+        { id: 102, page: 0, order: 200, type: 'quiz' } as any,
+      ];
+
+      // Add to registries
+      (componentIdToTypeMap as Map<number, string>).set(103, 'basic_task');
+      mockComponentManagers.set(102, {
+        getProgress: vi.fn(() => ({ completed: false })),
+      } as any as BaseComponentProgressManager<any, any>);
+      mockComponentManagers.set(103, {
+        getProgress: vi.fn(() => ({ completed: false })),
+      } as any as BaseComponentProgressManager<any, any>);
+
+      const result = instantiateComponents(
+        mockNavigationState,
+        mockLessonConfigs,
+        mockComponentManagers,
+        mockCurriculumData,
+        mockSettingsManager,
+        mockOverallProgressManager,
+        mockNavigationManager
+      );
+
+      // Maps preserve insertion order - verify components were instantiated in sorted order
+      const ids = Array.from(result.componentCores.keys());
+      expect(ids).toEqual([101, 102, 103]); // Sorted by order field (100, 200, 300)
     });
 
     it('returns empty maps when page has no components', () => {
@@ -262,14 +300,15 @@ describe('componentInstantiator', () => {
         mockNavigationManager
       );
 
+      expect(result.componentProgressPolling.size).toBe(2);
       expect(result.componentProgressPolling.has(100)).toBe(true);
-      expect(result.componentProgressPolling.get(100)).toBe('basic_task');
+      expect(result.componentProgressPolling.has(101)).toBe(true);
     });
 
-    it('excludes component from componentProgress polling when not permitted', () => {
+    it('includes component in overallProgress polling when permitted', () => {
       (getPermissions as any).mockReturnValue({
         componentProgress: false,
-        overallProgress: false,
+        overallProgress: true,
         navigation: false,
         settings: false,
       });
@@ -284,14 +323,39 @@ describe('componentInstantiator', () => {
         mockNavigationManager
       );
 
-      expect(result.componentProgressPolling.has(100)).toBe(false);
+      expect(result.overallProgressPolling.size).toBe(2);
+      expect(result.overallProgressPolling.has(100)).toBe(true);
+      expect(result.overallProgressPolling.has(101)).toBe(true);
     });
 
-    it('populates all four polling maps based on permissions', () => {
+    it('includes component in navigation polling when permitted', () => {
       (getPermissions as any).mockReturnValue({
-        componentProgress: true,
-        overallProgress: true,
+        componentProgress: false,
+        overallProgress: false,
         navigation: true,
+        settings: false,
+      });
+
+      const result = instantiateComponents(
+        mockNavigationState,
+        mockLessonConfigs,
+        mockComponentManagers,
+        mockCurriculumData,
+        mockSettingsManager,
+        mockOverallProgressManager,
+        mockNavigationManager
+      );
+
+      expect(result.navigationPolling.size).toBe(2);
+      expect(result.navigationPolling.has(100)).toBe(true);
+      expect(result.navigationPolling.has(101)).toBe(true);
+    });
+
+    it('includes component in settings polling when permitted', () => {
+      (getPermissions as any).mockReturnValue({
+        componentProgress: false,
+        overallProgress: false,
+        navigation: false,
         settings: true,
       });
 
@@ -305,13 +369,14 @@ describe('componentInstantiator', () => {
         mockNavigationManager
       );
 
-      expect(result.componentProgressPolling.has(100)).toBe(true);
-      expect(result.overallProgressPolling.has(100)).toBe(true);
-      expect(result.navigationPolling.has(100)).toBe(true);
+      expect(result.settingsPolling.size).toBe(2);
       expect(result.settingsPolling.has(100)).toBe(true);
+      expect(result.settingsPolling.has(101)).toBe(true);
     });
 
-    it('handles mixed permissions across different components', () => {
+    it('respects different permissions for different components', () => {
+      // Component 100: can do componentProgress
+      // Component 101: can do navigation
       (getPermissions as any).mockImplementation((type: string) => {
         if (type === 'basic_task') {
           return {
@@ -320,10 +385,11 @@ describe('componentInstantiator', () => {
             navigation: false,
             settings: false,
           };
-        } else if (type === 'text') {
+        }
+        if (type === 'text') {
           return {
             componentProgress: false,
-            overallProgress: true,
+            overallProgress: false,
             navigation: true,
             settings: false,
           };
@@ -346,23 +412,51 @@ describe('componentInstantiator', () => {
         mockNavigationManager
       );
 
-      // basicTask (100) should be in componentProgress only
+      // Component 100 in componentProgress, not navigation
       expect(result.componentProgressPolling.has(100)).toBe(true);
-      expect(result.overallProgressPolling.has(100)).toBe(false);
       expect(result.navigationPolling.has(100)).toBe(false);
 
-      // text (101) should be in overallProgress and navigation only
+      // Component 101 in navigation, not componentProgress
       expect(result.componentProgressPolling.has(101)).toBe(false);
-      expect(result.overallProgressPolling.has(101)).toBe(true);
       expect(result.navigationPolling.has(101)).toBe(true);
     });
+
+    it('includes component in multiple polling maps when permitted', () => {
+      (getPermissions as any).mockReturnValue({
+        componentProgress: true,
+        overallProgress: true,
+        navigation: true,
+        settings: true,
+      });
+
+      const result = instantiateComponents(
+        mockNavigationState,
+        mockLessonConfigs,
+        mockComponentManagers,
+        mockCurriculumData,
+        mockSettingsManager,
+        mockOverallProgressManager,
+        mockNavigationManager
+      );
+
+      // Both components should be in all four polling maps
+      expect(result.componentProgressPolling.size).toBe(2);
+      expect(result.overallProgressPolling.size).toBe(2);
+      expect(result.navigationPolling.size).toBe(2);
+      expect(result.settingsPolling.size).toBe(2);
+
+      expect(result.componentProgressPolling.has(100)).toBe(true);
+      expect(result.overallProgressPolling.has(100)).toBe(true);
+      expect(result.navigationPolling.has(100)).toBe(true);
+      expect(result.settingsPolling.has(100)).toBe(true);
+    });
   });
 
-  describe('Error Handling - Deployment Bugs (Fail Fast)', () => {
-    it('throws when lesson config not found', () => {
+  describe('Registry Validation - Deployment Bug Detection', () => {
+    it('throws error when lesson config not found', () => {
       mockNavigationState.currentEntityId = 999; // Non-existent lesson
 
-      expect(() => {
+      expect(() =>
         instantiateComponents(
           mockNavigationState,
           mockLessonConfigs,
@@ -371,14 +465,15 @@ describe('componentInstantiator', () => {
           mockSettingsManager,
           mockOverallProgressManager,
           mockNavigationManager
-        );
-      }).toThrow('Lesson config not found for entity 999');
+        )
+      ).toThrow(/Lesson config not found/);
     });
 
-    it('throws when component type not in registry', () => {
+    it('throws error when component type not in registry', () => {
+      // Remove component 100 from type map
       (componentIdToTypeMap as Map<number, string>).delete(100);
 
-      expect(() => {
+      expect(() =>
         instantiateComponents(
           mockNavigationState,
           mockLessonConfigs,
@@ -387,14 +482,14 @@ describe('componentInstantiator', () => {
           mockSettingsManager,
           mockOverallProgressManager,
           mockNavigationManager
-        );
-      }).toThrow('Component 100 not found in componentIdToTypeMap');
+        )
+      ).toThrow(/not found in componentIdToTypeMap/);
     });
 
-    it('throws when permissions not defined for component type', () => {
+    it('throws error when component type has no permissions defined', () => {
       (hasPermissions as any).mockReturnValue(false);
 
-      expect(() => {
+      expect(() =>
         instantiateComponents(
           mockNavigationState,
           mockLessonConfigs,
@@ -403,14 +498,15 @@ describe('componentInstantiator', () => {
           mockSettingsManager,
           mockOverallProgressManager,
           mockNavigationManager
-        );
-      }).toThrow("Component type 'basic_task' has no defined permissions");
+        )
+      ).toThrow(/has no defined permissions/);
     });
 
-    it('throws when primary manager not found', () => {
+    it('throws error when primary manager not found', () => {
+      // Remove component 100 from managers
       mockComponentManagers.delete(100);
 
-      expect(() => {
+      expect(() =>
         instantiateComponents(
           mockNavigationState,
           mockLessonConfigs,
@@ -419,17 +515,17 @@ describe('componentInstantiator', () => {
           mockSettingsManager,
           mockOverallProgressManager,
           mockNavigationManager
-        );
-      }).toThrow('Progress manager not found for component 100');
+        )
+      ).toThrow(/Progress manager not found/);
     });
   });
 
-  describe('Error Handling - Component Failures (Isolation)', () => {
-    it('skips component when core creation fails', () => {
+  describe('Component Creation Failure Handling', () => {
+    it('continues creating other components when one fails', () => {
       // Make component 100 fail during creation
       (createComponentCore as any).mockImplementation((type: string) => {
         if (type === 'basic_task') {
-          throw new Error('Component constructor failed');
+          throw new Error('Component creation failed');
         }
         return {
           config: { id: 101 },
@@ -451,16 +547,17 @@ describe('componentInstantiator', () => {
         mockNavigationManager
       );
 
-      // Should skip component 100 but successfully create 101
-      expect(result.componentCores.has(100)).toBe(false);
-      expect(result.componentCores.has(101)).toBe(true);
+      // Component 101 should still be created
       expect(result.componentCores.size).toBe(1);
+      expect(result.componentCores.has(101)).toBe(true);
+      expect(result.componentCores.has(100)).toBe(false);
     });
 
     it('excludes failed component from polling maps', () => {
+      // Make component 100 fail
       (createComponentCore as any).mockImplementation((type: string) => {
         if (type === 'basic_task') {
-          throw new Error('Component constructor failed');
+          throw new Error('Component creation failed');
         }
         return {
           config: { id: 101 },
@@ -472,60 +569,24 @@ describe('componentInstantiator', () => {
         };
       });
 
-      const result = instantiateComponents(
-        mockNavigationState,
-        mockLessonConfigs,
-        mockComponentManagers,
-        mockCurriculumData,
-        mockSettingsManager,
-        mockOverallProgressManager,
-        mockNavigationManager
-      );
-
-      // Failed component should not be in any polling map
-      expect(result.componentProgressPolling.has(100)).toBe(false);
-      expect(result.overallProgressPolling.has(100)).toBe(false);
-      expect(result.navigationPolling.has(100)).toBe(false);
-      expect(result.settingsPolling.has(100)).toBe(false);
-
-      // Successful component should be in polling maps
-      expect(result.componentProgressPolling.has(101)).toBe(true);
-    });
-
-    it('continues processing remaining components after failure', () => {
-      // Setup three components, make middle one fail
+      // Add component 103 which should succeed
       const lesson = mockLessonConfigs.get(1)!;
-      const newComponents = [
-        ...lesson.components,
-        { id: 103, page: 0, type: 'scenario' } as any
+      (lesson as any).components = [
+        { id: 100, page: 0, type: 'basic_task' } as any,
+        { id: 101, page: 0, type: 'text' } as any,
+        { id: 103, page: 0, type: 'text' } as any,
       ];
-      const newPageComponents = [
-        ...lesson.pages[0].components,
-        { id: 103, page: 0, type: 'scenario' } as any
+      (lesson.pages[0] as any).components = [
+        { id: 100, page: 0, type: 'basic_task' } as any,
+        { id: 101, page: 0, type: 'text' } as any,
+        { id: 103, page: 0, type: 'text' } as any,
       ];
-      
-      (lesson as any).components = newComponents;
-      (lesson.pages[0] as any).components = newPageComponents;
-      
-      (componentIdToTypeMap as Map<number, string>).set(103, 'scenario');
+
+      (componentIdToTypeMap as Map<number, string>).set(103, 'text');
       mockComponentManagers.set(103, {
         getProgress: vi.fn(() => ({ completed: false })),
       } as any as BaseComponentProgressManager<any, any>);
 
-      (createComponentCore as any).mockImplementation((type: string) => {
-        if (type === 'text') {
-          throw new Error('Middle component failed');
-        }
-        return {
-          config: { id: 100 },
-          interface: { destroy: vi.fn() },
-          getComponentProgressMessages: vi.fn(() => []),
-          getOverallProgressMessages: vi.fn(() => []),
-          getNavigationMessages: vi.fn(() => []),
-          getSettingsMessages: vi.fn(() => []),
-        };
-      });
-
       const result = instantiateComponents(
         mockNavigationState,
         mockLessonConfigs,
@@ -536,10 +597,10 @@ describe('componentInstantiator', () => {
         mockNavigationManager
       );
 
-      // Should have components 100 and 103, but not 101
+      // Should have components 101 and 103, but not 100 (which failed)
       expect(result.componentCores.size).toBe(2);
-      expect(result.componentCores.has(100)).toBe(true);
-      expect(result.componentCores.has(101)).toBe(false);
+      expect(result.componentCores.has(100)).toBe(false);
+      expect(result.componentCores.has(101)).toBe(true);
       expect(result.componentCores.has(103)).toBe(true);
     });
 

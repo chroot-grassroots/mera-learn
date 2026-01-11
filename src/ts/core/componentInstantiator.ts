@@ -35,9 +35,7 @@ import {
   hasPermissions,
   getPermissions,
 } from "../components/componentPermissions.js";
-import {
-  componentIdToTypeMap,
-} from "../registry/mera-registry.js";
+import { componentIdToTypeMap } from "../registry/mera-registry.js";
 import { createComponentCore } from "../components/componentCoreFactory.js";
 import { createComponentProgressManager } from "../components/componentManagerFactory.js";
 import { componentCoordinator } from "../components/componentCoordinator.js";
@@ -95,7 +93,7 @@ export function instantiateComponents(
   navigationManager: IReadonlyNavigationManager
 ): InstantiatedComponents {
   // ========================================================================
-  // PHASE 1: Determine which components to instantiate 
+  // PHASE 1: Determine which components to instantiate
   // ========================================================================
 
   const currentEntityId = navigationState.currentEntityId;
@@ -115,6 +113,7 @@ export function instantiateComponents(
   const componentsOnPage = lessonConfig.components.filter(
     (component) => component.page === currentPage
   );
+  componentsOnPage.sort((a, b) => a.order - b.order);
 
   console.log(
     `📄 Page ${currentPage} of entity ${currentEntityId}: ` +

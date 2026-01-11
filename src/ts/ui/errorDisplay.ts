@@ -1,5 +1,5 @@
-// errorDisplay.ts - TypeScript version of error_display.py
-// Unified error handling UI that integrates with TimelineContainer
+// errorDisplay.ts - Modal overlay error handling system
+// Displays errors as overlays on top of page content for maximum visibility
 
 import { TimelineContainer } from './timelineContainer';
 
@@ -14,22 +14,52 @@ interface ErrorInfo {
 }
 
 export interface CriticalErrorOptions {
-  title: string;
-  message: string;
-  technicalDetails?: string;
-  errorCode?: string;
+    title: string;
+    message: string;
+    technicalDetails?: string;
+    errorCode?: string;
 }
 
-
 /**
- * Manages error display UI that appears in the timeline container's error slot
+ * Manages error display as modal overlays on top of page content.
+ * 
+ * Errors appear as centered modals with backdrop, ensuring user attention.
+ * Queues multiple errors to show one at a time (no stacking).
+ * 
+ * Public API maintains backward compatibility - only internal implementation
+ * changed from timeline slot to overlay approach.
  */
 export class ErrorDisplay {
-    protected timelineContainer: TimelineContainer | null;
     protected activeErrors: Map<string, ErrorInfo> = new Map();
+    protected errorQueue: string[] = []; // Queue of error IDs to display
+    protected currentlyDisplayedError: string | null = null;
 
+    /**
+     * Constructor accepts optional timeline parameter for backward compatibility.
+     * Parameter is ignored - overlay approach doesn't need timeline reference.
+     */
     constructor(timelineContainer: TimelineContainer | null = null) {
-        this.timelineContainer = timelineContainer;
+        // timelineContainer parameter kept for backward compatibility but unused
+        this.ensureOverlayExists();
+    }
+
+    /**
+     * Ensure error overlay container exists in DOM.
+     * Creates it if missing - idempotent, safe to call multiple times.
+     */
+    private ensureOverlayExists(): void {
+        if (!document.getElementById('error-overlay')) {
+            document.body.insertAdjacentHTML('beforeend', `
+                <div id="error-overlay" class="hidden fixed inset-0 z-50">
+                    <div class="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm"></div>
+                    <div class="relative min-h-screen flex items-center justify-center p-4">
+                        <div id="error-container" class="w-full max-w-md">
+                            <!-- Error cards render here -->
+                        </div>
+                    </div>
+                </div>
+            `);
+        }
     }
 
     /**
@@ -76,37 +106,69 @@ export class ErrorDisplay {
     }
 
     /**
-     * Remove a specific error
+     * Display an authentication error
+     */
+    showAuthError(errorId: string = 'auth', context: string = ''): void {
+        this._showError({
+            errorId,
+            errorType: 'authentication',
+            title: 'Authentication Required',
+            message: 'Your session has expired or authentication failed.',
+            context,
+            actions: ['retry', 'refresh']
+        });
+    }
+
+    /**
+     * Display a Solid Pod specific error
+     */
+    showSolidError(errorId: string = 'solid', context: string = '', details: string = ''): void {
+        this._showError({
+            errorId,
+            errorType: 'solid',
+            title: 'Solid Pod Error',
+            message: 'Unable to access your Solid Pod.',
+            context,
+            details,
+            actions: ['retry_solid', 'check_connection', 'email_support']
+        });
+    }
+
+    /**
+     * Remove a specific error and show next in queue if any
      */
     clearError(errorId: string): void {
         if (this.activeErrors.has(errorId)) {
-            const errorElement = document.getElementById(`error-${errorId}`);
-            if (errorElement) {
-                errorElement.remove();
-            }
             this.activeErrors.delete(errorId);
             console.log(`🧹 Cleared error: ${errorId}`);
-        }
 
-        // Hide error slot if no errors remain
-        if (this.activeErrors.size === 0) {
-            this._hideErrorSlot();
+            // If this was the currently displayed error, show next in queue
+            if (this.currentlyDisplayedError === errorId) {
+                this.currentlyDisplayedError = null;
+                this._hideOverlay();
+                this._showNextInQueue();
+            } else {
+                // Remove from queue if it was waiting
+                this.errorQueue = this.errorQueue.filter(id => id !== errorId);
+            }
         }
     }
 
     /**
-     * Clear all active errors
+     * Clear all active errors and hide overlay
      */
     clearAllErrors(): void {
         const errorIds = Array.from(this.activeErrors.keys());
-        for (const errorId of errorIds) {
-            this.clearError(errorId);
-        }
+        this.activeErrors.clear();
+        this.errorQueue = [];
+        this.currentlyDisplayedError = null;
+        this._hideOverlay();
         console.log('🧹 All errors cleared');
     }
 
     /**
-     * Internal method to display an error in the timeline's error slot
+     * Internal method to display an error as modal overlay.
+     * Queues errors if one is already being displayed.
      */
     protected _showError(params: {
         errorId: string;
@@ -127,51 +189,125 @@ export class ErrorDisplay {
             context
         });
 
-        // Get error slot from timeline container
-        const errorSlot = this._getErrorSlot();
-        if (!errorSlot) {
-            // Fallback: create floating error if no timeline container
-            this._createFloatingError(errorId, title, message, actions);
-            return;
+        // If no error currently displayed, show this one immediately
+        if (this.currentlyDisplayedError === null) {
+            this._displayError(errorId, title, message, context, details, actions);
+        } else {
+            // Queue it for later
+            if (!this.errorQueue.includes(errorId)) {
+                this.errorQueue.push(errorId);
+                console.log(`⏳ Queued error: ${errorId} (${this.errorQueue.length} in queue)`);
+            }
         }
-
-        // Build error HTML
-        const errorHtml = this._buildErrorHtml(errorId, title, message, context, details, actions);
-
-        // Show error slot and add this error
-        errorSlot.className = errorSlot.className.replace('hidden', 'block');
-        errorSlot.insertAdjacentHTML('beforeend', errorHtml);
-
-        console.log(`❌ Displayed error: ${errorId} (${errorType})`);
     }
 
     /**
-     * Build the HTML for an error display
+     * Actually display an error in the overlay
      */
-    protected _buildErrorHtml(errorId: string, title: string, message: string, context: string, details: string, actions: ActionType[]): string {
-        const contextHtml = context ? `<p class="text-sm text-red-600 mt-1"><strong>Context:</strong> ${context}</p>` : '';
-        const detailsHtml = details ? `<details class="mt-2 text-xs text-red-500"><summary>Technical Details</summary><pre>${details}</pre></details>` : '';
+    protected _displayError(
+        errorId: string,
+        title: string,
+        message: string,
+        context: string,
+        details: string,
+        actions: ActionType[]
+    ): void {
+        this.currentlyDisplayedError = errorId;
+
+        const overlay = document.getElementById('error-overlay');
+        const container = document.getElementById('error-container');
+        
+        if (!overlay || !container) {
+            console.error('❌ Error overlay not found');
+            return;
+        }
+
+        // Build error modal HTML
+        const errorHtml = this._buildErrorModal(errorId, title, message, context, details, actions);
+        
+        // Display in overlay
+        container.innerHTML = errorHtml;
+        overlay.classList.remove('hidden');
+        document.body.style.overflow = 'hidden'; // Prevent background scroll
+
+        console.log(`❌ Displayed error: ${errorId}`);
+    }
+
+    /**
+     * Show next error in queue, if any
+     */
+    protected _showNextInQueue(): void {
+        if (this.errorQueue.length > 0) {
+            const nextErrorId = this.errorQueue.shift()!;
+            const errorInfo = this.activeErrors.get(nextErrorId);
+            
+            if (errorInfo) {
+                // Reconstruct display parameters from stored info
+                this._displayError(
+                    nextErrorId,
+                    errorInfo.title,
+                    errorInfo.message,
+                    errorInfo.context,
+                    '', // details not stored, would need to expand ErrorInfo if needed
+                    ['refresh', 'email_support'] // default actions
+                );
+            }
+        }
+    }
+
+    /**
+     * Hide the error overlay and re-enable scroll
+     */
+    protected _hideOverlay(): void {
+        const overlay = document.getElementById('error-overlay');
+        if (overlay) {
+            overlay.classList.add('hidden');
+            document.body.style.overflow = ''; // Re-enable scroll
+        }
+    }
+
+    /**
+     * Build the HTML for an error modal
+     */
+    protected _buildErrorModal(
+        errorId: string,
+        title: string,
+        message: string,
+        context: string,
+        details: string,
+        actions: ActionType[]
+    ): string {
+        const contextHtml = context 
+            ? `<p class="text-sm text-red-700 mt-2"><strong>Context:</strong> ${this._escapeHtml(context)}</p>` 
+            : '';
+        
+        const detailsHtml = details 
+            ? `<details class="mt-3 text-xs text-gray-600">
+                 <summary class="cursor-pointer hover:text-gray-900">Technical Details</summary>
+                 <pre class="mt-2 p-2 bg-gray-100 rounded overflow-x-auto">${this._escapeHtml(details)}</pre>
+               </details>` 
+            : '';
+        
         const actionsHtml = this._buildActionButtons(errorId, actions);
 
         return `
-            <div id="error-${errorId}" class="error-item bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <div id="error-modal-${errorId}" 
+                 class="bg-white rounded-lg shadow-2xl p-6 animate-fadeIn">
                 <div class="flex items-start">
                     <div class="flex-shrink-0">
-                        <svg class="w-5 h-5 text-red-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
                         </svg>
                     </div>
                     <div class="ml-3 flex-1">
-                        <h3 class="text-sm font-medium text-red-800">${title}</h3>
-                        <p class="text-sm text-red-700 mt-1">${message}</p>
+                        <h3 class="text-lg font-semibold text-gray-900">${this._escapeHtml(title)}</h3>
+                        <p class="text-sm text-gray-700 mt-2">${this._escapeHtml(message)}</p>
                         ${contextHtml}
                         ${detailsHtml}
-                        <div class="mt-3 flex space-x-2">
+                        <div class="mt-4 flex flex-wrap gap-2">
                             ${actionsHtml}
-                            <button onclick="window.errorDisplay?.clearError('${errorId}')" 
-                                    class="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">
-                                Dismiss
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -190,218 +326,155 @@ export class ErrorDisplay {
                 case 'refresh':
                     buttons.push(`
                         <button onclick="location.reload()" 
-                                class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">
+                                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
                             Refresh Page
                         </button>
                     `);
                     break;
                 case 'retry':
                     buttons.push(`
-                        <button onclick="window.errorDisplay?._retryAction('${errorId}')" 
-                                class="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700">
+                        <button onclick="location.reload()" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
                             Retry
+                        </button>
+                    `);
+                    break;
+                case 'check_connection':
+                    buttons.push(`
+                        <button onclick="window.open('https://www.google.com', '_blank')" 
+                                class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
+                            Check Connection
                         </button>
                     `);
                     break;
                 case 'email_support':
                     buttons.push(`
-                        <button onclick="window.open('mailto:support@meralearn.org?subject=Mera%20Learning%20Error')" 
-                                class="text-xs bg-gray-600 text-white px-2 py-1 rounded hover:bg-gray-700">
-                            Email Support
+                        <button onclick="window.location.href='mailto:support@example.com?subject=Mera Error: ${errorId}'" 
+                                class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
+                            Contact Support
                         </button>
                     `);
                     break;
                 case 'skip_component':
                     buttons.push(`
-                        <button onclick="window.errorDisplay?._skipComponent('${errorId}')" 
-                                class="text-xs bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700">
+                        <button onclick="window.errorDisplay?.clearError('${errorId}')" 
+                                class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors">
                             Skip Component
+                        </button>
+                    `);
+                    break;
+                case 'retry_solid':
+                    buttons.push(`
+                        <button onclick="location.href='/solid'" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+                            Retry Connection
                         </button>
                     `);
                     break;
             }
         }
 
-        return buttons.join(' ');
+        // Always add dismiss button
+        buttons.push(`
+            <button onclick="window.errorDisplay?.clearError('${errorId}')" 
+                    class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
+                Dismiss
+            </button>
+        `);
+
+        return buttons.join('');
     }
 
     /**
-     * Get the error slot from the timeline container
+     * Escape HTML to prevent XSS
      */
-    protected _getErrorSlot(): HTMLElement | null {
-        if (this.timelineContainer) {
-            return this.timelineContainer.getErrorSlot();
-        } else {
-            // Try to find error slot by ID if no timeline container reference
-            return document.getElementById('lesson-container-error-slot');
-        }
-    }
-
-    /**
-     * Hide the error slot when no errors are active
-     */
-    protected _hideErrorSlot(): void {
-        const errorSlot = this._getErrorSlot();
-        if (errorSlot) {
-            errorSlot.className = errorSlot.className.replace('block', 'hidden');
-            errorSlot.innerHTML = '';
-            console.log('👻 Error slot hidden');
-        }
-    }
-
-    /**
-     * Fallback: create a floating error if no timeline container is available
-     */
-    protected _createFloatingError(errorId: string, title: string, message: string, actions: ActionType[]): void {
-        let floatingContainer = document.getElementById('floating-errors');
-        if (!floatingContainer) {
-            floatingContainer = document.createElement('div');
-            floatingContainer.id = 'floating-errors';
-            floatingContainer.className = 'fixed top-4 right-4 z-50 max-w-md';
-            document.body.appendChild(floatingContainer);
-        }
-
-        const errorHtml = `
-            <div id="error-${errorId}" class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-4 border">
-                <div class="text-center">
-                    <div class="flex items-center justify-center space-x-2 text-red-600 mb-2">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span class="font-semibold">${title}</span>
-                    </div>
-                    <p class="text-red-500 text-sm mb-4">${message}</p>
-                    <div class="flex justify-center space-x-2">
-                        ${this._buildActionButtons(errorId, actions)}
-                        <button onclick="window.errorDisplay?.clearError('${errorId}')" 
-                                class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
-                            Dismiss
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        floatingContainer.insertAdjacentHTML('beforeend', errorHtml);
-        console.log(`💫 Created floating error: ${errorId}`);
-    }
-
-    /**
-     * Handle retry action - to be implemented by core or overridden
-     */
-    _retryAction(errorId: string): void {
-        console.log(`🔄 Retry requested for error: ${errorId}`);
-        // Core would implement the actual retry logic
-        // For now, just clear the error
-        this.clearError(errorId);
-    }
-
-    /**
-     * Handle skip component action - to be implemented by core or overridden
-     */
-    _skipComponent(errorId: string): void {
-        console.log(`⏭️ Skip component requested for error: ${errorId}`);
-        // Core would implement the actual skip logic
-        // For now, just clear the error
-        this.clearError(errorId);
+    protected _escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 }
 
 /**
- * Extended ErrorDisplay with Solid-specific error handling
+ * Display a critical blocking error (bootstrap failures, etc.)
+ * Creates a full-page error screen that can't be dismissed.
+ */
+export function showCriticalError(options: CriticalErrorOptions): void {
+    const { title, message, technicalDetails, errorCode } = options;
+
+    // Remove any existing content
+    document.body.innerHTML = '';
+
+    const detailsHtml = technicalDetails
+        ? `<details class="mt-4 text-sm text-gray-300">
+             <summary class="cursor-pointer hover:text-white">Technical Details</summary>
+             <pre class="mt-2 p-3 bg-gray-900 rounded overflow-x-auto text-xs">${technicalDetails}</pre>
+           </details>`
+        : '';
+
+    const errorCodeHtml = errorCode
+        ? `<p class="text-sm text-gray-400 mt-2">Error Code: ${errorCode}</p>`
+        : '';
+
+    document.body.innerHTML = `
+        <div class="min-h-screen bg-gray-800 flex items-center justify-center p-4">
+            <div class="max-w-md w-full bg-gray-900 rounded-lg shadow-2xl p-6 border border-red-500">
+                <div class="flex items-center mb-4">
+                    <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                        </path>
+                    </svg>
+                    <h1 class="ml-3 text-2xl font-bold text-white">${title}</h1>
+                </div>
+                <p class="text-gray-300 mb-4">${message}</p>
+                ${errorCodeHtml}
+                ${detailsHtml}
+                <div class="mt-6 flex gap-3">
+                    <button onclick="location.reload()" 
+                            class="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">
+                        Reload Application
+                    </button>
+                    <button onclick="location.href='/'" 
+                            class="flex-1 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors">
+                        Go Home
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Specialized error display for Solid connection issues.
+ * Extends base ErrorDisplay with Solid-specific error handling.
  */
 export class SolidConnectionErrorDisplay extends ErrorDisplay {
-    
     /**
-     * Display Solid Pod connection failure with retry option
+     * Display Solid Pod connection error
      */
-    showSolidConnectionError(): void {
+    showConnectionError(context: string = ''): void {
+        this.showSolidError('solid-connection', context);
+    }
+
+    /**
+     * Display Solid authentication error
+     */
+    showAuthenticationError(context: string = ''): void {
+        this.showAuthError('solid-auth', context);
+    }
+
+    /**
+     * Display Solid permission error
+     */
+    showPermissionError(context: string = ''): void {
         this._showError({
-            errorId: 'solid-connection',
+            errorId: 'solid-permission',
             errorType: 'solid',
-            title: 'Solid Pod Connection Failed',
-            message: 'Solid pod connection failed. Please try connecting to Solid pod again. If issues persist, please email support@meralearn.org.',
-            context: 'Authentication with your Solid Pod provider was unsuccessful',
+            title: 'Permission Denied',
+            message: 'The application does not have permission to access your Solid Pod.',
+            context,
             actions: ['retry_solid', 'email_support']
         });
     }
-
-    /**
-     * Override to add Solid-specific actions
-     */
-    protected _buildActionButtons(errorId: string, actions: ActionType[]): string {
-        const buttons: string[] = [];
-
-        for (const action of actions) {
-            if (action === 'retry_solid') {
-                // Use the connect page URL from your Django project
-                buttons.push(`
-                    <button onclick="window.location.href = window.CONNECT_URL || '/pages/connect/'" 
-                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
-                        Try Connecting Again
-                    </button>
-                `);
-            } else if (action === 'email_support') {
-                buttons.push(`
-                    <button onclick="window.open('mailto:support@meralearn.org?subject=Solid%20Pod%20Connection%20Issue')" 
-                            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
-                        Email Support
-                    </button>
-                `);
-            } else {
-                // Handle any other actions with parent class method
-                const parentButtons = super._buildActionButtons(errorId, [action]);
-                if (parentButtons) {
-                    buttons.push(parentButtons);
-                }
-            }
-        }
-
-        return buttons.join(' ');
-    }
-}
-
-// Global instance - will be initialized by bootstrap
-let globalErrorDisplay: ErrorDisplay | null = null;
-
-/**
- * Set the global error display instance
- */
-export function setGlobalErrorDisplay(errorDisplay: ErrorDisplay): void {
-    globalErrorDisplay = errorDisplay;
-    // Make available globally for onclick handlers
-    (window as any).errorDisplay = errorDisplay;
-}
-
-/**
- * Get the global error display instance
- */
-export function getGlobalErrorDisplay(): ErrorDisplay | null {
-    return globalErrorDisplay;
-}
-
-// Make the classes available globally for debugging
-declare global {
-    interface Window {
-        ErrorDisplay: typeof ErrorDisplay;
-        SolidConnectionErrorDisplay: typeof SolidConnectionErrorDisplay;
-        errorDisplay?: ErrorDisplay;
-    }
-}
-
-window.ErrorDisplay = ErrorDisplay;
-window.SolidConnectionErrorDisplay = SolidConnectionErrorDisplay;
-
-export function showCriticalError(options: CriticalErrorOptions): void {
-  console.error(`🚨 ${options.title}:`, options.message);
-  if (options.technicalDetails) {
-    console.error('Technical details:', options.technicalDetails);
-  }
-  
-  const shouldReload = confirm(
-    `${options.title}\n\n${options.message}\n\nReload page now?`
-  );
-  
-  if (shouldReload) {
-    window.location.reload();
-  }
 }

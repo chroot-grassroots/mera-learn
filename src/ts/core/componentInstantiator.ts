@@ -40,7 +40,7 @@ import {
 } from "../registry/mera-registry.js";
 import { createComponentCore } from "../components/componentCoreFactory.js";
 import { createComponentProgressManager } from "../components/componentManagerFactory.js";
-import { componentCoordinator } from "../ui/componentCoordinator.js";
+import { componentCoordinator } from "../components/componentCoordinator.js";
 import { IReadonlySettingsManager } from "./settingsSchema.js";
 import { IReadonlyOverallProgressManager } from "./overallProgressSchema.js";
 

@@ -18,8 +18,8 @@
  * - No blocking - Main Core keeps running during load
  */
 
-import type { BaseComponentCore } from '../components/cores/baseComponentCore.js';
-import { getTimelineInstance } from './timelineContainer.js';
+import type { BaseComponentCore } from './cores/baseComponentCore.js';
+import { getTimelineInstance } from '../ui/timelineContainer.js';
 
 /**
  * Component Coordinator singleton class.

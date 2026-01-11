@@ -30,6 +30,7 @@ import {
 import { componentIdToTypeMap } from "../registry/mera-registry.js";
 import { SaveManager } from "../persistence/saveManager.js";
 import { enforceDataIntegrity } from "../initialization/progressIntegrity.js";
+import { componentCoordinator } from "../components/componentCoordinator.js";
 
 /**
  * Parameters bundle for runCore.
@@ -79,7 +80,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
 
   // Track whether any state changed (for save optimization)
   let hasChanged = false;
-  
+
   // Track whether overall progress specifically changed (for critical save marking)
   let overallProgressChanged = false;
 
@@ -233,26 +234,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
     }
 
     // ========================================================================
-    // PHASE 3: Destroy Components If Navigation Changed
-    // ========================================================================
-
-    if (pageChanged && currentComponents !== null) {
-      currentComponents.componentCores.forEach((core) => {
-        try {
-          core.interface.destroy();
-        } catch (error) {
-          console.error(`Error destroying component ${core.config.id}:`, error);
-        }
-      });
-
-      // TODO: Each destroy() call should internally notify componentCoordinator.removeComponent()
-      // This prevents coordinator from holding stale references when page changes
-
-      currentComponents = null;
-    }
-
-    // ========================================================================
-    // PHASE 4: Trigger Save (fire-and-forget)
+    // PHASE 3: Trigger Save (fire-and-forget)
     // ========================================================================
 
     // Build bundle from current state
@@ -307,9 +289,27 @@ export async function runCore(params: RunCoreParams): Promise<void> {
     }
 
     // ========================================================================
-    // PHASE 5: Delay for 50ms cycle
+    // PHASE 4: Delay for 50ms cycle
     // ========================================================================
 
     await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // ========================================================================
+    // PHASE 5: Destroy Components If Navigation Changed
+    // ========================================================================
+
+    if (pageChanged && currentComponents !== null) {
+      componentCoordinator.clearPage();
+
+      currentComponents.componentCores.forEach((core) => {
+        try {
+          core.interface.destroy();
+        } catch (error) {
+          console.error(`Error destroying component ${core.config.id}:`, error);
+        }
+      });
+
+      currentComponents = null;
+    }
   }
 }

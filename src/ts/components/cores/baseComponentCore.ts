@@ -2,12 +2,6 @@
  * @fileoverview Base classes for all interactive learning components with timestamp support
  * @module components/cores/baseComponentCore
  *
- * REFACTORED:
- * - Removed .default(0) from BaseComponentProgressSchema
- * - Added input/output cloning to BaseComponentProgressManager
- * - Made progress field private to enforce cloning boundaries
- * - Manager now stores config reference (immutable, safe to share)
- *
  * Defines the Core/Interface component architecture that enables:
  * - Separation of data logic (Core) from UI rendering (Interface)
  * - Message-based communication with Main Application Core
@@ -257,8 +251,10 @@ export abstract class BaseComponentCore<
 
   // Component-specific progress queue manager
   // Defined by concrete component classes (not in base)
-
   private _interface: BaseComponentInterface<TConfig, TComponentProgress, any>;
+
+  // Operations control - components can't produce messages until coordinator releases them
+  protected _operationsEnabled: boolean = false;
 
   /**
    * Construct component core with readonly references to shared state.
@@ -328,12 +324,65 @@ export abstract class BaseComponentCore<
   /**
    * Retrieve component-specific progress messages.
    *
-   * Abstract - each component implements to return queued progress updates.
    * Main Core polls this during its update cycle.
+   * Returns empty array until operations enabled by coordinator.
+   * 
+   * Gating is enforced at base level - subclasses cannot bypass it.
    *
    * @returns Array of component progress messages
    */
-  abstract getComponentProgressMessages(): ComponentProgressMessage[];
+  getComponentProgressMessages(): ComponentProgressMessage[] {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this.getComponentProgressMessagesInternal();
+  }
+
+  /**
+   * Retrieve component-specific progress messages (internal).
+   * 
+   * Abstract - each component implements to return queued progress updates.
+   * This method is called by getComponentProgressMessages() after operations check.
+   * 
+   * Subclasses should NOT check _operationsEnabled - base class handles gating.
+   * 
+   * @returns Array of component progress messages
+   */
+  protected abstract getComponentProgressMessagesInternal(): ComponentProgressMessage[];
+
+  // ============================================================================
+  // LIFECYCLE MANAGEMENT METHODS (called by Coordinator)
+  // ============================================================================
+
+  /**
+   * Check if interface is ready to render.
+   *
+   * Called by coordinator to determine when component can be displayed.
+   * Delegates to interface which tracks asset loading state.
+   *
+   * @returns true if interface ready (assets loaded or acceptable failure state)
+   */
+  isInterfaceReady(): boolean {
+    return this._interface.isReady();
+  }
+
+  /**
+   * Display interface and enable operations.
+   *
+   * Called by coordinator when all components ready.
+   * Performs two actions:
+   * 1. Renders component to DOM (creates timeline slot, displays content)
+   * 2. Enables message production (allows getMessages() to return queued updates)
+   *
+   * After this method, component is fully active and can interact with user.
+   */
+  displayInterface(): void {
+    // Render to DOM
+    this._interface.renderToDOM();
+
+    // Enable message production
+    this._operationsEnabled = true;
+  }
 
   // ============================================================================
   // READONLY ACCESSORS
@@ -389,6 +438,9 @@ export abstract class BaseComponentCore<
    * Main Core polls this during update cycle.
    */
   getNavigationMessages(): NavigationMessage[] {
+    if (!this._operationsEnabled) {
+      return [];
+    }
     return this._navigationQueueManager.getMessages();
   }
 
@@ -398,6 +450,9 @@ export abstract class BaseComponentCore<
    * Main Core polls this during update cycle.
    */
   getSettingsMessages(): SettingsMessage[] {
+    if (!this._operationsEnabled) {
+      return [];
+    }
     return this._settingsQueueManager.getMessages();
   }
 
@@ -407,6 +462,9 @@ export abstract class BaseComponentCore<
    * Main Core polls this during update cycle.
    */
   getOverallProgressMessages(): OverallProgressMessage[] {
+    if (!this._operationsEnabled) {
+      return [];
+    }
     return this._overallProgressQueueManager.getMessages();
   }
 }

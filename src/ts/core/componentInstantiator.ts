@@ -252,7 +252,9 @@ export function instantiateComponents(
   // PHASE 4: Hand cores to coordinator for UI management
   // ========================================================================
 
-  componentCoordinator.beginPageLoad(componentCores);
+  componentCoordinator.beginPageLoad(componentCores).catch((err) => {
+    console.error("Component coordinator failed:", err);
+  });
 
   // ========================================================================
   // PHASE 5: Return polling maps to runCore

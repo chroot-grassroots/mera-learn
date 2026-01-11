@@ -42,7 +42,8 @@ vi.mock('../components/componentManagerFactory.js', () => ({
 
 vi.mock('../components/componentCoordinator.js', () => ({
   componentCoordinator: {
-    beginPageLoad: vi.fn(),
+    beginPageLoad: vi.fn().mockResolvedValue(undefined),  // ← Returns Promise
+    clearPage: vi.fn(),  // ← Add this too since we added the method
   },
 }));
 

@@ -2,7 +2,7 @@
  * @fileoverview Basic task component with checkbox-based interactions
  * @module components/cores/basicTaskCore
  *
- * REFACTORED: 
+ * REFACTORED:
  * - Updated to remove .default() from schema and ensure consistent default handling
  * - Manager now stores config internally - removed config parameter from methods
  * - Removed .default([]) from BasicTaskComponentProgressSchema
@@ -28,13 +28,11 @@ import {
 } from "./baseComponentCore.js";
 import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import { TimelineContainer } from "../../ui/timelineContainer.js";
-import {
-  ComponentProgressMessage,
-} from "../../core/coreTypes.js";
+import { ComponentProgressMessage } from "../../core/coreTypes.js";
 import { CurriculumRegistry } from "../../registry/mera-registry.js";
-import type { IReadonlyOverallProgressManager } from '../../core/overallProgressSchema.js';
-import type { IReadonlyNavigationManager } from '../../core/navigationSchema.js';
-import type { IReadonlySettingsManager } from '../../core/settingsSchema.js';
+import type { IReadonlyOverallProgressManager } from "../../core/overallProgressSchema.js";
+import type { IReadonlyNavigationManager } from "../../core/navigationSchema.js";
+import type { IReadonlySettingsManager } from "../../core/settingsSchema.js";
 // ============================================================================
 // SCHEMAS
 // ============================================================================
@@ -65,12 +63,12 @@ export type BasicTaskComponentConfig = z.infer<
 
 /**
  * Basic task component progress schema
- * 
- * REFACTORED: 
+ *
+ * REFACTORED:
  * - Extends BaseComponentProgressSchema which includes lastUpdated (no .default())
  * - Removed .default([]) from checkbox_checked
  * - Explicit defaulting happens in createInitialProgress() and validators
- * 
+ *
  * No need to add lastUpdated here - it's inherited automatically!
  */
 export const BasicTaskComponentProgressSchema =
@@ -180,8 +178,8 @@ export function validateBasicTaskStructure(
 
 /**
  * Progress manager for basic task component
- * 
- * REFACTORED: 
+ *
+ * REFACTORED:
  * - Inherits input/output cloning from BaseComponentProgressManager
  * - Stores config reference internally (no longer passed to methods)
  * - Protected progress field allows direct mutation
@@ -216,7 +214,7 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<
 
     // Mutation is safe - mutate protected field directly
     this.progress.checkbox_checked[index] = checked;
-    
+
     // Update timestamp (inherited helper from base class)
     this.updateTimestamp();
   }
@@ -226,7 +224,7 @@ export class BasicTaskProgressManager extends BaseComponentProgressManager<
    *
    * Called for new users or when component is first encountered.
    * Creates array of false values matching checkbox count.
-   * 
+   *
    * IMPORTANT: Explicitly sets lastUpdated to 0 (timestamp 0 = never set by user).
    *
    * @param config Component configuration with checkbox definitions
@@ -299,13 +297,12 @@ export class BasicTaskCore extends BaseComponentCore<
 
   constructor(
     config: BasicTaskComponentConfig,
-  progressManager: BasicTaskProgressManager,
-  timeline: TimelineContainer,
-  overallProgressManager: IReadonlyOverallProgressManager,
-  navigationManager: IReadonlyNavigationManager,
-  settingsManager: IReadonlySettingsManager,
-  curriculumRegistry: CurriculumRegistry
-
+    progressManager: BasicTaskProgressManager,
+    timeline: TimelineContainer,
+    overallProgressManager: IReadonlyOverallProgressManager,
+    navigationManager: IReadonlyNavigationManager,
+    settingsManager: IReadonlySettingsManager,
+    curriculumRegistry: CurriculumRegistry
   ) {
     super(
       config,
@@ -376,7 +373,8 @@ export class BasicTaskCore extends BaseComponentCore<
   /**
    * Get component progress messages for core polling
    */
-  getComponentProgressMessages(): ComponentProgressMessage[] {
+  protected getComponentProgressMessagesInternal(): ComponentProgressMessage[] {
+    // Note: No operations check needed here - base class handles gating
     return this._componentProgressQueueManager.getMessages();
   }
 }
@@ -387,37 +385,44 @@ export class BasicTaskCore extends BaseComponentCore<
 
 /**
  * Validates and executes basic task progress messages in Main Core.
- * 
+ *
  * Routes validated messages to appropriate BasicTaskProgressManager methods.
  * Only whitelisted methods can be called via messages - security boundary.
  */
-export class BasicTaskProgressMessageHandler implements IComponentProgressMessageHandler {
+export class BasicTaskProgressMessageHandler
+  implements IComponentProgressMessageHandler
+{
   constructor(
-    private componentManagers: Map<number, BaseComponentProgressManager<any, any>>
+    private componentManagers: Map<
+      number,
+      BaseComponentProgressManager<any, any>
+    >
   ) {}
-  
+
   getComponentType(): string {
-    return 'basic_task';
+    return "basic_task";
   }
-  
+
   handleMessage(message: ComponentProgressMessage): void {
     // Get the manager for this component
-    const manager = this.componentManagers.get(message.componentId) as BasicTaskProgressManager;
-    
+    const manager = this.componentManagers.get(
+      message.componentId
+    ) as BasicTaskProgressManager;
+
     if (!manager) {
       throw new Error(`No manager found for component ${message.componentId}`);
     }
-    
+
     // Whitelist of allowed methods for BasicTask components - security boundary
     switch (message.method) {
-      case 'setCheckboxState':
+      case "setCheckboxState":
         // Manager has config internally now - just pass the args
         manager.setCheckboxState(
           message.args[0] as number,
           message.args[1] as boolean
         );
         break;
-      
+
       default:
         throw new Error(
           `BasicTask components only support: setCheckboxState. Got: ${message.method}`

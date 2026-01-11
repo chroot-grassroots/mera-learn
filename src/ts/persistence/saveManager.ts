@@ -84,6 +84,9 @@ class SaveManager {
   /** Flag indicating bundle has changed since last save */
   private saveHasChanged: boolean = false;
 
+  /** Flag indicating a critical save (e.g., lesson completion) is pending */
+  private criticalSavePending: boolean = false;
+
   // ============================================================================
   // CONCURRENT SESSION PROTECTION STATE
   // ============================================================================
@@ -163,6 +166,9 @@ class SaveManager {
       // Clear changed flag to prevent endless repeats
       this.saveHasChanged = false;
 
+      // Capture critical save flag at start of save (before it can be modified by new queueSave calls)
+      const wasCriticalPending = this.criticalSavePending;
+
       // Capture string reference (no clone needed - strings are immutable)
       const bundleSnapshot = this.queuedSave;
 
@@ -205,6 +211,11 @@ class SaveManager {
         // Store result for retry logic and online status
         this.lastSaveResult = result;
 
+        // Clear critical save flag if this save succeeded AND the flag was set when we started
+        if (wasCriticalPending && result !== SaveResult.BothFailed) {
+          this.criticalSavePending = false;
+        }
+
         // Log localStorage failures (rare edge case)
         if (result === SaveResult.OnlySolidSucceeded) {
           console.error(
@@ -238,10 +249,15 @@ class SaveManager {
    *
    * @param bundleJSON - Pre-stringified JSON representation of complete progress bundle
    * @param hasChanged - True if bundle differs from last save
+   * @param criticalSave - Optional: True if this save represents critical progress (e.g., lesson completion)
    */
-  queueSave(bundleJSON: string, hasChanged: boolean): void {
+  queueSave(bundleJSON: string, hasChanged: boolean, criticalSave?: boolean): void {
     this.queuedSave = bundleJSON;
     this.saveHasChanged = hasChanged;
+    
+    if (criticalSave) {
+      this.criticalSavePending = true;
+    }
   }
 
   /**
@@ -261,6 +277,18 @@ class SaveManager {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Returns whether it's safe to close the window.
+   *
+   * Used by UI to warn user before closing if critical progress hasn't been saved yet.
+   * Returns false if a critical save is pending (queued or in progress but not completed).
+   *
+   * @returns True if safe to close (no critical saves pending), false otherwise
+   */
+  safeToClose(): boolean {
+    return !this.criticalSavePending;
   }
 
   // ============================================================================

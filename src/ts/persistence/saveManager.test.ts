@@ -45,23 +45,25 @@ describe('SaveManager', () => {
       webId: 'https://test.pod/profile/card#me'
     },
     overallProgress: {
-      lessonCompletions: { '100': 1234567890, '101': 1234567900 },
-      domainsCompleted: [1, 2],
+      lessonCompletions: {},
+      domainCompletions: {},
       currentStreak: 5,
-      lastStreakCheck: 1234567890
+      lastStreakCheck: 1234567890,
+      totalLessonsCompleted: 0,
+      totalDomainsCompleted: 0
     },
     settings: {
-      weekStartDay: 'monday',
-      weekStartTimeUTC: '00:00',
-      theme: 'auto',
-      learningPace: 'standard',
-      optOutDailyPing: false,
-      optOutErrorPing: false,
-      fontSize: 'medium',
-      highContrast: false,
-      reducedMotion: false,
-      focusIndicatorStyle: 'default',
-      audioEnabled: true
+      weekStartDay: ['monday', 0],
+      weekStartTimeUTC: ['00:00', 0],
+      theme: ['auto', 0],
+      learningPace: ['standard', 0],
+      optOutDailyPing: [false, 0],
+      optOutErrorPing: [false, 0],
+      fontSize: ['medium', 0],
+      highContrast: [false, 0],
+      reducedMotion: [false, 0],
+      focusIndicatorStyle: ['default', 0],
+      audioEnabled: [true, 0]
     },
     navigationState: {
       currentEntityId: 1,
@@ -69,17 +71,9 @@ describe('SaveManager', () => {
       lastUpdated: 1234567890
     },
     combinedComponentProgress: {
-      lessonId: '100',
-      lastUpdated: 1234567890,
       components: {
-        '1': { checkbox_checked: [true, false, true] },
-        '2': { checkbox_checked: [false, false] }
-      },
-      overallProgress: {
-        lessonCompletions: { '100': 1234567890 },
-        domainsCompleted: [1],
-        currentStreak: 5,
-        lastStreakCheck: 1234567890
+        '100': { checkbox_checked: [true, false, true], lastUpdated: 0 },
+        '101': { checkbox_checked: [false, false], lastUpdated: 0 }
       }
     }
   };
@@ -910,6 +904,100 @@ describe('SaveManager', () => {
       );
       
       expect(orchestrateSaveMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Critical Save Tracking', () => {
+    beforeEach(() => {
+      manager = SaveManager.getInstance();
+    });
+
+    it('sets criticalSavePending when queueSave called with criticalSave=true', () => {
+      manager.queueSave(testBundleJSON, true, true);
+      
+      // Should mark as not safe to close
+      expect(manager.safeToClose()).toBe(false);
+    });
+
+    it('does not set criticalSavePending when criticalSave is false', () => {
+      manager.queueSave(testBundleJSON, true, false);
+      
+      expect(manager.safeToClose()).toBe(true);
+    });
+
+    it('does not set criticalSavePending when criticalSave is omitted', () => {
+      manager.queueSave(testBundleJSON, true);
+      
+      expect(manager.safeToClose()).toBe(true);
+    });
+
+    it('clears criticalSavePending after successful save (BothSucceeded)', async () => {
+      orchestrateSaveMock.mockResolvedValue(SaveResult.BothSucceeded);
+      
+      manager.queueSave(testBundleJSON, true, true);
+      expect(manager.safeToClose()).toBe(false);
+      
+      await vi.advanceTimersByTimeAsync(100);
+      
+      // After successful save, should be safe to close
+      expect(manager.safeToClose()).toBe(true);
+    });
+
+    it('clears criticalSavePending after partial success (OnlyLocalSucceeded)', async () => {
+      orchestrateSaveMock.mockResolvedValue(SaveResult.OnlyLocalSucceeded);
+      
+      manager.queueSave(testBundleJSON, true, true);
+      expect(manager.safeToClose()).toBe(false);
+      
+      await vi.advanceTimersByTimeAsync(100);
+      
+      // After local save succeeded, should be safe to close
+      expect(manager.safeToClose()).toBe(true);
+    });
+
+    it('clears criticalSavePending after partial success (OnlySolidSucceeded)', async () => {
+      orchestrateSaveMock.mockResolvedValue(SaveResult.OnlySolidSucceeded);
+      
+      manager.queueSave(testBundleJSON, true, true);
+      expect(manager.safeToClose()).toBe(false);
+      
+      await vi.advanceTimersByTimeAsync(100);
+      
+      // After solid save succeeded, should be safe to close
+      expect(manager.safeToClose()).toBe(true);
+    });
+
+    it('does NOT clear criticalSavePending when save fails completely', async () => {
+      orchestrateSaveMock.mockResolvedValue(SaveResult.BothFailed);
+      
+      manager.queueSave(testBundleJSON, true, true);
+      expect(manager.safeToClose()).toBe(false);
+      
+      await vi.advanceTimersByTimeAsync(100);
+      
+      // After complete failure, still not safe to close
+      expect(manager.safeToClose()).toBe(false);
+    });
+
+    it('handles non-critical save overwriting critical save', async () => {
+      orchestrateSaveMock.mockResolvedValue(SaveResult.BothSucceeded);
+      
+      // Queue critical save
+      manager.queueSave(testBundleJSON, true, true);
+      expect(manager.safeToClose()).toBe(false);
+      
+      // Before it processes, queue non-critical save that overwrites bundle
+      const bundle2JSON = JSON.stringify({ ...testBundle, settings: { ...testBundle.settings, theme: ['dark', 0] } });
+      manager.queueSave(bundle2JSON, true, false);
+      
+      // Should still not be safe to close (critical flag already set)
+      expect(manager.safeToClose()).toBe(false);
+      
+      // Save processes
+      await vi.advanceTimersByTimeAsync(100);
+      
+      // Critical flag should be cleared because save succeeded
+      expect(manager.safeToClose()).toBe(true);
     });
   });
 });

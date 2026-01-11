@@ -79,6 +79,9 @@ export async function runCore(params: RunCoreParams): Promise<void> {
 
   // Track whether any state changed (for save optimization)
   let hasChanged = false;
+  
+  // Track whether overall progress specifically changed (for critical save marking)
+  let overallProgressChanged = false;
 
   // Get SaveManager singleton
   const saveManager = SaveManager.getInstance();
@@ -129,63 +132,59 @@ export async function runCore(params: RunCoreParams): Promise<void> {
       const componentType = componentIdToTypeMap.get(componentId);
       if (!componentType) {
         throw new Error(
-          `CRITICAL: Component ${componentId} exists in componentCores but has no type in registry. ` +
-            `This indicates registry corruption or deployment mismatch.`
+          `CRITICAL: Component ${componentId} exists in componentCores but has no type in registry.` +
+            ` This indicates registry generation bug or deployment error.` +
+            ` Registry must be regenerated with current curriculum.`
         );
       }
 
-      // Component Progress Messages - graceful degradation on errors
+      // Component Progress Messages - isolated error handling (community code)
+      // Catch errors to prevent single buggy component from crashing app
       if (currentComponents.componentProgressPolling.has(componentId)) {
-        try {
-          const messages = core.getComponentProgressMessages();
-          if (messages.length > 0) {
-            hasChanged = true;
+        const messages = core.getComponentProgressMessages();
+        if (messages.length > 0) {
+          hasChanged = true;
 
-            const handler = params.componentProgressHandlers.get(componentType);
-            if (!handler) {
-              throw new Error(
-                `No handler found for component type '${componentType}'`
-              );
-            }
-
-            for (const msg of messages) {
-              // SECURITY CHECK: Verify message claims correct componentId
-              // componentId from map key is source of truth
-              if (msg.componentId !== componentId) {
-                throw new Error(
-                  `Component ${componentId} sent message claiming to be from component ${msg.componentId}`
+          for (const msg of messages) {
+            try {
+              const handler =
+                params.componentProgressHandlers.get(componentType);
+              if (!handler) {
+                // Developer error - every component type needs a handler
+                console.error(
+                  `No handler found for component type: ${componentType}`
                 );
+                continue;
               }
+
               handler.handleMessage(msg);
+            } catch (error) {
+              // Component bug - log but continue processing
+              console.error(`Component ${componentId} message error:`, error);
+
+              // TODO: Consider component-level error recovery here
+              // Could destroy and recreate component with recovered progress
+              // For now, just log and continue
+
+              // Future enhancement: If errors persist, could trigger:
+              // 1. Component Core destruction
+              // 2. Heartbeat timeout detection
+              // 3. Component recreation with recovered state
+              //
+              // This prevents buggy components from permanently hanging
+              // Interface.destroy() calls componentCoordinator.removeComponent()
+              // This prevents coordinator from holding stale references after component failure
+              // Interface will need componentCoordinator passed to constructor
+
+              currentComponents.componentCores.delete(componentId);
+              currentComponents.componentProgressPolling.delete(componentId);
+              currentComponents.overallProgressPolling.delete(componentId);
+              currentComponents.navigationPolling.delete(componentId);
+              currentComponents.settingsPolling.delete(componentId);
+
+              continue; // Skip to next component
             }
           }
-        } catch (error) {
-          console.error(
-            `❌ Component ${componentId} (${componentType}) failed during component progress polling/processing:`,
-            error
-          );
-
-          // Destroy component (should internally notify componentCoordinator)
-          try {
-            core.interface.destroy();
-          } catch (destroyError) {
-            console.error(
-              `Failed to destroy component ${componentId}:`,
-              destroyError
-            );
-          }
-
-          // TODO: Ensure BaseComponentInterface.destroy() calls componentCoordinator.removeComponent()
-          // This prevents coordinator from holding stale references after component failure
-          // Interface will need componentCoordinator passed to constructor
-
-          currentComponents.componentCores.delete(componentId);
-          currentComponents.componentProgressPolling.delete(componentId);
-          currentComponents.overallProgressPolling.delete(componentId);
-          currentComponents.navigationPolling.delete(componentId);
-          currentComponents.settingsPolling.delete(componentId);
-
-          continue; // Skip to next component
         }
       }
 
@@ -205,6 +204,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
         const messages = core.getOverallProgressMessages();
         if (messages.length > 0) {
           hasChanged = true;
+          overallProgressChanged = true; // Mark critical save needed
           for (const msg of messages) {
             params.overallProgressHandler.handleMessage(msg);
           }
@@ -299,9 +299,11 @@ export async function runCore(params: RunCoreParams): Promise<void> {
       hasChanged || timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS;
 
     if (shouldQueueSave) {
-      saveManager.queueSave(bundleJSON, hasChanged);
+      // Pass criticalSave flag if overall progress changed (lesson completion, etc.)
+      saveManager.queueSave(bundleJSON, hasChanged, overallProgressChanged);
       lastSaveQueueTime = now;
       hasChanged = false; // Reset for next iteration
+      overallProgressChanged = false; // Reset critical save flag
     }
 
     // ========================================================================

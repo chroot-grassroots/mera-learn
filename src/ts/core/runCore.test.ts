@@ -795,7 +795,8 @@ describe('runCore', () => {
 
       expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
         expect.any(String), // bundleJSON
-        true // hasChanged
+        true, // hasChanged
+        false // overallProgressChanged (navigation message, not critical)
       );
     });
 
@@ -836,6 +837,75 @@ describe('runCore', () => {
       // Save triggered after each message
       await vi.advanceTimersByTimeAsync(50);
       expect(mockSaveManager.queueSave).toHaveBeenCalled();
+    });
+
+    it('passes criticalSave=true when overall progress changes', async () => {
+      // Setup: overall progress message
+      vi.mocked(mockComponentCore1.getOverallProgressMessages).mockReturnValueOnce([
+        { method: 'markLessonComplete', args: [1] }
+      ] as OverallProgressMessage[]);
+
+      const runPromise = runCore(params);
+
+      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
+        expect.any(String),
+        true, // hasChanged
+        true  // overallProgressChanged (critical save needed)
+      );
+    });
+
+    it('passes criticalSave=false when only non-overall-progress changes', async () => {
+      // Setup: settings message only (not critical)
+      vi.mocked(mockComponentCore1.getSettingsMessages).mockReturnValueOnce([
+        { method: 'setTheme', args: ['dark'] }
+      ] as SettingsMessage[]);
+
+      const runPromise = runCore(params);
+
+      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
+        expect.any(String),
+        true,  // hasChanged
+        false  // overallProgressChanged (not critical)
+      );
+    });
+
+    it('resets overallProgressChanged after save', async () => {
+      // First overall progress message
+      vi.mocked(mockComponentCore1.getOverallProgressMessages)
+        .mockReturnValueOnce([{ method: 'incrementStreak', args: [] }] as OverallProgressMessage[])
+        .mockReturnValue([]);
+
+      const runPromise = runCore(params);
+
+      // First save with critical=true
+      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
+        expect.any(String),
+        true,
+        true  // Critical save
+      );
+
+      // Now trigger a non-critical change (navigation)
+      vi.mocked(mockComponentCore1.getNavigationMessages)
+        .mockReturnValueOnce([{ method: 'setCurrentView', args: [1, 2] }] as NavigationMessage[]);
+
+      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(50);
+
+      // Second save should not be critical
+      expect(mockSaveManager.queueSave).toHaveBeenCalledTimes(2);
+      expect(mockSaveManager.queueSave).toHaveBeenLastCalledWith(
+        expect.any(String),
+        true,
+        false  // Not critical (flag was reset)
+      );
     });
   });
 
@@ -1077,7 +1147,11 @@ describe('runCore', () => {
       
       // Should trigger ONE save with hasChanged=true (not 3 separate saves)
       expect(mockSaveManager.queueSave).toHaveBeenCalledTimes(1);
-      expect(mockSaveManager.queueSave).toHaveBeenCalledWith(expect.any(String), true);
+      expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
+        expect.any(String),
+        true, // hasChanged
+        true  // overallProgressChanged (has incrementStreak message)
+      );
       
       // Second iteration: no new messages, hasChanged=false, NO save triggered
       await vi.advanceTimersByTimeAsync(50);
@@ -1151,7 +1225,8 @@ describe('runCore', () => {
       expect(mockSaveManager.queueSave).toHaveBeenCalledTimes(1);
       expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
         expect.any(String),
-        true // hasChanged = true because message was processed
+        true, // hasChanged = true because message was processed
+        false // overallProgressChanged = false (navigation message only)
       );
     });
 

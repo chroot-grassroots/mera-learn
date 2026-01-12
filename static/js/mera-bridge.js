@@ -33117,6 +33117,9 @@ var MeraBridge = _MeraBridge;
 var bridgeInstance = MeraBridge.getInstance();
 window.meraBridge = bridgeInstance;
 window.MeraBridge = MeraBridge;
+bridgeInstance.initialize().catch((err) => {
+  console.error("\u274C Bridge initialization failed:", err);
+});
 var meraBridge_default = bridgeInstance;
 export {
   BridgeErrorType,

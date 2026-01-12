@@ -1034,7 +1034,11 @@ function createFullyDefaultedResult(
       domainCompletions,
     },
     settings: defaultSettings,
-    navigationState: getDefaultNavigationState(),
+    navigationState: {
+      currentEntityId: 1, // Welcome screen for new users
+      currentPage: 0,
+      lastUpdated: 0,
+    },
     combinedComponentProgress: {
       components: initializeAllComponentsWithDefaults(),
     },

@@ -30,6 +30,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/base64-js/index.js
 var require_base64_js = __commonJS({
@@ -33817,7 +33818,680 @@ var init_meraBridge = __esm({
     bridgeInstance = MeraBridge.getInstance();
     window.meraBridge = bridgeInstance;
     window.MeraBridge = MeraBridge;
+    bridgeInstance.initialize().catch((err) => {
+      console.error("\u274C Bridge initialization failed:", err);
+    });
     meraBridge_default = bridgeInstance;
+  }
+});
+
+// src/ts/components/interfaces/baseComponentInterface.ts
+var BaseComponentInterface;
+var init_baseComponentInterface = __esm({
+  "src/ts/components/interfaces/baseComponentInterface.ts"() {
+    "use strict";
+    BaseComponentInterface = class {
+      /**
+       * Construct interface and start loading assets.
+       * 
+       * Asset loading begins immediately in background.
+       * NO DOM WORK in constructor - rendering managed by coordinator.
+       * 
+       * Initial states:
+       * - assetLoadingState: 'loading'
+       * - lifecycleState: 'not_displayed'
+       */
+      constructor(componentCore, timelineContainer) {
+        this.componentCore = componentCore;
+        this.timelineContainer = timelineContainer;
+        this.assetLoadingState = "loading";
+        this.lifecycleState = "not_displayed";
+        this.internal = this.createInternalState();
+        this.loadComponentSpecificAssets().then(() => {
+          if (this.assetLoadingState === "loading") {
+            this.assetLoadingState = "ready";
+          }
+        }).catch((error46) => {
+          console.error("Asset loading failed:", error46);
+          if (this.assetLoadingState === "loading") {
+            this.assetLoadingState = "complete_failure";
+          }
+        });
+      }
+      /**
+       * Set asset loading state.
+       * 
+       * Protected - only subclasses can update state during asset loading.
+       * Allows components to communicate loading status to coordinator.
+       * 
+       * @param state New asset loading state
+       */
+      setAssetLoadingState(state) {
+        this.assetLoadingState = state;
+      }
+      /**
+       * Check if interface is ready to render.
+       * 
+       * Called by coordinator to determine when component can be displayed.
+       * Returns true for states where rendering makes sense:
+       * - ready: All assets loaded successfully
+       * - partial_failure: Some assets failed, but component can function in degraded mode
+       * - slow_connection: Still loading but slow, can render with loading indicator
+       * 
+       * Returns false for:
+       * - loading: Normal loading in progress
+       * - complete_failure: Critical failure, component cannot function
+       * 
+       * @returns true if component can be rendered
+       */
+      isReady() {
+        return this.assetLoadingState === "ready" || this.assetLoadingState === "partial_failure" || this.assetLoadingState === "slow_connection";
+      }
+      /**
+       * Get current asset loading state.
+       * 
+       * Allows coordinator to make informed decisions:
+       * - Show different loading UI for slow_connection
+       * - Warn user about partial_failure components
+       * - Skip complete_failure components
+       * 
+       * @returns Current asset loading state
+       */
+      getAssetLoadingState() {
+        return this.assetLoadingState;
+      }
+      /**
+       * Get progress information for assets being loaded.
+       * 
+       * Optional - components that support progress tracking override this.
+       * Default implementation returns null (no progress info available).
+       * 
+       * Used by coordinator to show "10 MB of 50 MB" type progress.
+       * 
+       * @returns Progress info or null if not supported
+       */
+      getLoadingProgress() {
+        return null;
+      }
+      /**
+       * Render component to DOM.
+       * 
+       * Called by coordinator after isReady() returns true.
+       * Creates timeline slot and delegates to concrete render() implementation.
+       * Updates lifecycle state: not_displayed → displayed
+       */
+      renderToDOM() {
+        this.timelineContainer.addComponentSlot(
+          this.componentCore.config.id
+        );
+        this.render();
+        this.lifecycleState = "displayed";
+      }
+    };
+  }
+});
+
+// src/ts/components/interfaces/newUserWelcomeInterface.ts
+var newUserWelcomeInterface_exports = {};
+__export(newUserWelcomeInterface_exports, {
+  NewUserWelcomeInterface: () => NewUserWelcomeInterface
+});
+var NewUserWelcomeInterface;
+var init_newUserWelcomeInterface = __esm({
+  "src/ts/components/interfaces/newUserWelcomeInterface.ts"() {
+    "use strict";
+    init_baseComponentInterface();
+    NewUserWelcomeInterface = class extends BaseComponentInterface {
+      constructor(core2, timeline2) {
+        super(core2, timeline2);
+      }
+      /**
+       * Create initial internal state
+       */
+      createInternalState() {
+        return {
+          rendered: false,
+          currentScreen: "welcome",
+          screenHistory: [],
+          userChoices: {
+            showAccessibility: false,
+            accessibilityOptions: {
+              fontSize: "medium",
+              highContrast: false,
+              reducedMotion: false,
+              focusIndicatorStyle: "default",
+              audioEnabled: false
+            },
+            optOutTelemetry: false,
+            learningPace: "standard",
+            weekStartDay: "monday",
+            weekStartTime: "00:00"
+          }
+        };
+      }
+      /**
+       * Load component-specific assets
+       * No external assets needed for this component
+       */
+      async loadComponentSpecificAssets() {
+        return Promise.resolve();
+      }
+      /**
+       * Cleanup method - remove event listeners
+       */
+      destroy() {
+      }
+      /**
+       * Main render method - delegates to screen-specific renderers
+       */
+      render() {
+        const slot = this.timelineContainer.getComponentArea(this.componentCore.config.id);
+        if (!slot) {
+          console.error(`Slot not found for component ${this.componentCore.config.id}`);
+          return;
+        }
+        let screenHtml = "";
+        switch (this.internal.currentScreen) {
+          case "welcome":
+            screenHtml = this.renderWelcomeScreen();
+            break;
+          case "accessibility-gateway":
+            screenHtml = this.renderAccessibilityGatewayScreen();
+            break;
+          case "accessibility-options":
+            screenHtml = this.renderAccessibilityOptionsScreen();
+            break;
+          case "telemetry":
+            screenHtml = this.renderTelemetryScreen();
+            break;
+          case "learning-pace":
+            screenHtml = this.renderLearningPaceScreen();
+            break;
+          case "week-start":
+            screenHtml = this.renderWeekStartScreen();
+            break;
+          case "complete":
+            screenHtml = this.renderCompleteScreen();
+            break;
+        }
+        slot.innerHTML = screenHtml;
+        this.attachEventListeners();
+      }
+      // ==========================================================================
+      // SCREEN RENDERERS
+      // ==========================================================================
+      renderWelcomeScreen() {
+        return `
+      <div class="max-w-2xl mx-auto text-center space-y-6">
+        <h2 class="text-3xl font-bold text-gray-900 dark:text-white">
+          Welcome to Mera! \u{1F331}
+        </h2>
+        <p class="text-lg text-gray-700 dark:text-gray-300">
+          Let's take a moment to set up your learning experience. 
+          This will only take a minute.
+        </p>
+        <div class="pt-4">
+          <button 
+            id="btn-start"
+            class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors">
+            Let's Get Started
+          </button>
+        </div>
+      </div>
+    `;
+      }
+      renderAccessibilityGatewayScreen() {
+        return `
+      <div class="max-w-2xl mx-auto space-y-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white text-center">
+          Accessibility Options
+        </h2>
+        <p class="text-lg text-gray-700 dark:text-gray-300 text-center">
+          Mera is for everyone. Would you like to customize accessibility settings?
+        </p>
+        <p class="text-sm text-gray-600 dark:text-gray-400 text-center">
+          If an option you need is missing, please let us know.
+        </p>
+        <div class="flex flex-col gap-4 pt-4">
+          <div class="flex justify-between items-center">
+            <button 
+              id="btn-back"
+              class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold">
+              \u2190 Back
+            </button>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <button 
+              id="btn-show-accessibility"
+              class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+              Yes, Show Options
+            </button>
+            <button 
+              id="btn-skip-accessibility"
+              class="bg-amber-700 hover:bg-amber-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+              No Thanks, Use Defaults
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+      }
+      renderAccessibilityOptionsScreen() {
+        return `
+      <div class="max-w-2xl mx-auto space-y-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Customize Accessibility
+        </h2>
+        <p class="text-gray-700 dark:text-gray-300">
+          Select the options that work best for you:
+        </p>
+        
+        <div class="space-y-4">
+          <!-- Font Size -->
+          <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+              Font Size
+            </label>
+            <select 
+              id="select-font-size"
+              class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium (Default)</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+
+          <!-- High Contrast -->
+          <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <label class="flex items-center space-x-3">
+              <input 
+                type="checkbox" 
+                id="check-high-contrast"
+                class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">
+                High Contrast Mode
+              </span>
+            </label>
+          </div>
+
+          <!-- Reduced Motion -->
+          <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <label class="flex items-center space-x-3">
+              <input 
+                type="checkbox" 
+                id="check-reduced-motion"
+                class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">
+                Reduce Motion & Animations
+              </span>
+            </label>
+          </div>
+
+          <!-- Focus Indicator -->
+          <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+              Focus Indicators
+            </label>
+            <select 
+              id="select-focus-style"
+              class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
+              <option value="default" selected>Default</option>
+              <option value="enhanced">Enhanced (More Visible)</option>
+            </select>
+          </div>
+
+          <!-- Audio -->
+          <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <label class="flex items-center space-x-3">
+              <input 
+                type="checkbox" 
+                id="check-audio-enabled"
+                class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">
+                Enable Audio Descriptions
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center pt-4">
+          <button 
+            id="btn-back"
+            class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold">
+            \u2190 Back
+          </button>
+          <button 
+            id="btn-save-accessibility"
+            class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+            Continue
+          </button>
+        </div>
+      </div>
+    `;
+      }
+      renderTelemetryScreen() {
+        return `
+      <div class="max-w-2xl mx-auto space-y-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Privacy & Telemetry
+        </h2>
+        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-3">
+          <p class="text-gray-700 dark:text-gray-300">
+            We believe in <strong>privacy</strong>. We only collect simple anonymous counters:
+          </p>
+          <ul class="list-disc list-inside text-gray-700 dark:text-gray-300 space-y-1 ml-4">
+            <li>Number of active users (daily ping)</li>
+            <li>Major error reports (to fix bugs)</li>
+          </ul>
+          <p class="text-gray-700 dark:text-gray-300">
+            These reveal <strong>nothing</strong> about your identity, location, or activity.
+          </p>
+        </div>
+        
+        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+          <p class="text-sm text-gray-700 dark:text-gray-300">
+            <strong>Note:</strong> We keep 48 hours of IP address logs to protect against 
+            denial-of-service attacks. Use a VPN if you want to hide your IP address.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-4 pt-4">
+          <button 
+            id="btn-back"
+            class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold text-left">
+            \u2190 Back
+          </button>
+          <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <button 
+              id="btn-telemetry-accept"
+              class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+              That's Fine
+            </button>
+            <button 
+              id="btn-telemetry-optout"
+              class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+              Opt Out
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+      }
+      renderLearningPaceScreen() {
+        return `
+      <div class="max-w-2xl mx-auto space-y-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Your Learning Pace
+        </h2>
+        <p class="text-lg text-gray-700 dark:text-gray-300">
+          Mera gently encourages you to stick with making digital security improvements 
+          by tracking weekly goals. Lessons are typically 10 minutes long.
+        </p>
+        <p class="text-gray-700 dark:text-gray-300">
+          How many lessons would you like to complete per week?
+        </p>
+
+        <div class="space-y-4">
+          <button 
+            id="btn-back"
+            class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold">
+            \u2190 Back
+          </button>
+
+          <button 
+            id="btn-pace-accelerated"
+            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white">6 lessons/week</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">Complete curriculum in ~3 months</div>
+          </button>
+
+          <button 
+            id="btn-pace-standard"
+            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white">3 lessons/week (Recommended)</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">Complete curriculum in ~6 months</div>
+          </button>
+
+          <button 
+            id="btn-pace-flexible"
+            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white">Go at your own pace</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">No weekly goals, learn when you want</div>
+          </button>
+        </div>
+      </div>
+    `;
+      }
+      renderWeekStartScreen() {
+        return `
+      <div class="max-w-2xl mx-auto space-y-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Week Start Time
+        </h2>
+        <p class="text-gray-700 dark:text-gray-300">
+          When should your learning week begin? Choose a day and time that works for you.
+        </p>
+
+        <div class="space-y-4">
+          <!-- Day of Week -->
+          <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+              Day of Week
+            </label>
+            <select 
+              id="select-week-day"
+              class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
+              <option value="monday" selected>Monday</option>
+              <option value="tuesday">Tuesday</option>
+              <option value="wednesday">Wednesday</option>
+              <option value="thursday">Thursday</option>
+              <option value="friday">Friday</option>
+              <option value="saturday">Saturday</option>
+              <option value="sunday">Sunday</option>
+            </select>
+          </div>
+
+          <!-- Time -->
+          <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
+            <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+              Time (in your local timezone)
+            </label>
+            <input 
+              type="time" 
+              id="input-week-time"
+              value="00:00"
+              class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center pt-4">
+          <button 
+            id="btn-back"
+            class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold">
+            \u2190 Back
+          </button>
+          <button 
+            id="btn-save-week-start"
+            class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+            Continue
+          </button>
+        </div>
+      </div>
+    `;
+      }
+      renderCompleteScreen() {
+        return `
+      <div class="max-w-2xl mx-auto text-center space-y-6">
+        <div class="text-6xl">\u2705</div>
+        <h2 class="text-3xl font-bold text-gray-900 dark:text-white">
+          You're All Set!
+        </h2>
+        <p class="text-lg text-gray-700 dark:text-gray-300">
+          Your settings have been saved. Let's begin your journey to better digital security.
+        </p>
+        <div class="pt-4">
+          <button 
+            id="btn-finish"
+            class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors">
+            Start Learning
+          </button>
+        </div>
+      </div>
+    `;
+      }
+      // ==========================================================================
+      // EVENT HANDLERS
+      // ==========================================================================
+      attachEventListeners() {
+        document.getElementById("btn-back")?.addEventListener("click", () => {
+          this.goBack();
+        });
+        document.getElementById("btn-start")?.addEventListener("click", () => {
+          this.advanceToScreen("accessibility-gateway");
+        });
+        document.getElementById("btn-show-accessibility")?.addEventListener("click", () => {
+          this.internal.userChoices.showAccessibility = true;
+          this.advanceToScreen("accessibility-options");
+        });
+        document.getElementById("btn-skip-accessibility")?.addEventListener("click", () => {
+          this.internal.userChoices.showAccessibility = false;
+          this.advanceToScreen("telemetry");
+        });
+        document.getElementById("btn-save-accessibility")?.addEventListener("click", () => {
+          this.captureAccessibilityChoices();
+          this.advanceToScreen("telemetry");
+        });
+        document.getElementById("btn-telemetry-accept")?.addEventListener("click", () => {
+          this.internal.userChoices.optOutTelemetry = false;
+          this.advanceToScreen("learning-pace");
+        });
+        document.getElementById("btn-telemetry-optout")?.addEventListener("click", () => {
+          this.internal.userChoices.optOutTelemetry = true;
+          this.advanceToScreen("learning-pace");
+        });
+        document.getElementById("btn-pace-accelerated")?.addEventListener("click", () => {
+          this.internal.userChoices.learningPace = "accelerated";
+          this.advanceToScreen("week-start");
+        });
+        document.getElementById("btn-pace-standard")?.addEventListener("click", () => {
+          this.internal.userChoices.learningPace = "standard";
+          this.advanceToScreen("week-start");
+        });
+        document.getElementById("btn-pace-flexible")?.addEventListener("click", () => {
+          this.internal.userChoices.learningPace = "flexible";
+          this.advanceToScreen("complete");
+        });
+        document.getElementById("btn-save-week-start")?.addEventListener("click", () => {
+          this.captureWeekStartChoices();
+          this.advanceToScreen("complete");
+        });
+        document.getElementById("btn-finish")?.addEventListener("click", () => {
+          this.queueAllSettingsAndNavigate();
+        });
+      }
+      // ==========================================================================
+      // HELPER METHODS
+      // ==========================================================================
+      advanceToScreen(screen) {
+        this.internal.screenHistory.push(this.internal.currentScreen);
+        this.internal.currentScreen = screen;
+        this.render();
+      }
+      goBack() {
+        const previousScreen = this.internal.screenHistory.pop();
+        if (previousScreen) {
+          this.internal.currentScreen = previousScreen;
+          this.render();
+        }
+      }
+      captureAccessibilityChoices() {
+        const fontSize = document.getElementById("select-font-size")?.value || "medium";
+        const highContrast = document.getElementById("check-high-contrast")?.checked || false;
+        const reducedMotion = document.getElementById("check-reduced-motion")?.checked || false;
+        const focusStyle = document.getElementById("select-focus-style")?.value || "default";
+        const audioEnabled = document.getElementById("check-audio-enabled")?.checked || false;
+        this.internal.userChoices.accessibilityOptions = {
+          fontSize,
+          highContrast,
+          reducedMotion,
+          focusIndicatorStyle: focusStyle,
+          audioEnabled
+        };
+      }
+      captureWeekStartChoices() {
+        const day2 = document.getElementById("select-week-day")?.value || "monday";
+        const time3 = document.getElementById("input-week-time")?.value || "00:00";
+        this.internal.userChoices.weekStartDay = day2;
+        this.internal.userChoices.weekStartTime = time3;
+      }
+      queueAllSettingsAndNavigate() {
+        this.componentCore.queueSettingsMessage({
+          method: "setTheme",
+          args: ["auto"]
+        });
+        this.componentCore.queueSettingsMessage({
+          method: "setLearningPace",
+          args: [this.internal.userChoices.learningPace]
+        });
+        this.componentCore.queueSettingsMessage({
+          method: "setOptOutDailyPing",
+          args: [this.internal.userChoices.optOutTelemetry]
+        });
+        this.componentCore.queueSettingsMessage({
+          method: "setOptOutErrorPing",
+          args: [this.internal.userChoices.optOutTelemetry]
+        });
+        const opts = this.internal.userChoices.accessibilityOptions;
+        this.componentCore.queueSettingsMessage({
+          method: "setFontSize",
+          args: [opts.fontSize]
+        });
+        this.componentCore.queueSettingsMessage({
+          method: "setHighContrast",
+          args: [opts.highContrast]
+        });
+        this.componentCore.queueSettingsMessage({
+          method: "setReducedMotion",
+          args: [opts.reducedMotion]
+        });
+        this.componentCore.queueSettingsMessage({
+          method: "setFocusIndicatorStyle",
+          args: [opts.focusIndicatorStyle]
+        });
+        this.componentCore.queueSettingsMessage({
+          method: "setAudioEnabled",
+          args: [opts.audioEnabled]
+        });
+        if (this.internal.userChoices.learningPace !== "flexible") {
+          this.componentCore.queueSettingsMessage({
+            method: "setWeekStartDay",
+            args: [this.internal.userChoices.weekStartDay]
+          });
+          const utcTime = this.convertLocalTimeToUTC(this.internal.userChoices.weekStartTime);
+          this.componentCore.queueSettingsMessage({
+            method: "setWeekStartTimeUTC",
+            args: [utcTime]
+          });
+        }
+        this.componentCore.queueNavigationToMainMenu();
+        console.log("\u2705 Welcome flow complete - settings and navigation queued");
+      }
+      /**
+       * Convert local time to UTC for storage
+       * 
+       * @param localTime - Time in HH:MM format (local timezone)
+       * @returns Time in HH:MM format (UTC timezone)
+       */
+      convertLocalTimeToUTC(localTime) {
+        const [hours, minutes] = localTime.split(":").map(Number);
+        const localDate = /* @__PURE__ */ new Date();
+        localDate.setHours(hours, minutes, 0, 0);
+        const utcHours = localDate.getUTCHours();
+        const utcMinutes = localDate.getUTCMinutes();
+        const utcTime = `${String(utcHours).padStart(2, "0")}:${String(utcMinutes).padStart(2, "0")}`;
+        return utcTime;
+      }
+    };
   }
 });
 
@@ -33826,186 +34500,80 @@ var TimelineContainer = class {
   constructor(containerId = "lesson-container") {
     this.containerId = containerId;
     this.timelineId = `${containerId}-timeline`;
-    this.errorSlotId = `${containerId}-error-slot`;
     this.setupTimelineStructure();
   }
   /**
-   * Create the basic timeline DOM structure
+   * Create the basic timeline DOM structure - just a centered container
    */
   setupTimelineStructure() {
     const container = document.getElementById(this.containerId);
     if (!container) {
       throw new Error(`Container ${this.containerId} not found`);
     }
-    container.innerHTML = "";
-    const timelineHtml = `
-            <div class="timeline-wrapper max-w-4xl mx-auto">
-                <!-- Error slot (hidden by default) -->
-                <div id="${this.errorSlotId}" class="hidden mb-6"></div>
-                
-                <!-- Main timeline -->
-                <div id="${this.timelineId}" class="timeline-track relative">
-                    <!-- Timeline line -->
-                    <div class="timeline-line absolute left-8 top-0 bottom-0 w-0.5 bg-gray-300"></div>
-                    
+    container.innerHTML = `
+            <div class="max-w-4xl mx-auto py-8 px-4">
+                <div id="${this.timelineId}" class="space-y-8">
                     <!-- Component slots will be added here -->
                 </div>
             </div>
         `;
-    container.innerHTML = timelineHtml;
-    console.log(`\u2705 Timeline structure created for ${this.containerId}`);
+    console.log("\u2705 Timeline container initialized");
   }
   /**
-   * Add a spatial slot for a component - matches learn.html card styling
-   * @param componentId Unique identifier for the component
-   * @param position Where to add the slot ('bottom' or 'top')
-   * @returns Success status
+   * Add a slot for a component to render into.
+   * Creates a simple wrapper div with consistent spacing.
+   * 
+   * @param componentId - Unique identifier for the component
    */
-  addComponentSlot(componentId, position = "bottom") {
+  addComponentSlot(componentId) {
     const timeline2 = document.getElementById(this.timelineId);
     if (!timeline2) {
-      console.error(`Timeline ${this.timelineId} not found`);
-      return false;
+      console.error("\u274C Timeline not found, cannot add slot");
+      return;
     }
     const slotHtml = `
-            <div id="slot-${componentId}" class="timeline-item relative flex items-start">
-                <!-- Timeline dot -->
-                <div class="timeline-dot relative z-10 flex items-center justify-center w-4 h-4 bg-white dark:bg-gray-800 border-2 border-blue-500 rounded-full mt-6">
-                    <div class="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                </div>
-                
-                <!-- Component content area - matches learn.html card styling -->
-                <div id="component-${componentId}" class="component-content ml-6 flex-1 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                    <!-- Core will inject component here -->
-                    <div class="loading-placeholder text-center py-4">
-                        <div class="flex items-center justify-center space-x-2 text-blue-600 dark:text-blue-400">
-                            <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span class="text-sm font-medium">Loading component...</span>
-                        </div>
-                    </div>
+            <div id="slot-${componentId}" class="component-slot">
+                <div id="component-area-${componentId}" class="component-content">
+                    <!-- Component interface renders here -->
                 </div>
             </div>
         `;
-    if (position === "bottom") {
-      timeline2.insertAdjacentHTML("beforeend", slotHtml);
-    } else {
-      timeline2.insertAdjacentHTML("afterbegin", slotHtml);
-    }
-    console.log(`\u2705 Added component slot for ${componentId}`);
-    return true;
+    timeline2.insertAdjacentHTML("beforeend", slotHtml);
+    console.log(`\u{1F4CD} Added slot for component ${componentId}`);
   }
   /**
-   * Get the DOM element where core should inject the component
-   * @param componentId Component identifier
-   * @returns DOM element or null if not found
+   * Get the DOM element where a component should render its content.
+   * Component interfaces use this to know where to attach their UI.
+   * 
+   * @param componentId - Component identifier
+   * @returns The render area element, or null if not found
    */
   getComponentArea(componentId) {
-    return document.getElementById(`component-${componentId}`);
+    const area = document.getElementById(`component-area-${componentId}`);
+    if (!area) {
+      console.warn(`\u26A0\uFE0F Component area ${componentId} not found`);
+    }
+    return area;
   }
   /**
-   * Remove a component slot from the timeline
-   * @param componentId Component identifier
-   * @returns Success status
-   */
-  removeComponentSlot(componentId) {
-    const slot = document.getElementById(`slot-${componentId}`);
-    if (slot) {
-      slot.remove();
-      console.log(`\u2705 Removed component slot for ${componentId}`);
-      return true;
-    }
-    console.warn(`\u26A0\uFE0F Component slot ${componentId} not found for removal`);
-    return false;
-  }
-  /**
-   * Update visual state of a component slot (completed, active, locked)
-   * @param componentId Component identifier
-   * @param status New status to apply
-   * @returns Success status
-   */
-  updateComponentStatus(componentId, status = "active") {
-    const slot = document.getElementById(`slot-${componentId}`);
-    if (!slot) {
-      console.warn(`\u26A0\uFE0F Component slot ${componentId} not found for status update`);
-      return false;
-    }
-    const dot = slot.querySelector(".timeline-dot div");
-    const dotContainer = slot.querySelector(".timeline-dot");
-    if (!dot || !dotContainer) {
-      console.warn(`\u26A0\uFE0F Timeline dot elements not found for ${componentId}`);
-      return false;
-    }
-    dot.className = "w-2 h-2 rounded-full";
-    switch (status) {
-      case "completed":
-        dot.classList.add("bg-green-500");
-        dotContainer.className = dotContainer.className.replace(/border-(blue|gray)-\d+/, "border-green-500");
-        break;
-      case "active":
-        dot.classList.add("bg-blue-500");
-        dotContainer.className = dotContainer.className.replace(/border-(green|gray)-\d+/, "border-blue-500");
-        break;
-      case "locked":
-        dot.classList.add("bg-gray-400");
-        dotContainer.className = dotContainer.className.replace(/border-(blue|green)-\d+/, "border-gray-400");
-        break;
-    }
-    console.log(`\u2705 Updated component ${componentId} status to ${status}`);
-    return true;
-  }
-  /**
-   * Get the error display area for the error handler
-   * @returns Error slot DOM element or null
-   */
-  getErrorSlot() {
-    return document.getElementById(this.errorSlotId);
-  }
-  /**
-   * Remove all component slots from the timeline
+   * Remove all component slots from the timeline.
+   * Called when navigating to a new page - clears everything for fresh start.
    */
   clearTimeline() {
     const timeline2 = document.getElementById(this.timelineId);
     if (timeline2) {
-      const slots = timeline2.querySelectorAll(".timeline-item");
-      slots.forEach((slot) => slot.remove());
+      timeline2.innerHTML = "";
       console.log("\u{1F9F9} Timeline cleared of all component slots");
     }
   }
   /**
-   * Update the timeline line to show overall progress
-   * @param completedCount Number of completed components
-   * @param totalCount Total number of components
-   */
-  setTimelineProgress(completedCount, totalCount) {
-    if (totalCount === 0) {
-      console.warn("\u26A0\uFE0F Cannot set progress: total count is 0");
-      return;
-    }
-    const progressPercent = completedCount / totalCount * 100;
-    const timeline2 = document.getElementById(this.timelineId);
-    if (!timeline2) {
-      console.warn("\u26A0\uFE0F Timeline not found for progress update");
-      return;
-    }
-    const timelineLine = timeline2.querySelector(".timeline-line");
-    if (timelineLine) {
-      timelineLine.innerHTML = `
-                <div class="progress-fill absolute top-0 left-0 w-full bg-green-400" 
-                     style="height: ${progressPercent}%; transition: height 0.3s ease;"></div>
-            `;
-      console.log(`\u{1F4CA} Timeline progress updated: ${completedCount}/${totalCount} (${progressPercent.toFixed(1)}%)`);
-    }
-  }
-  /**
-   * Get basic timeline statistics
+   * Get basic timeline statistics for debugging.
+   * 
    * @returns Object with timeline metrics
    */
   getTimelineStats() {
     const timeline2 = document.getElementById(this.timelineId);
-    const totalSlots = timeline2 ? timeline2.querySelectorAll(".timeline-item").length : 0;
+    const totalSlots = timeline2 ? timeline2.querySelectorAll(".component-slot").length : 0;
     return {
       totalSlots,
       containerId: this.containerId,
@@ -34025,9 +34593,34 @@ function getTimelineInstance() {
 
 // src/ts/ui/errorDisplay.ts
 var ErrorDisplay = class {
+  /**
+   * Constructor accepts optional timeline parameter for backward compatibility.
+   * Parameter is ignored - overlay approach doesn't need timeline reference.
+   */
   constructor(timelineContainer = null) {
     this.activeErrors = /* @__PURE__ */ new Map();
-    this.timelineContainer = timelineContainer;
+    this.errorQueue = [];
+    // Queue of error IDs to display
+    this.currentlyDisplayedError = null;
+    this.ensureOverlayExists();
+  }
+  /**
+   * Ensure error overlay container exists in DOM.
+   * Creates it if missing - idempotent, safe to call multiple times.
+   */
+  ensureOverlayExists() {
+    if (!document.getElementById("error-overlay")) {
+      document.body.insertAdjacentHTML("beforeend", `
+                <div id="error-overlay" class="hidden fixed inset-0 z-50">
+                    <div class="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm"></div>
+                    <div class="relative min-h-screen flex items-center justify-center p-4">
+                        <div id="error-container" class="w-full max-w-md">
+                            <!-- Error cards render here -->
+                        </div>
+                    </div>
+                </div>
+            `);
+    }
   }
   /**
    * Display a system error (YAML loading, TypeScript issues, etc.)
@@ -34070,33 +34663,62 @@ var ErrorDisplay = class {
     });
   }
   /**
-   * Remove a specific error
+   * Display an authentication error
+   */
+  showAuthError(errorId = "auth", context = "") {
+    this._showError({
+      errorId,
+      errorType: "authentication",
+      title: "Authentication Required",
+      message: "Your session has expired or authentication failed.",
+      context,
+      actions: ["retry", "refresh"]
+    });
+  }
+  /**
+   * Display a Solid Pod specific error
+   */
+  showSolidError(errorId = "solid", context = "", details = "") {
+    this._showError({
+      errorId,
+      errorType: "solid",
+      title: "Solid Pod Error",
+      message: "Unable to access your Solid Pod.",
+      context,
+      details,
+      actions: ["retry_solid", "check_connection", "email_support"]
+    });
+  }
+  /**
+   * Remove a specific error and show next in queue if any
    */
   clearError(errorId) {
     if (this.activeErrors.has(errorId)) {
-      const errorElement = document.getElementById(`error-${errorId}`);
-      if (errorElement) {
-        errorElement.remove();
-      }
       this.activeErrors.delete(errorId);
       console.log(`\u{1F9F9} Cleared error: ${errorId}`);
-    }
-    if (this.activeErrors.size === 0) {
-      this._hideErrorSlot();
+      if (this.currentlyDisplayedError === errorId) {
+        this.currentlyDisplayedError = null;
+        this._hideOverlay();
+        this._showNextInQueue();
+      } else {
+        this.errorQueue = this.errorQueue.filter((id) => id !== errorId);
+      }
     }
   }
   /**
-   * Clear all active errors
+   * Clear all active errors and hide overlay
    */
   clearAllErrors() {
     const errorIds = Array.from(this.activeErrors.keys());
-    for (const errorId of errorIds) {
-      this.clearError(errorId);
-    }
+    this.activeErrors.clear();
+    this.errorQueue = [];
+    this.currentlyDisplayedError = null;
+    this._hideOverlay();
     console.log("\u{1F9F9} All errors cleared");
   }
   /**
-   * Internal method to display an error in the timeline's error slot
+   * Internal method to display an error as modal overlay.
+   * Queues errors if one is already being displayed.
    */
   _showError(params) {
     const { errorId, errorType, title, message: message2, context = "", details = "", actions = ["refresh", "email_support"] } = params;
@@ -34106,42 +34728,91 @@ var ErrorDisplay = class {
       message: message2,
       context
     });
-    const errorSlot = this._getErrorSlot();
-    if (!errorSlot) {
-      this._createFloatingError(errorId, title, message2, actions);
-      return;
+    if (this.currentlyDisplayedError === null) {
+      this._displayError(errorId, title, message2, context, details, actions);
+    } else {
+      if (!this.errorQueue.includes(errorId)) {
+        this.errorQueue.push(errorId);
+        console.log(`\u23F3 Queued error: ${errorId} (${this.errorQueue.length} in queue)`);
+      }
     }
-    const errorHtml = this._buildErrorHtml(errorId, title, message2, context, details, actions);
-    errorSlot.className = errorSlot.className.replace("hidden", "block");
-    errorSlot.insertAdjacentHTML("beforeend", errorHtml);
-    console.log(`\u274C Displayed error: ${errorId} (${errorType})`);
   }
   /**
-   * Build the HTML for an error display
+   * Actually display an error in the overlay
    */
-  _buildErrorHtml(errorId, title, message2, context, details, actions) {
-    const contextHtml = context ? `<p class="text-sm text-red-600 mt-1"><strong>Context:</strong> ${context}</p>` : "";
-    const detailsHtml = details ? `<details class="mt-2 text-xs text-red-500"><summary>Technical Details</summary><pre>${details}</pre></details>` : "";
+  _displayError(errorId, title, message2, context, details, actions) {
+    this.currentlyDisplayedError = errorId;
+    const overlay = document.getElementById("error-overlay");
+    const container = document.getElementById("error-container");
+    if (!overlay || !container) {
+      console.error("\u274C Error overlay not found");
+      return;
+    }
+    const errorHtml = this._buildErrorModal(errorId, title, message2, context, details, actions);
+    container.innerHTML = errorHtml;
+    overlay.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+    console.log(`\u274C Displayed error: ${errorId}`);
+  }
+  /**
+   * Show next error in queue, if any
+   */
+  _showNextInQueue() {
+    if (this.errorQueue.length > 0) {
+      const nextErrorId = this.errorQueue.shift();
+      const errorInfo = this.activeErrors.get(nextErrorId);
+      if (errorInfo) {
+        this._displayError(
+          nextErrorId,
+          errorInfo.title,
+          errorInfo.message,
+          errorInfo.context,
+          "",
+          // details not stored, would need to expand ErrorInfo if needed
+          ["refresh", "email_support"]
+          // default actions
+        );
+      }
+    }
+  }
+  /**
+   * Hide the error overlay and re-enable scroll
+   */
+  _hideOverlay() {
+    const overlay = document.getElementById("error-overlay");
+    if (overlay) {
+      overlay.classList.add("hidden");
+      document.body.style.overflow = "";
+    }
+  }
+  /**
+   * Build the HTML for an error modal
+   */
+  _buildErrorModal(errorId, title, message2, context, details, actions) {
+    const contextHtml = context ? `<p class="text-sm text-red-700 mt-2"><strong>Context:</strong> ${this._escapeHtml(context)}</p>` : "";
+    const detailsHtml = details ? `<details class="mt-3 text-xs text-gray-600">
+                 <summary class="cursor-pointer hover:text-gray-900">Technical Details</summary>
+                 <pre class="mt-2 p-2 bg-gray-100 rounded overflow-x-auto">${this._escapeHtml(details)}</pre>
+               </details>` : "";
     const actionsHtml = this._buildActionButtons(errorId, actions);
     return `
-            <div id="error-${errorId}" class="error-item bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <div id="error-modal-${errorId}" 
+                 class="bg-white rounded-lg shadow-2xl p-6 animate-fadeIn">
                 <div class="flex items-start">
                     <div class="flex-shrink-0">
-                        <svg class="w-5 h-5 text-red-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
                         </svg>
                     </div>
                     <div class="ml-3 flex-1">
-                        <h3 class="text-sm font-medium text-red-800">${title}</h3>
-                        <p class="text-sm text-red-700 mt-1">${message2}</p>
+                        <h3 class="text-lg font-semibold text-gray-900">${this._escapeHtml(title)}</h3>
+                        <p class="text-sm text-gray-700 mt-2">${this._escapeHtml(message2)}</p>
                         ${contextHtml}
                         ${detailsHtml}
-                        <div class="mt-3 flex space-x-2">
+                        <div class="mt-4 flex flex-wrap gap-2">
                             ${actionsHtml}
-                            <button onclick="window.errorDisplay?.clearError('${errorId}')" 
-                                    class="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">
-                                Dismiss
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -34158,171 +34829,133 @@ var ErrorDisplay = class {
         case "refresh":
           buttons.push(`
                         <button onclick="location.reload()" 
-                                class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">
+                                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
                             Refresh Page
                         </button>
                     `);
           break;
         case "retry":
           buttons.push(`
-                        <button onclick="window.errorDisplay?._retryAction('${errorId}')" 
-                                class="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700">
+                        <button onclick="location.reload()" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
                             Retry
+                        </button>
+                    `);
+          break;
+        case "check_connection":
+          buttons.push(`
+                        <button onclick="window.open('https://www.google.com', '_blank')" 
+                                class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
+                            Check Connection
                         </button>
                     `);
           break;
         case "email_support":
           buttons.push(`
-                        <button onclick="window.open('mailto:support@meralearn.org?subject=Mera%20Learning%20Error')" 
-                                class="text-xs bg-gray-600 text-white px-2 py-1 rounded hover:bg-gray-700">
-                            Email Support
+                        <button onclick="window.location.href='mailto:support@example.com?subject=Mera Error: ${errorId}'" 
+                                class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
+                            Contact Support
                         </button>
                     `);
           break;
         case "skip_component":
           buttons.push(`
-                        <button onclick="window.errorDisplay?._skipComponent('${errorId}')" 
-                                class="text-xs bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700">
+                        <button onclick="window.errorDisplay?.clearError('${errorId}')" 
+                                class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors">
                             Skip Component
+                        </button>
+                    `);
+          break;
+        case "retry_solid":
+          buttons.push(`
+                        <button onclick="location.href='/solid'" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+                            Retry Connection
                         </button>
                     `);
           break;
       }
     }
-    return buttons.join(" ");
+    buttons.push(`
+            <button onclick="window.errorDisplay?.clearError('${errorId}')" 
+                    class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
+                Dismiss
+            </button>
+        `);
+    return buttons.join("");
   }
   /**
-   * Get the error slot from the timeline container
+   * Escape HTML to prevent XSS
    */
-  _getErrorSlot() {
-    if (this.timelineContainer) {
-      return this.timelineContainer.getErrorSlot();
-    } else {
-      return document.getElementById("lesson-container-error-slot");
-    }
-  }
-  /**
-   * Hide the error slot when no errors are active
-   */
-  _hideErrorSlot() {
-    const errorSlot = this._getErrorSlot();
-    if (errorSlot) {
-      errorSlot.className = errorSlot.className.replace("block", "hidden");
-      errorSlot.innerHTML = "";
-      console.log("\u{1F47B} Error slot hidden");
-    }
-  }
-  /**
-   * Fallback: create a floating error if no timeline container is available
-   */
-  _createFloatingError(errorId, title, message2, actions) {
-    let floatingContainer = document.getElementById("floating-errors");
-    if (!floatingContainer) {
-      floatingContainer = document.createElement("div");
-      floatingContainer.id = "floating-errors";
-      floatingContainer.className = "fixed top-4 right-4 z-50 max-w-md";
-      document.body.appendChild(floatingContainer);
-    }
-    const errorHtml = `
-            <div id="error-${errorId}" class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-4 border">
-                <div class="text-center">
-                    <div class="flex items-center justify-center space-x-2 text-red-600 mb-2">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span class="font-semibold">${title}</span>
-                    </div>
-                    <p class="text-red-500 text-sm mb-4">${message2}</p>
-                    <div class="flex justify-center space-x-2">
-                        ${this._buildActionButtons(errorId, actions)}
-                        <button onclick="window.errorDisplay?.clearError('${errorId}')" 
-                                class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
-                            Dismiss
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    floatingContainer.insertAdjacentHTML("beforeend", errorHtml);
-    console.log(`\u{1F4AB} Created floating error: ${errorId}`);
-  }
-  /**
-   * Handle retry action - to be implemented by core or overridden
-   */
-  _retryAction(errorId) {
-    console.log(`\u{1F504} Retry requested for error: ${errorId}`);
-    this.clearError(errorId);
-  }
-  /**
-   * Handle skip component action - to be implemented by core or overridden
-   */
-  _skipComponent(errorId) {
-    console.log(`\u23ED\uFE0F Skip component requested for error: ${errorId}`);
-    this.clearError(errorId);
+  _escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
   }
 };
+function showCriticalError(options) {
+  const { title, message: message2, technicalDetails, errorCode } = options;
+  document.body.innerHTML = "";
+  const detailsHtml = technicalDetails ? `<details class="mt-4 text-sm text-gray-300">
+             <summary class="cursor-pointer hover:text-white">Technical Details</summary>
+             <pre class="mt-2 p-3 bg-gray-900 rounded overflow-x-auto text-xs">${technicalDetails}</pre>
+           </details>` : "";
+  const errorCodeHtml = errorCode ? `<p class="text-sm text-gray-400 mt-2">Error Code: ${errorCode}</p>` : "";
+  document.body.innerHTML = `
+        <div class="min-h-screen bg-gray-800 flex items-center justify-center p-4">
+            <div class="max-w-md w-full bg-gray-900 rounded-lg shadow-2xl p-6 border border-red-500">
+                <div class="flex items-center mb-4">
+                    <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                        </path>
+                    </svg>
+                    <h1 class="ml-3 text-2xl font-bold text-white">${title}</h1>
+                </div>
+                <p class="text-gray-300 mb-4">${message2}</p>
+                ${errorCodeHtml}
+                ${detailsHtml}
+                <div class="mt-6 flex gap-3">
+                    <button onclick="location.reload()" 
+                            class="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">
+                        Reload Application
+                    </button>
+                    <button onclick="location.href='/'" 
+                            class="flex-1 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors">
+                        Go Home
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
 var SolidConnectionErrorDisplay = class extends ErrorDisplay {
   /**
-   * Display Solid Pod connection failure with retry option
+   * Display Solid Pod connection error
    */
-  showSolidConnectionError() {
+  showConnectionError(context = "") {
+    this.showSolidError("solid-connection", context);
+  }
+  /**
+   * Display Solid authentication error
+   */
+  showAuthenticationError(context = "") {
+    this.showAuthError("solid-auth", context);
+  }
+  /**
+   * Display Solid permission error
+   */
+  showPermissionError(context = "") {
     this._showError({
-      errorId: "solid-connection",
+      errorId: "solid-permission",
       errorType: "solid",
-      title: "Solid Pod Connection Failed",
-      message: "Solid pod connection failed. Please try connecting to Solid pod again. If issues persist, please email support@meralearn.org.",
-      context: "Authentication with your Solid Pod provider was unsuccessful",
+      title: "Permission Denied",
+      message: "The application does not have permission to access your Solid Pod.",
+      context,
       actions: ["retry_solid", "email_support"]
     });
   }
-  /**
-   * Override to add Solid-specific actions
-   */
-  _buildActionButtons(errorId, actions) {
-    const buttons = [];
-    for (const action of actions) {
-      if (action === "retry_solid") {
-        buttons.push(`
-                    <button onclick="window.location.href = window.CONNECT_URL || '/pages/connect/'" 
-                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
-                        Try Connecting Again
-                    </button>
-                `);
-      } else if (action === "email_support") {
-        buttons.push(`
-                    <button onclick="window.open('mailto:support@meralearn.org?subject=Solid%20Pod%20Connection%20Issue')" 
-                            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
-                        Email Support
-                    </button>
-                `);
-      } else {
-        const parentButtons = super._buildActionButtons(errorId, [action]);
-        if (parentButtons) {
-          buttons.push(parentButtons);
-        }
-      }
-    }
-    return buttons.join(" ");
-  }
 };
-window.ErrorDisplay = ErrorDisplay;
-window.SolidConnectionErrorDisplay = SolidConnectionErrorDisplay;
-function showCriticalError(options) {
-  console.error(`\u{1F6A8} ${options.title}:`, options.message);
-  if (options.technicalDetails) {
-    console.error("Technical details:", options.technicalDetails);
-  }
-  const shouldReload = confirm(
-    `${options.title}
-
-${options.message}
-
-Reload page now?`
-  );
-  if (shouldReload) {
-    window.location.reload();
-  }
-}
 
 // src/ts/initialization/bootstrap.ts
 init_meraBridge();
@@ -48068,18 +48701,21 @@ var componentRegistrations = [];
 var progressSchemaMap = /* @__PURE__ */ new Map([]);
 var componentValidatorMap = /* @__PURE__ */ new Map([]);
 var componentInitializerMap = /* @__PURE__ */ new Map([]);
-var allLessonIds = [12345];
-var allComponentIds = [123456, 123457];
+var allLessonIds = [1, 12345];
+var allComponentIds = [123456, 123457, 1000001];
 var lessonMetrics = /* @__PURE__ */ new Map([
-  [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }]
+  [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
+  [1, { pageCount: 1, componentCount: 1, title: "Welcome to Mera", difficulty: "beginner" }]
 ]);
 var componentIdToTypeMap = /* @__PURE__ */ new Map([
   [123456, "basic_task"],
-  [123457, "basic_task"]
+  [123457, "basic_task"],
+  [1000001, "new_user_welcome"]
 ]);
 var componentToLessonMap = /* @__PURE__ */ new Map([
   [123456, 12345],
-  [123457, 12345]
+  [123457, 12345],
+  [1000001, 1]
 ]);
 var domainLessonMap = /* @__PURE__ */ new Map([
   [1001, [12345]]
@@ -48157,6 +48793,18 @@ var lessonMetadata = [
     "estimatedMinutes": 8,
     "required": true,
     "domainId": 1001
+  },
+  {
+    "id": 1,
+    "path": "static/yaml/lessons/welcome_menu.yaml",
+    "title": "Welcome to Mera",
+    "entityType": "lesson",
+    "pageCount": 1,
+    "componentCount": 1,
+    "difficulty": "beginner",
+    "estimatedMinutes": 5,
+    "required": true,
+    "domainId": null
   }
 ];
 console.log(`Mera Registry loaded with all 12 mappings:`);
@@ -48649,7 +49297,12 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
       domainCompletions
     },
     settings: defaultSettings,
-    navigationState: getDefaultNavigationState(),
+    navigationState: {
+      currentEntityId: 1,
+      // Welcome screen for new users
+      currentPage: 0,
+      lastUpdated: 0
+    },
     combinedComponentProgress: {
       components: initializeAllComponentsWithDefaults()
     }
@@ -51924,6 +52577,8 @@ var BaseComponentCore = class {
    * @param curriculumRegistry Lesson/domain lookup for validation
    */
   constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
+    // Operations control - components can't produce messages until coordinator releases them
+    this._operationsEnabled = false;
     this._config = config2;
     this._progressManager = progressManager;
     this._navigationQueueManager = new NavigationMessageQueueManager(
@@ -51934,6 +52589,50 @@ var BaseComponentCore = class {
       curriculumRegistry
     );
     this._interface = this.createInterface(timeline2);
+  }
+  /**
+   * Retrieve component-specific progress messages.
+   *
+   * Main Core polls this during its update cycle.
+   * Returns empty array until operations enabled by coordinator.
+   * 
+   * Gating is enforced at base level - subclasses cannot bypass it.
+   *
+   * @returns Array of component progress messages
+   */
+  getComponentProgressMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this.getComponentProgressMessagesInternal();
+  }
+  // ============================================================================
+  // LIFECYCLE MANAGEMENT METHODS (called by Coordinator)
+  // ============================================================================
+  /**
+   * Check if interface is ready to render.
+   *
+   * Called by coordinator to determine when component can be displayed.
+   * Delegates to interface which tracks asset loading state.
+   *
+   * @returns true if interface ready (assets loaded or acceptable failure state)
+   */
+  isInterfaceReady() {
+    return this._interface.isReady();
+  }
+  /**
+   * Display interface and enable operations.
+   *
+   * Called by coordinator when all components ready.
+   * Performs two actions:
+   * 1. Renders component to DOM (creates timeline slot, displays content)
+   * 2. Enables message production (allows getMessages() to return queued updates)
+   *
+   * After this method, component is fully active and can interact with user.
+   */
+  displayInterface() {
+    this._interface.renderToDOM();
+    this._operationsEnabled = true;
   }
   // ============================================================================
   // READONLY ACCESSORS
@@ -51981,6 +52680,9 @@ var BaseComponentCore = class {
    * Main Core polls this during update cycle.
    */
   getNavigationMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
     return this._navigationQueueManager.getMessages();
   }
   /**
@@ -51989,6 +52691,9 @@ var BaseComponentCore = class {
    * Main Core polls this during update cycle.
    */
   getSettingsMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
     return this._settingsQueueManager.getMessages();
   }
   /**
@@ -51997,6 +52702,9 @@ var BaseComponentCore = class {
    * Main Core polls this during update cycle.
    */
   getOverallProgressMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
     return this._overallProgressQueueManager.getMessages();
   }
 };
@@ -52050,7 +52758,7 @@ var BasicTaskProgressManager = class extends BaseComponentProgressManager {
    *
    * Called for new users or when component is first encountered.
    * Creates array of false values matching checkbox count.
-   * 
+   *
    * IMPORTANT: Explicitly sets lastUpdated to 0 (timestamp 0 = never set by user).
    *
    * @param config Component configuration with checkbox definitions
@@ -52149,7 +52857,7 @@ var BasicTaskCore = class extends BaseComponentCore {
   /**
    * Get component progress messages for core polling
    */
-  getComponentProgressMessages() {
+  getComponentProgressMessagesInternal() {
     return this._componentProgressQueueManager.getMessages();
   }
 };
@@ -52161,7 +52869,9 @@ var BasicTaskProgressMessageHandler = class {
     return "basic_task";
   }
   handleMessage(message2) {
-    const manager = this.componentManagers.get(message2.componentId);
+    const manager = this.componentManagers.get(
+      message2.componentId
+    );
     if (!manager) {
       throw new Error(`No manager found for component ${message2.componentId}`);
     }
@@ -52608,6 +53318,8 @@ var SaveManager = class _SaveManager {
     this.queuedSave = null;
     /** Flag indicating bundle has changed since last save */
     this.saveHasChanged = false;
+    /** Flag indicating a critical save (e.g., lesson completion) is pending */
+    this.criticalSavePending = false;
     // ============================================================================
     // CONCURRENT SESSION PROTECTION STATE
     // ============================================================================
@@ -52662,6 +53374,7 @@ var SaveManager = class _SaveManager {
     if (!this.saveInProgress && (this.saveHasChanged || this.lastSaveResult === 1 /* BothFailed */ || this.lastSaveResult === 2 /* OnlyLocalSucceeded */)) {
       this.saveInProgress = true;
       this.saveHasChanged = false;
+      const wasCriticalPending = this.criticalSavePending;
       const bundleSnapshot = this.queuedSave;
       const timestamp2 = Date.now();
       const concurrenceCheck = await this.checkConcurrentSessions();
@@ -52689,6 +53402,9 @@ var SaveManager = class _SaveManager {
         const allowSolidSaves = concurrenceCheck === 0 /* Passed */;
         const result = await orchestrateSave(bundleSnapshot, timestamp2, allowSolidSaves);
         this.lastSaveResult = result;
+        if (wasCriticalPending && result !== 1 /* BothFailed */) {
+          this.criticalSavePending = false;
+        }
         if (result === 3 /* OnlySolidSucceeded */) {
           console.error(
             "\u26A0\uFE0F localStorage save failed - offline mode unavailable"
@@ -52718,10 +53434,14 @@ var SaveManager = class _SaveManager {
    *
    * @param bundleJSON - Pre-stringified JSON representation of complete progress bundle
    * @param hasChanged - True if bundle differs from last save
+   * @param criticalSave - Optional: True if this save represents critical progress (e.g., lesson completion)
    */
-  queueSave(bundleJSON, hasChanged) {
+  queueSave(bundleJSON, hasChanged, criticalSave) {
     this.queuedSave = bundleJSON;
     this.saveHasChanged = hasChanged;
+    if (criticalSave) {
+      this.criticalSavePending = true;
+    }
   }
   /**
    * Returns whether Solid Pod sync is currently working.
@@ -52737,6 +53457,17 @@ var SaveManager = class _SaveManager {
     } else {
       return false;
     }
+  }
+  /**
+   * Returns whether it's safe to close the window.
+   *
+   * Used by UI to warn user before closing if critical progress hasn't been saved yet.
+   * Returns false if a critical save is pending (queued or in progress but not completed).
+   *
+   * @returns True if safe to close (no critical saves pending), false otherwise
+   */
+  safeToClose() {
+    return !this.criticalSavePending;
   }
   // ============================================================================
   // CONCURRENT SESSION PROTECTION (Edge Case Prevention)
@@ -53122,12 +53853,150 @@ var SaveCleaner = class _SaveCleaner {
   }
 };
 
+// src/ts/components/cores/newUserWelcomeCore.ts
+var NewUserWelcomeComponentConfigSchema = BaseComponentConfigSchema.extend({
+  type: external_exports.literal("new_user_welcome")
+});
+var NewUserWelcomeComponentProgressSchema = BaseComponentProgressSchema.extend({
+  // No additional fields - just lastUpdated from base
+});
+var NewUserWelcomeProgressManager = class extends BaseComponentProgressManager {
+  /**
+   * Create initial progress structure
+   * 
+   * Just the base lastUpdated field set to 0
+   */
+  createInitialProgress(config2) {
+    return {
+      lastUpdated: 0
+    };
+  }
+};
+var NewUserWelcomeSettingsMessageQueueManager = class {
+  constructor() {
+    this.queue = [];
+  }
+  /**
+   * Queue a settings message
+   */
+  queueMessage(message2) {
+    this.queue.push(message2);
+  }
+  /**
+   * Get all queued messages and clear the queue
+   */
+  getMessages() {
+    const messages = [...this.queue];
+    this.queue = [];
+    return messages;
+  }
+};
+var NewUserWelcomeNavigationMessageQueueManager = class {
+  constructor() {
+    this.queue = [];
+  }
+  /**
+   * Queue navigation to main menu
+   */
+  queueNavigationToMainMenu() {
+    this.queue.push({
+      method: "setCurrentView",
+      args: [0, 0]
+      // Entity 0 (main menu), page 0
+    });
+  }
+  /**
+   * Get all queued messages and clear the queue
+   */
+  getMessages() {
+    const messages = [...this.queue];
+    this.queue = [];
+    return messages;
+  }
+};
+var NewUserWelcomeCore = class extends BaseComponentCore {
+  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
+    super(
+      config2,
+      progressManager,
+      timeline2,
+      overallProgressManager,
+      navigationManager,
+      settingsManager,
+      curriculumRegistry
+    );
+    this.settingsMessageQueue = new NewUserWelcomeSettingsMessageQueueManager();
+    this.navigationMessageQueue = new NewUserWelcomeNavigationMessageQueueManager();
+  }
+  /**
+   * Create the interface for this core
+   */
+  createInterface(timeline2) {
+    const { NewUserWelcomeInterface: NewUserWelcomeInterface2 } = (init_newUserWelcomeInterface(), __toCommonJS(newUserWelcomeInterface_exports));
+    return new NewUserWelcomeInterface2(this, timeline2);
+  }
+  /**
+   * Check if component is complete
+   * 
+   * Always returns true - completion determined by navigation away
+   */
+  isComplete() {
+    return true;
+  }
+  /**
+   * Get component-specific progress messages (internal)
+   * 
+   * Always returns empty array - no progress to track
+   */
+  getComponentProgressMessagesInternal() {
+    return [];
+  }
+  /**
+   * Get queued settings messages
+   */
+  getSettingsMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this.settingsMessageQueue.getMessages();
+  }
+  /**
+   * Get queued navigation messages
+   */
+  getNavigationMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this.navigationMessageQueue.getMessages();
+  }
+  /**
+   * Public interface for component to queue settings message
+   */
+  queueSettingsMessage(message2) {
+    this.settingsMessageQueue.queueMessage(message2);
+  }
+  /**
+   * Public interface for component to queue navigation to main menu
+   */
+  queueNavigationToMainMenu() {
+    this.navigationMessageQueue.queueNavigationToMainMenu();
+  }
+};
+
 // src/ts/components/componentManagerFactory.ts
 function createComponentProgressManager(componentType, config2, progressData) {
   switch (componentType) {
     case "basic_task": {
       const validated = BasicTaskComponentProgressSchema.parse(progressData);
       return new BasicTaskProgressManager(
+        config2,
+        // Pass config first
+        validated
+      );
+    }
+    case "new_user_welcom": {
+      const validated = NewUserWelcomeComponentProgressSchema.parse(progressData);
+      return new NewUserWelcomeProgressManager(
         config2,
         // Pass config first
         validated
@@ -53158,6 +54027,16 @@ var MESSAGE_TYPE_PERMISSIONS = {
     // Cannot navigate
     settings: false
     // Cannot change settings
+  },
+  "new_user_welcome": {
+    componentProgress: false,
+    // Doesn't have persistent state
+    overallProgress: false,
+    // Cannot mark lessons complete
+    navigation: true,
+    // Can navigate
+    settings: true
+    // Can change settings
   }
   // Add additional components here
 };
@@ -53182,6 +54061,16 @@ function createComponentCore(componentType, config2, progressManager, curriculum
         settingsManager,
         curriculumData2
       );
+    case "new_user_welcome":
+      return new NewUserWelcomeCore(
+        config2,
+        progressManager,
+        timeline2,
+        overallProgressManager,
+        navigationManager,
+        settingsManager,
+        curriculumData2
+      );
     // TODO: Add other component types as they're implemented
     // case 'quiz':
     //   return new QuizCore(
@@ -53196,79 +54085,248 @@ function createComponentCore(componentType, config2, progressManager, curriculum
   }
 }
 
-// src/ts/ui/componentCoordinator.ts
+// src/ts/components/componentCoordinator.ts
 var ComponentCoordinator = class {
   constructor() {
-    this.componentsToMonitor = /* @__PURE__ */ new Map();
-    this.pageReady = true;
-    // No page load in progress
-    this.loadingCheckInterval = null;
+    // Current page's components being coordinated (cloned map for safety)
+    this.currentPageCores = null;
+    // Whether a page load is currently in progress
+    this.loadingInProgress = false;
+  }
+  /**
+   * Clear current page state in preparation for new page.
+   * 
+   * Called by runCore before destroying old components.
+   * Resets coordinator state for the next page load.
+   */
+  clearPage() {
+    console.log("\u{1F4C4} ComponentCoordinator: Clearing page state");
+    this.currentPageCores = null;
+    this.loadingInProgress = false;
   }
   /**
    * Begin coordinating a new page load.
    * 
-   * Starts monitoring component readiness and displays loading UI.
-   * Called by componentInstantiator when new components are created.
+   * Orchestrates the async loading and activation of all components:
+   * 1. Store cloned map of cores (defensive against external changes)
+   * 2. Poll components for readiness (assets loaded)
+   * 3. Activate all components when ready (or on timeout)
    * 
-   * @param cores - Map of component cores to monitor (componentId -> core)
+   * This method is async but called fire-and-forget. Main Core continues
+   * polling normally while this runs in parallel. Components return empty
+   * message arrays until activated.
+   * 
+   * @param cores - Map of component cores to coordinate (componentId -> core)
+   * @returns Promise that resolves when page load complete (or times out)
    */
-  beginPageLoad(cores) {
-    console.log(`\u{1F3AC} ComponentCoordinator: Starting page load with ${cores.size} components`);
-    this.componentsToMonitor = new Map(cores);
-    this.pageReady = false;
-    this.startReadinessCheck();
-  }
-  /**
-   * Poll components for readiness.
-   * Runs every 50ms until all components report ready.
-   */
-  startReadinessCheck() {
-    if (this.loadingCheckInterval !== null) {
-      clearInterval(this.loadingCheckInterval);
+  async beginPageLoad(cores) {
+    console.log(
+      `\u{1F3AC} ComponentCoordinator: Beginning page load with ${cores.size} components`
+    );
+    this.currentPageCores = new Map(cores);
+    this.loadingInProgress = true;
+    try {
+      await this.waitForAllReady();
+      this.activateAllComponents();
+      console.log("\u2705 ComponentCoordinator: Page load complete");
+    } catch (error46) {
+      console.error("\u274C ComponentCoordinator: Page load failed:", error46);
+      this.activateAllComponents();
+    } finally {
+      this.loadingInProgress = false;
     }
-    this.loadingCheckInterval = window.setInterval(() => {
-      this.checkReadiness();
-    }, 50);
   }
   /**
-   * Check if all components are ready.
-   * When ready, release them and hide loading screen.
+   * Wait for all components to report ready.
+   * 
+   * Polls every 50ms, checking if all components have finished loading assets.
+   * 
+   * Uses progress-based timeout: Times out only if NO progress detected for
+   * 30 seconds. This allows slow connections to take as long as needed, while 
+   * still timing out on truly stalled connections.
+   * 
+   * Progress is tracked via component.interface.getLoadingProgress() which
+   * returns {loaded, total} for components that support it. If any component
+   * shows increasing 'loaded' bytes, the timeout clock resets.
+   * 
+   * Each component check is wrapped in try-catch to handle destroyed/broken
+   * components gracefully. A broken component doesn't block page load.
+   * 
+   * @returns Promise that resolves when all ready or stall timeout reached
    */
-  checkReadiness() {
-    const allReady = Array.from(this.componentsToMonitor.values()).every(
-      (core2) => {
-        try {
-          return true;
-        } catch (err) {
-          console.error("Error checking component readiness:", err);
+  async waitForAllReady() {
+    const POLL_INTERVAL_MS2 = 50;
+    const STALL_TIMEOUT_MS = 3e4;
+    let lastProgressTime = Date.now();
+    let lastProgressSnapshot = this.captureProgressSnapshot();
+    let iterationCount = 0;
+    while (true) {
+      if (this.allComponentsReady()) {
+        console.log(
+          `\u2705 All components ready after ${iterationCount * POLL_INTERVAL_MS2}ms`
+        );
+        return;
+      }
+      const currentSnapshot = this.captureProgressSnapshot();
+      if (this.hasProgressChanged(lastProgressSnapshot, currentSnapshot)) {
+        lastProgressTime = Date.now();
+        lastProgressSnapshot = currentSnapshot;
+      }
+      const timeSinceProgress = Date.now() - lastProgressTime;
+      if (timeSinceProgress > STALL_TIMEOUT_MS) {
+        console.warn(
+          `\u26A0\uFE0F ComponentCoordinator: No progress for ${STALL_TIMEOUT_MS}ms - connection stalled, proceeding anyway`
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS2));
+      iterationCount++;
+    }
+  }
+  /**
+   * Capture current loading progress for all components.
+   * 
+   * Returns a snapshot of how many bytes each component has loaded.
+   * Used to detect whether progress is being made on slow connections.
+   * 
+   * Components that don't support progress tracking (like BasicTask with
+   * no assets) won't appear in the snapshot - that's fine, we just track
+   * the ones that do report progress.
+   * 
+   * @returns Map of componentId → bytes loaded
+   */
+  captureProgressSnapshot() {
+    const snapshot = /* @__PURE__ */ new Map();
+    if (!this.currentPageCores) return snapshot;
+    for (const [componentId, core2] of this.currentPageCores) {
+      try {
+        const progress = core2.interface.getLoadingProgress();
+        if (progress) {
+          snapshot.set(componentId, progress.loaded);
+        }
+      } catch (error46) {
+      }
+    }
+    return snapshot;
+  }
+  /**
+   * Check if any component has loaded more bytes.
+   * 
+   * Compares two progress snapshots to detect forward progress.
+   * Even 1 byte of progress resets the stall timeout.
+   * 
+   * @param oldSnapshot - Previous progress snapshot
+   * @param newSnapshot - Current progress snapshot
+   * @returns true if any component loaded more data
+   */
+  hasProgressChanged(oldSnapshot, newSnapshot) {
+    for (const [componentId, newBytes] of newSnapshot) {
+      const oldBytes = oldSnapshot.get(componentId) || 0;
+      if (newBytes > oldBytes) {
+        return true;
+      }
+    }
+    return false;
+  }
+  /**
+   * Check if all components report ready.
+   * 
+   * Defensive implementation - each component check wrapped in try-catch.
+   * Broken/destroyed components are treated as "ready" (don't block page).
+   * 
+   * @returns true if all components ready (or no components exist)
+   */
+  allComponentsReady() {
+    if (!this.currentPageCores || this.currentPageCores.size === 0) {
+      return true;
+    }
+    for (const [componentId, core2] of this.currentPageCores) {
+      try {
+        if (!core2.isInterfaceReady()) {
           return false;
         }
+      } catch (error46) {
+        console.warn(
+          `\u26A0\uFE0F Component ${componentId} readiness check failed, treating as ready:`,
+          error46
+        );
       }
-    );
-    if (allReady) {
-      this.releaseComponents();
     }
+    return true;
   }
   /**
-   * Release all components for operations.
-   * Hides loading screen and enables message queues.
-   */
-  releaseComponents() {
-    console.log("\u2705 ComponentCoordinator: All components ready, releasing");
-    if (this.loadingCheckInterval !== null) {
-      clearInterval(this.loadingCheckInterval);
-      this.loadingCheckInterval = null;
-    }
-    this.pageReady = true;
-    this.componentsToMonitor.clear();
-  }
-  /**
-   * Check if current page is ready.
+   * Activate all components.
    * 
-   * @returns true if no page load in progress
+   * Calls displayInterface() on each component, which:
+   * 1. Renders component to DOM (creates timeline slot, displays content)
+   * 2. Enables operations (_operationsEnabled = true)
+   * 
+   * After this, components can produce messages and interact with users.
+   * 
+   * Each activation is wrapped in try-catch. One broken component doesn't
+   * prevent others from activating.
    */
-  isPageReady() {
-    return this.pageReady;
+  activateAllComponents() {
+    if (!this.currentPageCores) {
+      return;
+    }
+    console.log(
+      `\u{1F680} ComponentCoordinator: Activating ${this.currentPageCores.size} components`
+    );
+    for (const [componentId, core2] of this.currentPageCores) {
+      try {
+        core2.displayInterface();
+      } catch (error46) {
+        console.error(
+          `\u274C Component ${componentId} activation failed:`,
+          error46
+        );
+      }
+    }
+  }
+  /**
+   * Check if all components on current page are complete.
+   * 
+   * Called synchronously by navigation components to determine if user
+   * can proceed to next page (e.g., "Next" button should be enabled).
+   * 
+   * Defensive implementation - broken components treated as complete
+   * (don't block navigation due to component bugs).
+   * 
+   * Race condition acceptable: If user clicks during the 50ms window
+   * where a component becomes incomplete, navigation may still succeed.
+   * This is an acceptable UX trade-off vs. complex locking.
+   * 
+   * @returns true if all components complete (or no components exist)
+   */
+  areAllComplete() {
+    if (!this.currentPageCores || this.currentPageCores.size === 0) {
+      return true;
+    }
+    for (const [componentId, core2] of this.currentPageCores) {
+      try {
+        if (!core2.isComplete()) {
+          return false;
+        }
+      } catch (error46) {
+        console.warn(
+          `\u26A0\uFE0F Component ${componentId} completion check failed, treating as complete:`,
+          error46
+        );
+      }
+    }
+    return true;
+  }
+  /**
+   * Check if page load is currently in progress.
+   * 
+   * Can be used by UI to show loading indicators, though not currently
+   * required by the architecture.
+   * 
+   * @returns true if beginPageLoad() is running
+   */
+  isLoadingInProgress() {
+    return this.loadingInProgress;
   }
 };
 var componentCoordinator = new ComponentCoordinator();
@@ -53286,6 +54344,7 @@ function instantiateComponents(navigationState, lessonConfigs, componentManagers
   const componentsOnPage = lessonConfig.components.filter(
     (component) => component.page === currentPage
   );
+  componentsOnPage.sort((a, b) => a.order - b.order);
   console.log(
     `\u{1F4C4} Page ${currentPage} of entity ${currentEntityId}: ${componentsOnPage.length} components to instantiate`
   );
@@ -53365,7 +54424,9 @@ function instantiateComponents(navigationState, lessonConfigs, componentManagers
   console.log(`   - overallProgress: ${overallProgressPolling.size} allowed`);
   console.log(`   - navigation: ${navigationPolling.size} allowed`);
   console.log(`   - settings: ${settingsPolling.size} allowed`);
-  componentCoordinator.beginPageLoad(componentCores);
+  componentCoordinator.beginPageLoad(componentCores).catch((err) => {
+    console.error("Component coordinator failed:", err);
+  });
   return {
     componentCores,
     componentProgressPolling,
@@ -53381,7 +54442,10 @@ async function runCore(params) {
   let pageChanged = true;
   let currentComponents = null;
   let hasChanged = false;
+  let overallProgressChanged = false;
   const saveManager = SaveManager.getInstance();
+  let lastSaveQueueTime = Date.now();
+  const SAVE_QUEUE_INTERVAL_MS = 15e3;
   while (true) {
     const navStateAtStart = params.navigationManager.getState();
     if (pageChanged) {
@@ -53407,48 +54471,33 @@ async function runCore(params) {
       const componentType = componentIdToTypeMap.get(componentId);
       if (!componentType) {
         throw new Error(
-          `CRITICAL: Component ${componentId} exists in componentCores but has no type in registry. This indicates registry corruption or deployment mismatch.`
+          `CRITICAL: Component ${componentId} exists in componentCores but has no type in registry. This indicates registry generation bug or deployment error. Registry must be regenerated with current curriculum.`
         );
       }
       if (currentComponents.componentProgressPolling.has(componentId)) {
-        try {
-          const messages = core2.getComponentProgressMessages();
-          if (messages.length > 0) {
-            hasChanged = true;
-            const handler = params.componentProgressHandlers.get(componentType);
-            if (!handler) {
-              throw new Error(
-                `No handler found for component type '${componentType}'`
-              );
-            }
-            for (const msg of messages) {
-              if (msg.componentId !== componentId) {
-                throw new Error(
-                  `Component ${componentId} sent message claiming to be from component ${msg.componentId}`
+        const messages = core2.getComponentProgressMessages();
+        if (messages.length > 0) {
+          hasChanged = true;
+          for (const msg of messages) {
+            try {
+              const handler = params.componentProgressHandlers.get(componentType);
+              if (!handler) {
+                console.error(
+                  `No handler found for component type: ${componentType}`
                 );
+                continue;
               }
               handler.handleMessage(msg);
+            } catch (error46) {
+              console.error(`Component ${componentId} message error:`, error46);
+              currentComponents.componentCores.delete(componentId);
+              currentComponents.componentProgressPolling.delete(componentId);
+              currentComponents.overallProgressPolling.delete(componentId);
+              currentComponents.navigationPolling.delete(componentId);
+              currentComponents.settingsPolling.delete(componentId);
+              continue;
             }
           }
-        } catch (error46) {
-          console.error(
-            `\u274C Component ${componentId} (${componentType}) failed during component progress polling/processing:`,
-            error46
-          );
-          try {
-            core2.interface.destroy();
-          } catch (destroyError) {
-            console.error(
-              `Failed to destroy component ${componentId}:`,
-              destroyError
-            );
-          }
-          currentComponents.componentCores.delete(componentId);
-          currentComponents.componentProgressPolling.delete(componentId);
-          currentComponents.overallProgressPolling.delete(componentId);
-          currentComponents.navigationPolling.delete(componentId);
-          currentComponents.settingsPolling.delete(componentId);
-          continue;
         }
       }
       if (currentComponents.settingsPolling.has(componentId)) {
@@ -53464,6 +54513,7 @@ async function runCore(params) {
         const messages = core2.getOverallProgressMessages();
         if (messages.length > 0) {
           hasChanged = true;
+          overallProgressChanged = true;
           for (const msg of messages) {
             params.overallProgressHandler.handleMessage(msg);
           }
@@ -53482,19 +54532,6 @@ async function runCore(params) {
     const navStateAtEnd = params.navigationManager.getState();
     if (navStateAtEnd.currentEntityId !== navStateAtStart.currentEntityId || navStateAtEnd.currentPage !== navStateAtStart.currentPage) {
       pageChanged = true;
-    }
-    if (pageChanged && currentComponents !== null) {
-      currentComponents.componentCores.forEach((core2) => {
-        try {
-          core2.interface.destroy();
-        } catch (error46) {
-          console.error(
-            `Error destroying component ${core2.config.id}:`,
-            error46
-          );
-        }
-      });
-      currentComponents = null;
     }
     const componentProgressObj = {};
     for (const [componentId, manager] of params.componentManagers) {
@@ -53517,10 +54554,7 @@ async function runCore(params) {
         params.lessonConfigs
       );
       if (!integrityCheck.perfectlyValidInput) {
-        console.error(
-          "\u{1F4A5} CRITICAL: Generated corrupt bundle:",
-          integrityCheck
-        );
+        console.error("\u{1F4A5} CRITICAL: Generated corrupt bundle:", integrityCheck);
         throw new Error(
           "Bundle failed integrity check - this is a bug in state managers"
         );
@@ -53529,9 +54563,27 @@ async function runCore(params) {
       console.error("\u{1F4A5} CRITICAL: Bundle integrity validation failed:", error46);
       throw error46;
     }
-    saveManager.queueSave(bundleJSON, hasChanged);
-    hasChanged = false;
+    const now = Date.now();
+    const timeSinceLastSave = now - lastSaveQueueTime;
+    const shouldQueueSave = hasChanged || timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS;
+    if (shouldQueueSave) {
+      saveManager.queueSave(bundleJSON, hasChanged, overallProgressChanged);
+      lastSaveQueueTime = now;
+      hasChanged = false;
+      overallProgressChanged = false;
+    }
     await new Promise((resolve) => setTimeout(resolve, 50));
+    if (pageChanged && currentComponents !== null) {
+      componentCoordinator.clearPage();
+      currentComponents.componentCores.forEach((core2) => {
+        try {
+          core2.interface.destroy();
+        } catch (error46) {
+          console.error(`Error destroying component ${core2.config.id}:`, error46);
+        }
+      });
+      currentComponents = null;
+    }
   }
 }
 
@@ -53571,7 +54623,7 @@ async function startCore(bundle, lessonConfigs) {
       );
     }
     const lessonId = componentToLessonMap.get(componentId);
-    if (!lessonId) {
+    if (lessonId === void 0) {
       throw new Error(
         `No lesson mapping found for component ID ${componentId}. This indicates registry generation bug or corrupted mappings.`
       );
@@ -53867,7 +54919,7 @@ function continueToNextModule() {
 function noSolidConnection() {
   console.log("\u{1F510} No Solid connection - authentication required");
   if (errorDisplay) {
-    errorDisplay.showSolidConnectionError();
+    errorDisplay.showConnectionError("solid");
   }
 }
 async function startBootstrap() {

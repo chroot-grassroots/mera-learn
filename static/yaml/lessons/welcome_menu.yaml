@@ -1,0 +1,19 @@
+metadata:
+  id: 1
+  entityType: menu
+  title: "Welcome to Mera"
+  description: "Welcome and initial setup"
+  estimatedMinutes: 5
+  difficulty: beginner
+  version: "1.0.0"
+
+pages:
+  - id: 100001
+    title: "Welcome"
+    description: "Get started with Mera"
+    order: 0
+    components:
+      - id: 1000001
+        type: "new_user_welcome"
+        accessibility_label: "Welcome and settings configuration"
+        order: 100

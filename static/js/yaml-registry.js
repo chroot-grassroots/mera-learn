@@ -1,6 +1,6 @@
 /*
  * Auto-generated YAML File Registry for Runtime Loading
- * Generated on: 2026-01-09T06:20:03.049152
+ * Generated on: 2026-01-11T22:26:08.052399
  * 
  * This file contains ONLY file paths for loading YAML content at runtime.
  * All parsed data and mappings are in mera-registry.ts (bundled with TypeScript).
@@ -16,6 +16,11 @@ export const lessonFiles = [
   {
     "path": "/static/yaml/lessons/phishing-basics.yaml",
     "filename": "phishing-basics.yaml",
+    "type": "lesson"
+  },
+  {
+    "path": "/static/yaml/lessons/welcome_menu.yaml",
+    "filename": "welcome_menu.yaml",
     "type": "lesson"
   }
 ];

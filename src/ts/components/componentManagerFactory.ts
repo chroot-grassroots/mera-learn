@@ -8,6 +8,11 @@ import type {
   BaseComponentProgress,
   BaseComponentConfig,
 } from "./cores/baseComponentCore.js";
+import {
+  NewUserWelcomeComponentConfig,
+  NewUserWelcomeComponentProgressSchema,
+  NewUserWelcomeProgressManager,
+} from "./cores/newUserWelcomeCore.js";
 
 /**
  * Create the appropriate progress manager for a component type.
@@ -28,6 +33,13 @@ export function createComponentProgressManager(
       const validated = BasicTaskComponentProgressSchema.parse(progressData);
       return new BasicTaskProgressManager(
         config as BasicTaskComponentConfig,  // Pass config first
+        validated
+      );
+    }
+    case 'new_user_welcom': {
+      const validated = NewUserWelcomeComponentProgressSchema.parse(progressData);
+      return new NewUserWelcomeProgressManager(
+        config as NewUserWelcomeComponentConfig,  // Pass config first
         validated
       );
     }

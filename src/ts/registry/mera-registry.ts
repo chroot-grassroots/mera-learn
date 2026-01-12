@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2026-01-09T06:20:03.049196
+ * Generated on: 2026-01-11T22:26:08.052447
  * 
  * This file contains ALL 11 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -82,20 +82,21 @@ export const componentInitializerMap = new Map<string, () => any>([
  * MAPPING 5: All Entity IDs
  * Set of all valid entity IDs in the system (lessons and menus)
  */
-export const allLessonIds = [12345];
+export const allLessonIds = [1, 12345];
 
 /**
  * MAPPING 6: All Component IDs
  * Set of all component IDs used across all entities
  */
-export const allComponentIds = [123456, 123457];
+export const allComponentIds = [123456, 123457, 1000001];
 
 /**
  * MAPPING 7: Entity Metrics Map
  * Maps entity ID to metrics (page count, component count, etc.)
  */
 export const lessonMetrics = new Map<number, LessonMetrics>([
-    [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }]
+    [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
+    [1, { pageCount: 1, componentCount: 1, title: "Welcome to Mera", difficulty: "beginner" }]
 ]);
 
 /**
@@ -105,7 +106,8 @@ export const lessonMetrics = new Map<number, LessonMetrics>([
  */
 export const componentIdToTypeMap = new Map<number, string>([
     [123456, "basic_task"],
-    [123457, "basic_task"]
+    [123457, "basic_task"],
+    [1000001, "new_user_welcome"]
 ]);
 
 /**
@@ -115,7 +117,8 @@ export const componentIdToTypeMap = new Map<number, string>([
  */
 export const componentToLessonMap = new Map<number, number>([
     [123456, 12345],
-    [123457, 12345]
+    [123457, 12345],
+    [1000001, 1]
 ]);
 
 /**
@@ -231,6 +234,18 @@ export const lessonMetadata = [
     "estimatedMinutes": 8,
     "required": true,
     "domainId": 1001
+  },
+  {
+    "id": 1,
+    "path": "static/yaml/lessons/welcome_menu.yaml",
+    "title": "Welcome to Mera",
+    "entityType": "lesson",
+    "pageCount": 1,
+    "componentCount": 1,
+    "difficulty": "beginner",
+    "estimatedMinutes": 5,
+    "required": true,
+    "domainId": null
   }
 ];
 

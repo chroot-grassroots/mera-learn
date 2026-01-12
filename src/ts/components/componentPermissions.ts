@@ -33,7 +33,12 @@ export const MESSAGE_TYPE_PERMISSIONS: Record<string, {
     navigation: false,         // Cannot navigate
     settings: false           // Cannot change settings
   },
-  
+    'new_user_welcome': {
+    componentProgress: false,   // Doesn't have persistent state
+    overallProgress: false,    // Cannot mark lessons complete
+    navigation: true,         // Can navigate
+    settings: true           // Can change settings
+  },
   // Add additional components here
 
 };

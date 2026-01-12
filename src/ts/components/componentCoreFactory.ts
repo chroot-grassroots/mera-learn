@@ -20,6 +20,9 @@ import type { IReadonlyOverallProgressManager } from "../core/overallProgressSch
 import type { IReadonlyNavigationManager } from "../core/navigationSchema.js";
 import type { IReadonlySettingsManager } from "../core/settingsSchema.js";
 import { getTimelineInstance } from "../ui/timelineContainer.js";
+import { NewUserWelcomeCore } from "./cores/newUserWelcomeCore.js";
+import type { NewUserWelcomeComponentConfig } from "./cores/newUserWelcomeCore.js";
+import type { NewUserWelcomeProgressManager } from "./cores/newUserWelcomeCore.js";
 
 /**
  * Create a component Core instance based on type string.
@@ -51,6 +54,17 @@ const timeline = getTimelineInstance();
       return new BasicTaskCore(
         config as BasicTaskComponentConfig,
         progressManager as BasicTaskProgressManager,
+        timeline,
+        overallProgressManager,
+        navigationManager,
+        settingsManager,
+        curriculumData
+      );
+
+    case "new_user_welcome":
+      return new NewUserWelcomeCore(
+        config as NewUserWelcomeComponentConfig,
+        progressManager as NewUserWelcomeProgressManager,
         timeline,
         overallProgressManager,
         navigationManager,

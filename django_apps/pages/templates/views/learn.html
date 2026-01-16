@@ -23,9 +23,6 @@
   console.log('🔍 Solid session:', window.solidClientAuthentication?.getDefaultSession()?.info);
 </script>
 
-<!-- Mera Bridge (loads before main app) -->
-<script type="module" src="{% static 'js/mera-bridge.js' %}"></script>
-
 {% endblock %}
 
 {% block content %}

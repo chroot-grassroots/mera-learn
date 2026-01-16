@@ -9,7 +9,7 @@
   "scripts": {
     "generate-registry": "python3 dev/py/registry_builder.py",
     "build-solid": "esbuild src/solid-bundle-source.js --bundle --outfile=static/js/solid-bundle.js --format=iife --define:process.env.NODE_ENV='\"production\"' --define:global=globalThis --platform=browser --target=es2020",
-    "build-solid-ts": "esbuild src/ts/solid/solidAuth.ts --outfile=static/js/solid-auth.js --format=esm --platform=browser --target=es2020 --bundle && esbuild src/ts/solid/meraBridge.ts --outfile=static/js/mera-bridge.js --format=esm --platform=browser --target=es2020 --bundle",
+    "build-solid-ts": "esbuild src/ts/solid/solidAuth.ts --outfile=static/js/solid-auth.js --format=esm --platform=browser --target=es2020 --bundle",
     "build-ts": "tsc",
     "build-ts-bundle": "esbuild src/ts/initialization/bootstrap.ts --bundle --outfile=static/js/mera-app.js --format=esm --platform=browser",
     "build-web": "esbuild src/ts/web/siteMenu.ts --outfile=static/web/site-menu.js --format=esm --platform=browser --bundle && esbuild src/ts/web/updateHomeJourney.ts --outfile=static/web/update-home-journey.js --format=esm --platform=browser --bundle && esbuild src/ts/web/customSolidHandler.ts --outfile=static/web/customSolidHandler.js --format=esm --platform=browser --bundle",

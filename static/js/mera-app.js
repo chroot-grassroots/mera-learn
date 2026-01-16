@@ -33463,19 +33463,25 @@ var init_meraBridge = __esm({
        */
       async _extractPodUrl() {
         if (!this.session?.info.isLoggedIn) {
-          throw new Error("Cannot extract Pod URL: not authenticated");
+          throw new Error("Cannot extract Pod URL - not authenticated");
         }
         const webId = this.session.info.webId;
         if (!webId) {
-          throw new Error("WebID not available in session");
+          throw new Error("No WebID in authenticated session");
         }
-        const webIdUrl = new URL(webId);
-        this.podUrl = `${webIdUrl.protocol}//${webIdUrl.host}`;
-        console.log("\u{1F4E6} Pod URL extracted:", this.podUrl);
+        try {
+          const url2 = new URL(webId);
+          this.podUrl = `${url2.protocol}//${url2.host}/`;
+          console.log("\u{1F4E6} Pod URL extracted:", this.podUrl);
+        } catch (error46) {
+          throw new Error(`Failed to parse WebID URL: ${webId}`);
+        }
       }
       /**
-       * Check if bridge is ready (lightweight check - doesn't trigger initialization)
-       * Use this for polling in bootstrap.ts
+       * Check if bridge is initialized and user is logged in
+       * 
+       * Lightweight check - returns cached status without triggering initialization.
+       * Bootstrap polls this method waiting for initialization to complete.
        */
       check() {
         return this.initialized && this.session?.info.isLoggedIn === true;
@@ -33499,47 +33505,186 @@ var init_meraBridge = __esm({
         }
       }
       // ==========================================================================
-      // Local Storage Operations
+      // Pod Storage Operations
       // ==========================================================================
       /**
-       * Save data to localStorage (expects pre-stringified JSON)
+       * Save JSON data to Solid Pod
+       */
+      async solidSave(filename, data) {
+        if (!this.podUrl) {
+          return {
+            success: false,
+            error: "Not authenticated - no Pod URL available",
+            errorType: "authentication" /* Authentication */
+          };
+        }
+        try {
+          const fileUrl = `${this.podUrl}mera/${filename}`;
+          const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: "application/json"
+          });
+          await overwriteFile(fileUrl, blob, {
+            contentType: "application/json",
+            fetch: this.session.fetch
+          });
+          return {
+            success: true,
+            data: fileUrl
+          };
+        } catch (error46) {
+          return {
+            success: false,
+            error: error46 instanceof Error ? error46.message : "Unknown error during save",
+            errorType: this._classifyError(error46)
+          };
+        }
+      }
+      /**
+       * Load JSON data from Solid Pod
+       */
+      async solidLoad(filename) {
+        if (!this.podUrl) {
+          return {
+            success: false,
+            error: "Not authenticated - no Pod URL available",
+            errorType: "authentication" /* Authentication */
+          };
+        }
+        try {
+          const fileUrl = `${this.podUrl}mera/${filename}`;
+          const file2 = await getFile(fileUrl, {
+            fetch: this.session.fetch
+          });
+          const text = await file2.text();
+          const data = JSON.parse(text);
+          return {
+            success: true,
+            data
+          };
+        } catch (error46) {
+          return {
+            success: false,
+            error: error46 instanceof Error ? error46.message : "Unknown error during load",
+            errorType: this._classifyError(error46)
+          };
+        }
+      }
+      /**
+       * Delete file from Solid Pod
+       */
+      async solidDelete(filename) {
+        if (!this.podUrl) {
+          return {
+            success: false,
+            error: "Not authenticated - no Pod URL available",
+            errorType: "authentication" /* Authentication */
+          };
+        }
+        try {
+          const fileUrl = `${this.podUrl}mera/${filename}`;
+          await deleteFile(fileUrl, {
+            fetch: this.session.fetch
+          });
+          return {
+            success: true
+          };
+        } catch (error46) {
+          return {
+            success: false,
+            error: error46 instanceof Error ? error46.message : "Unknown error during delete",
+            errorType: this._classifyError(error46)
+          };
+        }
+      }
+      /**
+       * List files in Solid Pod matching pattern
+       * 
+       * Pattern uses basic wildcards:
+       * - * matches any characters
+       * - Example: "mera.*.json" matches "mera.123.json", "mera.backup.json"
+       */
+      async solidList(pattern) {
+        if (!this.podUrl) {
+          return {
+            success: false,
+            error: "Not authenticated - no Pod URL available",
+            errorType: "authentication" /* Authentication */
+          };
+        }
+        try {
+          const containerUrl = `${this.podUrl}mera/`;
+          try {
+            await createContainerAt(containerUrl, {
+              fetch: this.session.fetch
+            });
+          } catch (error46) {
+          }
+          const dataset = await getSolidDataset(containerUrl, {
+            fetch: this.session.fetch
+          });
+          const allUrls = getContainedResourceUrlAll(dataset);
+          const filenames = allUrls.map((url2) => url2.split("/").pop()).filter((filename) => !!filename);
+          const matched = filenames.filter(
+            (filename) => this._matchPattern(filename, pattern)
+          );
+          return {
+            success: true,
+            data: matched
+          };
+        } catch (error46) {
+          return {
+            success: false,
+            error: error46 instanceof Error ? error46.message : "Unknown error during list",
+            errorType: this._classifyError(error46)
+          };
+        }
+      }
+      // ==========================================================================
+      // LocalStorage Operations
+      // ==========================================================================
+      /**
+       * Save JSON data to localStorage
        */
       async localSave(filename, data) {
         try {
-          const key = `mera_${filename}`;
-          localStorage.setItem(key, data);
-          console.log("\u{1F4BE} Saved to localStorage:", filename);
-          return { success: true, error: null };
+          const key = `mera:${filename}`;
+          const json3 = JSON.stringify(data);
+          localStorage.setItem(key, json3);
+          return {
+            success: true,
+            data: key
+          };
         } catch (error46) {
-          console.error("\u274C localStorage save failed:", error46);
           return {
             success: false,
-            error: error46 instanceof Error ? error46.message : "Unknown error",
+            error: error46 instanceof Error ? error46.message : "Unknown error during local save",
             errorType: "storage" /* Storage */
           };
         }
       }
       /**
-       * Load data from localStorage (returns JSON string)
+       * Load JSON data from localStorage
        */
       async localLoad(filename) {
         try {
-          const key = `mera_${filename}`;
-          const item = localStorage.getItem(key);
-          if (!item) {
+          const key = `mera:${filename}`;
+          const json3 = localStorage.getItem(key);
+          if (json3 === null) {
             return {
               success: false,
-              error: "File not found",
+              error: `File not found: ${filename}`,
               errorType: "not_found" /* NotFound */
             };
           }
-          console.log("\u{1F4E5} Loaded from localStorage:", filename);
-          return { success: true, data: item, error: null };
+          const data = JSON.parse(json3);
+          return {
+            success: true,
+            data
+          };
         } catch (error46) {
-          console.error("\u274C localStorage load failed:", error46);
           return {
             success: false,
-            error: error46 instanceof Error ? error46.message : "Unknown error",
+            error: error46 instanceof Error ? error46.message : "Unknown error during local load",
             errorType: "storage" /* Storage */
           };
         }
@@ -33549,237 +33694,51 @@ var init_meraBridge = __esm({
        */
       async localDelete(filename) {
         try {
-          const key = `mera_${filename}`;
+          const key = `mera:${filename}`;
           localStorage.removeItem(key);
-          console.log("\u{1F5D1}\uFE0F Deleted from localStorage:", filename);
-          return { success: true, error: null };
+          return {
+            success: true
+          };
         } catch (error46) {
-          console.error("\u274C localStorage delete failed:", error46);
           return {
             success: false,
-            error: error46 instanceof Error ? error46.message : "Unknown error",
+            error: error46 instanceof Error ? error46.message : "Unknown error during local delete",
             errorType: "storage" /* Storage */
           };
         }
       }
       /**
-       * List files in localStorage with mera_ prefix
-       * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.lofp.*.json")
+       * List files in localStorage matching pattern
        */
       async localList(pattern) {
         try {
-          const filenames = [];
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (!key || !key.startsWith("mera_")) {
-              continue;
-            }
-            const filename = key.substring(5);
-            if (pattern && !this._matchesPattern(filename, pattern)) {
-              continue;
-            }
-            filenames.push(filename);
-          }
-          filenames.sort((a, b) => {
-            const timestampA = this._extractTimestamp(a);
-            const timestampB = this._extractTimestamp(b);
-            return timestampB - timestampA;
-          });
-          console.log("\u{1F4CB} Listed localStorage files:", filenames.length);
-          return { success: true, data: filenames, error: null };
+          const allKeys = Object.keys(localStorage);
+          const meraKeys = allKeys.filter((key) => key.startsWith("mera:"));
+          const filenames = meraKeys.map((key) => key.replace("mera:", ""));
+          const matched = filenames.filter(
+            (filename) => this._matchPattern(filename, pattern)
+          );
+          return {
+            success: true,
+            data: matched
+          };
         } catch (error46) {
-          console.error("\u274C localStorage list failed:", error46);
           return {
             success: false,
-            error: error46 instanceof Error ? error46.message : "Unknown error",
+            error: error46 instanceof Error ? error46.message : "Unknown error during local list",
             errorType: "storage" /* Storage */
           };
         }
       }
-      /**
-       * Extract timestamp from filename (expects format: *.{timestamp}.json)
-       */
-      _extractTimestamp(filename) {
-        const match = filename.match(/\.(\d+)\.json$/);
-        return match ? parseInt(match[1], 10) : 0;
-      }
       // ==========================================================================
-      // Solid Pod Operations
+      // Helper Methods
       // ==========================================================================
       /**
-       * Save data to Solid Pod (expects pre-stringified JSON)
+       * Match filename against pattern with wildcards
+       * - * matches any characters
        */
-      async solidSave(filename, data) {
-        try {
-          if (!this.initialized) {
-            await this.initialize();
-          }
-          if (!this.session?.info.isLoggedIn) {
-            return {
-              success: false,
-              error: "Not authenticated",
-              errorType: "authentication" /* Authentication */
-            };
-          }
-          if (!this.podUrl) {
-            return {
-              success: false,
-              error: "Pod URL not available",
-              errorType: "authentication" /* Authentication */
-            };
-          }
-          const containerUrl = `${this.podUrl}/mera-learn/`;
-          try {
-            await createContainerAt(containerUrl, { fetch: this.session.fetch });
-          } catch {
-          }
-          const fileUrl = `${containerUrl}${filename}`;
-          const blob = new Blob([data], { type: "application/json" });
-          await overwriteFile(fileUrl, blob, {
-            contentType: "application/json",
-            fetch: this.session.fetch
-          });
-          console.log("\u{1F4BE} Saved to Pod:", filename);
-          return { success: true, error: null };
-        } catch (error46) {
-          const errorType = this._classifyError(error46);
-          console.error("\u274C Pod save failed:", error46);
-          return {
-            success: false,
-            error: error46 instanceof Error ? error46.message : "Unknown error",
-            errorType
-          };
-        }
-      }
-      /**
-       * Load data from Solid Pod (returns JSON string)
-       */
-      async solidLoad(filename) {
-        try {
-          if (!this.initialized) {
-            await this.initialize();
-          }
-          if (!this.session?.info.isLoggedIn) {
-            return {
-              success: false,
-              error: "Not authenticated",
-              errorType: "authentication" /* Authentication */
-            };
-          }
-          if (!this.podUrl) {
-            return {
-              success: false,
-              error: "Pod URL not available",
-              errorType: "authentication" /* Authentication */
-            };
-          }
-          const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
-          const file2 = await getFile(fileUrl, { fetch: this.session.fetch });
-          const text = await file2.text();
-          console.log("\u{1F4E5} Loaded from Pod:", filename);
-          return { success: true, data: text, error: null };
-        } catch (error46) {
-          const errorType = this._classifyError(error46);
-          console.error("\u274C Pod load failed:", error46);
-          return {
-            success: false,
-            error: error46 instanceof Error ? error46.message : "Unknown error",
-            errorType
-          };
-        }
-      }
-      /**
-       * Delete file from Solid Pod
-       */
-      async solidDelete(filename) {
-        try {
-          if (!this.initialized) {
-            await this.initialize();
-          }
-          if (!this.session?.info.isLoggedIn) {
-            return {
-              success: false,
-              error: "Not authenticated",
-              errorType: "authentication" /* Authentication */
-            };
-          }
-          if (!this.podUrl) {
-            return {
-              success: false,
-              error: "Pod URL not available",
-              errorType: "authentication" /* Authentication */
-            };
-          }
-          const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
-          await deleteFile(fileUrl, { fetch: this.session.fetch });
-          console.log("\u{1F5D1}\uFE0F Deleted from Pod:", filename);
-          return { success: true, error: null };
-        } catch (error46) {
-          const errorType = this._classifyError(error46);
-          console.error("\u274C Pod delete failed:", error46);
-          return {
-            success: false,
-            error: error46 instanceof Error ? error46.message : "Unknown error",
-            errorType
-          };
-        }
-      }
-      /**
-       * List files in Solid Pod mera-learn container
-       * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.sp.*.json")
-       */
-      async solidList(pattern) {
-        try {
-          if (!this.initialized) {
-            await this.initialize();
-          }
-          if (!this.session?.info.isLoggedIn) {
-            return {
-              success: false,
-              error: "Not authenticated",
-              errorType: "authentication" /* Authentication */
-            };
-          }
-          if (!this.podUrl) {
-            return {
-              success: false,
-              error: "Pod URL not available",
-              errorType: "authentication" /* Authentication */
-            };
-          }
-          const containerUrl = `${this.podUrl}/mera-learn/`;
-          const dataset = await getSolidDataset(containerUrl, { fetch: this.session.fetch });
-          const fileUrls = getContainedResourceUrlAll(dataset);
-          const filenames = fileUrls.map((url2) => {
-            const parts = url2.split("/");
-            return parts[parts.length - 1];
-          }).filter((filename) => {
-            if (pattern) {
-              return this._matchesPattern(filename, pattern);
-            }
-            return true;
-          });
-          console.log("\u{1F4CB} Listed Pod files:", filenames.length);
-          return { success: true, data: filenames, error: null };
-        } catch (error46) {
-          const errorType = this._classifyError(error46);
-          console.error("\u274C Pod list failed:", error46);
-          return {
-            success: false,
-            error: error46 instanceof Error ? error46.message : "Unknown error",
-            errorType
-          };
-        }
-      }
-      // ==========================================================================
-      // Utility Methods
-      // ==========================================================================
-      /**
-       * Simple glob pattern matcher
-       * Supports * for any characters
-       */
-      _matchesPattern(filename, pattern) {
-        const regexPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+      _matchPattern(filename, pattern) {
+        const regexPattern = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
         const regex = new RegExp(`^${regexPattern}$`);
         return regex.test(filename);
       }
@@ -48696,11 +48655,573 @@ var PodStorageBundleSchema = external_exports.object({
   metadata: PodMetadataSchema
 });
 
+// src/ts/components/cores/baseComponentCore.ts
+var BaseComponentConfigSchema = external_exports.object({
+  id: ImmutableId,
+  // Immutable ID for progress tracking
+  type: external_exports.string().min(1),
+  // Component type: text, quiz, task, etc.
+  accessibility_label: external_exports.string().min(2),
+  // Screen reader description
+  order: external_exports.number().int().min(-1e6).max(1e6)
+  // Display order: 100, 200, 300, etc.
+});
+var BaseComponentProgressSchema = external_exports.object({
+  lastUpdated: external_exports.number().int().min(0)
+  // NO .default() - explicit defaulting only
+});
+var BaseComponentProgressManager = class {
+  // Protected - child classes can mutate, external code cannot
+  /**
+   * Construct manager with config reference and cloned progress data.
+   *
+   * CLONING: Progress data is cloned to prevent external mutations from
+   * corrupting the manager's internal state. Config is stored as readonly
+   * reference since it's immutable.
+   *
+   * @param config - Component configuration (immutable, safe to share reference)
+   * @param initialProgress - Progress data from Main Core (will be cloned)
+   */
+  constructor(config2, initialProgress) {
+    this.config = config2;
+    this.progress = structuredClone(initialProgress);
+  }
+  /**
+   * Get current progress state (cloned).
+   *
+   * CLONING: Returns clone to prevent external code from mutating the
+   * manager's internal state. Component Core and Interface receive a
+   * snapshot they can read but cannot corrupt.
+   *
+   * @returns Cloned progress state
+   */
+  getProgress() {
+    return structuredClone(this.progress);
+  }
+  /**
+   * Update lastUpdated timestamp to current time.
+   *
+   * IMPORTANT: All mutation methods in subclasses MUST call this
+   * after modifying progress state to maintain accurate timestamps
+   * for conflict resolution.
+   *
+   * Protected helper - only accessible to subclass mutation methods.
+   */
+  updateTimestamp() {
+    this.progress.lastUpdated = Math.floor(Date.now() / 1e3);
+  }
+};
+var BaseComponentCore = class {
+  /**
+   * Construct component core with readonly references to shared state.
+   *
+   * @param config Component configuration from YAML (readonly)
+   * @param progressManager Validated progress mutations with cloning
+   * @param timeline Container for component rendering
+   * @param overallProgress Readonly lesson completion state
+   * @param navigationState Readonly current page/lesson position
+   * @param settings Readonly user preferences
+   * @param curriculumRegistry Lesson/domain lookup for validation
+   */
+  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
+    // Operations control - components can't produce messages until coordinator releases them
+    this._operationsEnabled = false;
+    this._config = config2;
+    this._progressManager = progressManager;
+    this._navigationQueueManager = new NavigationMessageQueueManager(
+      curriculumRegistry
+    );
+    this._settingsQueueManager = new SettingsMessageQueueManager();
+    this._overallProgressQueueManager = new OverallProgressMessageQueueManager(
+      curriculumRegistry
+    );
+    this._interface = this.createInterface(timeline2);
+  }
+  /**
+   * Retrieve component-specific progress messages.
+   *
+   * Main Core polls this during its update cycle.
+   * Returns empty array until operations enabled by coordinator.
+   * 
+   * Gating is enforced at base level - subclasses cannot bypass it.
+   *
+   * @returns Array of component progress messages
+   */
+  getComponentProgressMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this.getComponentProgressMessagesInternal();
+  }
+  // ============================================================================
+  // LIFECYCLE MANAGEMENT METHODS (called by Coordinator)
+  // ============================================================================
+  /**
+   * Check if interface is ready to render.
+   *
+   * Called by coordinator to determine when component can be displayed.
+   * Delegates to interface which tracks asset loading state.
+   *
+   * @returns true if interface ready (assets loaded or acceptable failure state)
+   */
+  isInterfaceReady() {
+    return this._interface.isReady();
+  }
+  /**
+   * Display interface and enable operations.
+   *
+   * Called by coordinator when all components ready.
+   * Performs two actions:
+   * 1. Renders component to DOM (creates timeline slot, displays content)
+   * 2. Enables message production (allows getMessages() to return queued updates)
+   *
+   * After this method, component is fully active and can interact with user.
+   */
+  displayInterface() {
+    this._interface.renderToDOM();
+    this._operationsEnabled = true;
+  }
+  // ============================================================================
+  // READONLY ACCESSORS
+  // ============================================================================
+  /**
+   * Get component configuration (readonly)
+   */
+  get config() {
+    return this._config;
+  }
+  /**
+   * Get component interface instance (readonly)
+   */
+  get interface() {
+    return this._interface;
+  }
+  // ============================================================================
+  // MESSAGE QUEUE CONVENIENCE METHODS
+  // ============================================================================
+  /**
+   * Convenience wrapper for queueing lesson completion message.
+   *
+   * Components call this when they trigger lesson completion
+   * (e.g., final quiz question answered correctly).
+   *
+   * @param lessonId Immutable lesson ID
+   */
+  queueLessonComplete(lessonId) {
+    this._overallProgressQueueManager.queueLessonComplete(lessonId);
+  }
+  /**
+   * Convenience wrapper for queueing lesson incompletion message.
+   *
+   * Used when component state changes invalidate lesson completion
+   * (e.g., quiz answer changed after lesson marked complete).
+   *
+   * @param lessonId Immutable lesson ID
+   */
+  queueLessonIncomplete(lessonId) {
+    this._overallProgressQueueManager.queueLessonIncomplete(lessonId);
+  }
+  /**
+   * Retrieve queued navigation messages.
+   *
+   * Main Core polls this during update cycle.
+   */
+  getNavigationMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this._navigationQueueManager.getMessages();
+  }
+  /**
+   * Retrieve queued settings messages.
+   *
+   * Main Core polls this during update cycle.
+   */
+  getSettingsMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this._settingsQueueManager.getMessages();
+  }
+  /**
+   * Retrieve queued overall progress messages.
+   *
+   * Main Core polls this during update cycle.
+   */
+  getOverallProgressMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this._overallProgressQueueManager.getMessages();
+  }
+};
+
+// src/ts/components/cores/newUserWelcomeCore.ts
+var NewUserWelcomeComponentConfigSchema = BaseComponentConfigSchema.extend({
+  type: external_exports.literal("new_user_welcome")
+});
+var NewUserWelcomeComponentProgressSchema = BaseComponentProgressSchema.extend({
+  // No additional fields - just lastUpdated from base
+});
+var NewUserWelcomeProgressManager = class extends BaseComponentProgressManager {
+  /**
+   * Create initial progress structure
+   * 
+   * Just the base lastUpdated field set to 0
+   */
+  createInitialProgress(config2) {
+    return {
+      lastUpdated: 0
+    };
+  }
+};
+var NewUserWelcomeSettingsMessageQueueManager = class {
+  constructor() {
+    this.queue = [];
+  }
+  /**
+   * Queue a settings message
+   */
+  queueMessage(message2) {
+    this.queue.push(message2);
+  }
+  /**
+   * Get all queued messages and clear the queue
+   */
+  getMessages() {
+    const messages = [...this.queue];
+    this.queue = [];
+    return messages;
+  }
+};
+var NewUserWelcomeNavigationMessageQueueManager = class {
+  constructor() {
+    this.queue = [];
+  }
+  /**
+   * Queue navigation to main menu
+   */
+  queueNavigationToMainMenu() {
+    this.queue.push({
+      method: "setCurrentView",
+      args: [0, 0]
+      // Entity 0 (main menu), page 0
+    });
+  }
+  /**
+   * Get all queued messages and clear the queue
+   */
+  getMessages() {
+    const messages = [...this.queue];
+    this.queue = [];
+    return messages;
+  }
+};
+var NewUserWelcomeCore = class extends BaseComponentCore {
+  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
+    super(
+      config2,
+      progressManager,
+      timeline2,
+      overallProgressManager,
+      navigationManager,
+      settingsManager,
+      curriculumRegistry
+    );
+    this.settingsMessageQueue = new NewUserWelcomeSettingsMessageQueueManager();
+    this.navigationMessageQueue = new NewUserWelcomeNavigationMessageQueueManager();
+  }
+  /**
+   * Create the interface for this core
+   */
+  createInterface(timeline2) {
+    const { NewUserWelcomeInterface: NewUserWelcomeInterface2 } = (init_newUserWelcomeInterface(), __toCommonJS(newUserWelcomeInterface_exports));
+    return new NewUserWelcomeInterface2(this, timeline2);
+  }
+  /**
+   * Check if component is complete
+   * 
+   * Always returns true - completion determined by navigation away
+   */
+  isComplete() {
+    return true;
+  }
+  /**
+   * Get component-specific progress messages (internal)
+   * 
+   * Always returns empty array - no progress to track
+   */
+  getComponentProgressMessagesInternal() {
+    return [];
+  }
+  /**
+   * Get queued settings messages
+   */
+  getSettingsMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this.settingsMessageQueue.getMessages();
+  }
+  /**
+   * Get queued navigation messages
+   */
+  getNavigationMessages() {
+    if (!this._operationsEnabled) {
+      return [];
+    }
+    return this.navigationMessageQueue.getMessages();
+  }
+  /**
+   * Public interface for component to queue settings message
+   */
+  queueSettingsMessage(message2) {
+    this.settingsMessageQueue.queueMessage(message2);
+  }
+  /**
+   * Public interface for component to queue navigation to main menu
+   */
+  queueNavigationToMainMenu() {
+    this.navigationMessageQueue.queueNavigationToMainMenu();
+  }
+};
+function createInitialProgress(config2) {
+  const tempManager = new NewUserWelcomeProgressManager(
+    config2,
+    { lastUpdated: 0 }
+  );
+  return tempManager.createInitialProgress(config2);
+}
+
+// src/ts/components/cores/basicTaskCore.ts
+var CheckboxItemSchema = external_exports.object({
+  content: external_exports.string().min(1).max(1e3),
+  required: external_exports.boolean().default(false)
+});
+var BasicTaskComponentConfigSchema = BaseComponentConfigSchema.extend({
+  type: external_exports.literal("basic_task"),
+  title: external_exports.string().min(1).max(200),
+  description: external_exports.string().min(1).max(1e3),
+  checkboxes: external_exports.array(CheckboxItemSchema).min(1).max(20)
+});
+var BasicTaskComponentProgressSchema = BaseComponentProgressSchema.extend({
+  checkbox_checked: external_exports.array(external_exports.boolean())
+  // NO .default() - explicit defaulting only
+});
+function isValidCheckboxIndex(index, config2) {
+  return index >= 0 && index < config2.checkboxes.length;
+}
+function isValidProgressStructure(progress, config2) {
+  return progress.checkbox_checked.length === config2.checkboxes.length;
+}
+function validateBasicTaskStructure(progress, config2) {
+  if (!isValidProgressStructure(progress, config2)) {
+    return {
+      cleaned: {
+        checkbox_checked: new Array(config2.checkboxes.length).fill(false),
+        lastUpdated: 0
+        // Explicit timestamp 0 = never set
+      },
+      defaultedRatio: 1
+    };
+  }
+  return {
+    cleaned: progress,
+    defaultedRatio: 0
+  };
+}
+var BasicTaskProgressManager = class extends BaseComponentProgressManager {
+  /**
+   * Set individual checkbox state with validation
+   *
+   * Uses shared validation helpers to ensure index is valid and
+   * progress structure matches config. Calls updateTimestamp() after mutation.
+   *
+   * @param index - Checkbox index to update
+   * @param checked - New checked state
+   * @throws Error if index out of bounds or structure mismatch
+   */
+  setCheckboxState(index, checked) {
+    if (!isValidProgressStructure(this.progress, this.config)) {
+      throw new Error(
+        `Progress has ${this.progress.checkbox_checked.length} checkboxes, config expects ${this.config.checkboxes.length}`
+      );
+    }
+    if (!isValidCheckboxIndex(index, this.config)) {
+      throw new Error(`Checkbox index ${index} out of range`);
+    }
+    this.progress.checkbox_checked[index] = checked;
+    this.updateTimestamp();
+  }
+  /**
+   * Create initial progress structure matching config requirements.
+   *
+   * Called for new users or when component is first encountered.
+   * Creates array of false values matching checkbox count.
+   *
+   * IMPORTANT: Explicitly sets lastUpdated to 0 (timestamp 0 = never set by user).
+   *
+   * @param config Component configuration with checkbox definitions
+   * @returns Fresh progress object with all checkboxes unchecked
+   */
+  createInitialProgress(config2) {
+    return {
+      checkbox_checked: new Array(config2.checkboxes.length).fill(false),
+      lastUpdated: 0
+      // Explicit timestamp 0 = never set by user
+    };
+  }
+};
+var BasicTaskMessageQueueManager = class {
+  constructor(componentId) {
+    this.componentId = componentId;
+    this.messageQueue = [];
+  }
+  /**
+   * Queue checkbox state change message
+   *
+   * @param index Checkbox index
+   * @param checked New checked state
+   */
+  queueCheckboxState(index, checked) {
+    this.messageQueue.push({
+      type: "component_progress",
+      componentId: this.componentId,
+      method: "setCheckboxState",
+      args: [index, checked]
+    });
+  }
+  /**
+   * Retrieve and clear all queued messages.
+   *
+   * Core polls this method to get pending updates.
+   * Messages are removed from queue after retrieval.
+   *
+   * @returns Array of queued messages
+   */
+  getMessages() {
+    const messages = [...this.messageQueue];
+    this.messageQueue = [];
+    return messages;
+  }
+};
+var BasicTaskCore = class extends BaseComponentCore {
+  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
+    super(
+      config2,
+      progressManager,
+      timeline2,
+      overallProgressManager,
+      navigationManager,
+      settingsManager,
+      curriculumRegistry
+    );
+    this._componentProgressQueueManager = new BasicTaskMessageQueueManager(
+      config2.id
+    );
+  }
+  /**
+   * Create the interface for this core
+   */
+  createInterface(timeline2) {
+    throw new Error("BasicTaskInterface not yet implemented");
+  }
+  /**
+   * Set checkbox state and queue message to main core
+   */
+  setCheckboxState(index, checked) {
+    this._progressManager.setCheckboxState(
+      index,
+      checked
+    );
+    this._componentProgressQueueManager.queueCheckboxState(index, checked);
+  }
+  /**
+   * Check if task is complete
+   *
+   * Task is complete when all required checkboxes are checked.
+   * Optional checkboxes don't affect completion status.
+   */
+  isComplete() {
+    const progress = this._progressManager.getProgress();
+    for (let i = 0; i < this._config.checkboxes.length; i++) {
+      const checkbox = this._config.checkboxes[i];
+      if (checkbox.required) {
+        if (i >= progress.checkbox_checked.length || !progress.checkbox_checked[i]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+  /**
+   * Get component progress messages for core polling
+   */
+  getComponentProgressMessagesInternal() {
+    return this._componentProgressQueueManager.getMessages();
+  }
+};
+var BasicTaskProgressMessageHandler = class {
+  constructor(componentManagers) {
+    this.componentManagers = componentManagers;
+  }
+  getComponentType() {
+    return "basic_task";
+  }
+  handleMessage(message2) {
+    const manager = this.componentManagers.get(
+      message2.componentId
+    );
+    if (!manager) {
+      throw new Error(`No manager found for component ${message2.componentId}`);
+    }
+    switch (message2.method) {
+      case "setCheckboxState":
+        manager.setCheckboxState(
+          message2.args[0],
+          message2.args[1]
+        );
+        break;
+      default:
+        throw new Error(
+          `BasicTask components only support: setCheckboxState. Got: ${message2.method}`
+        );
+    }
+  }
+};
+function createInitialProgress2(config2) {
+  return {
+    lastUpdated: 0,
+    checkbox_checked: new Array(config2.checkboxes.length).fill(false)
+  };
+}
+
 // src/ts/registry/mera-registry.ts
-var componentRegistrations = [];
-var progressSchemaMap = /* @__PURE__ */ new Map([]);
-var componentValidatorMap = /* @__PURE__ */ new Map([]);
-var componentInitializerMap = /* @__PURE__ */ new Map([]);
+var componentRegistrations = [
+  {
+    componentClass: NewUserWelcomeProgressManager,
+    configSchema: NewUserWelcomeComponentConfigSchema,
+    progressSchema: NewUserWelcomeComponentProgressSchema,
+    typeName: "new_user_welcome"
+  },
+  {
+    componentClass: BasicTaskProgressManager,
+    configSchema: BasicTaskComponentConfigSchema,
+    progressSchema: BasicTaskComponentProgressSchema,
+    typeName: "basic_task"
+  }
+];
+var progressSchemaMap = /* @__PURE__ */ new Map([
+  ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
+  ["basic_task", BasicTaskComponentProgressSchema]
+]);
+var componentValidatorMap = /* @__PURE__ */ new Map([
+  ["basic_task", validateBasicTaskStructure]
+]);
+var componentInitializerMap = /* @__PURE__ */ new Map([
+  ["new_user_welcome", createInitialProgress],
+  ["basic_task", createInitialProgress2]
+]);
 var allLessonIds = [1, 12345];
 var allComponentIds = [123456, 123457, 1000001];
 var lessonMetrics = /* @__PURE__ */ new Map([
@@ -48815,6 +49336,13 @@ console.log(`  - ${componentIdToTypeMap.size} component ID->type mappings`);
 console.log(`  - ${domainLessonMap.size} domains`);
 
 // src/ts/initialization/progressIntegrity.ts
+function getComponentConfig(componentId, lessonConfigs) {
+  const lessonId = curriculumData.getLessonIdForComponent(componentId);
+  if (!lessonId) return null;
+  const lessonConfig = lessonConfigs.get(lessonId);
+  if (!lessonConfig) return null;
+  return lessonConfig.components.find((c) => c.id === componentId) || null;
+}
 function enforceDataIntegrity(rawJson, expectedWebId, lessonConfigs) {
   if (!lessonConfigs || lessonConfigs.size === 0) {
     throw new Error(
@@ -48826,7 +49354,7 @@ function enforceDataIntegrity(rawJson, expectedWebId, lessonConfigs) {
     parsed = JSON.parse(rawJson);
   } catch (e) {
     console.warn("\u26A0\uFE0F JSON parse failed, returning fully defaulted bundle");
-    return createFullyDefaultedResult(expectedWebId, null);
+    return createFullyDefaultedResult(expectedWebId, null, lessonConfigs);
   }
   const metadataResult = extractMetadata(parsed, expectedWebId);
   const overallProgressResult = extractOverallProgress(parsed);
@@ -49190,8 +49718,9 @@ function extractCombinedComponentProgress(parsed, lessonConfigs) {
     if (savedProgress === void 0) {
       const componentType2 = curriculumData.getComponentType(componentId);
       if (componentType2) {
+        const componentConfig = getComponentConfig(componentId, lessonConfigs);
         const initializer3 = componentInitializerMap.get(componentType2);
-        components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
+        components[componentIdStr] = initializer3 && componentConfig ? initializer3(componentConfig) : { lastUpdated: 0 };
       } else {
         components[componentIdStr] = { lastUpdated: 0 };
       }
@@ -49201,22 +49730,25 @@ function extractCombinedComponentProgress(parsed, lessonConfigs) {
     const componentType = curriculumData.getComponentType(componentId);
     if (!componentType) {
       componentsDefaulted++;
+      const componentConfig = getComponentConfig(componentId, lessonConfigs);
       const initializer3 = componentInitializerMap.get("unknown");
-      components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
+      components[componentIdStr] = initializer3 && componentConfig ? initializer3(componentConfig) : { lastUpdated: 0 };
       continue;
     }
     const progressSchema = progressSchemaMap.get(componentType);
     if (!progressSchema) {
       componentsDefaulted++;
+      const componentConfig = getComponentConfig(componentId, lessonConfigs);
       const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
+      components[componentIdStr] = initializer3 && componentConfig ? initializer3(componentConfig) : { lastUpdated: 0 };
       continue;
     }
     const zodResult = progressSchema.safeParse(savedProgress);
     if (!zodResult.success) {
       componentsDefaulted++;
+      const componentConfig = getComponentConfig(componentId, lessonConfigs);
       const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
+      components[componentIdStr] = initializer3 && componentConfig ? initializer3(componentConfig) : { lastUpdated: 0 };
       continue;
     }
     const validator = componentValidatorMap.get(componentType);
@@ -49266,22 +49798,23 @@ function initializeAllLessonsAndDomainsWithDefaults() {
   }
   return { lessonCompletions, domainCompletions };
 }
-function initializeAllComponentsWithDefaults() {
+function initializeAllComponentsWithDefaults(lessonConfigs) {
   const components = {};
   const allComponentIds2 = curriculumData.getAllComponentIds();
   for (const componentId of allComponentIds2) {
     const componentIdStr = componentId.toString();
     const componentType = curriculumData.getComponentType(componentId);
     if (componentType) {
+      const componentConfig = getComponentConfig(componentId, lessonConfigs);
       const initializer3 = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer3 ? initializer3() : { lastUpdated: 0 };
+      components[componentIdStr] = initializer3 && componentConfig ? initializer3(componentConfig) : { lastUpdated: 0 };
     } else {
       components[componentIdStr] = { lastUpdated: 0 };
     }
   }
   return components;
 }
-function createFullyDefaultedResult(expectedWebId, foundWebId) {
+function createFullyDefaultedResult(expectedWebId, foundWebId, lessonConfigs) {
   const allComponentIds2 = curriculumData.getAllComponentIds();
   const { lessonCompletions, domainCompletions } = initializeAllLessonsAndDomainsWithDefaults();
   const defaultSettings = getDefaultSettings();
@@ -49304,7 +49837,7 @@ function createFullyDefaultedResult(expectedWebId, foundWebId) {
       lastUpdated: 0
     },
     combinedComponentProgress: {
-      components: initializeAllComponentsWithDefaults()
+      components: initializeAllComponentsWithDefaults(lessonConfigs)
     }
   };
   try {
@@ -52508,388 +53041,6 @@ var jsYaml = {
   safeDump
 };
 
-// src/ts/components/cores/baseComponentCore.ts
-var BaseComponentConfigSchema = external_exports.object({
-  id: ImmutableId,
-  // Immutable ID for progress tracking
-  type: external_exports.string().min(1),
-  // Component type: text, quiz, task, etc.
-  accessibility_label: external_exports.string().min(2),
-  // Screen reader description
-  order: external_exports.number().int().min(-1e6).max(1e6)
-  // Display order: 100, 200, 300, etc.
-});
-var BaseComponentProgressSchema = external_exports.object({
-  lastUpdated: external_exports.number().int().min(0)
-  // NO .default() - explicit defaulting only
-});
-var BaseComponentProgressManager = class {
-  // Protected - child classes can mutate, external code cannot
-  /**
-   * Construct manager with config reference and cloned progress data.
-   *
-   * CLONING: Progress data is cloned to prevent external mutations from
-   * corrupting the manager's internal state. Config is stored as readonly
-   * reference since it's immutable.
-   *
-   * @param config - Component configuration (immutable, safe to share reference)
-   * @param initialProgress - Progress data from Main Core (will be cloned)
-   */
-  constructor(config2, initialProgress) {
-    this.config = config2;
-    this.progress = structuredClone(initialProgress);
-  }
-  /**
-   * Get current progress state (cloned).
-   *
-   * CLONING: Returns clone to prevent external code from mutating the
-   * manager's internal state. Component Core and Interface receive a
-   * snapshot they can read but cannot corrupt.
-   *
-   * @returns Cloned progress state
-   */
-  getProgress() {
-    return structuredClone(this.progress);
-  }
-  /**
-   * Update lastUpdated timestamp to current time.
-   *
-   * IMPORTANT: All mutation methods in subclasses MUST call this
-   * after modifying progress state to maintain accurate timestamps
-   * for conflict resolution.
-   *
-   * Protected helper - only accessible to subclass mutation methods.
-   */
-  updateTimestamp() {
-    this.progress.lastUpdated = Math.floor(Date.now() / 1e3);
-  }
-};
-var BaseComponentCore = class {
-  /**
-   * Construct component core with readonly references to shared state.
-   *
-   * @param config Component configuration from YAML (readonly)
-   * @param progressManager Validated progress mutations with cloning
-   * @param timeline Container for component rendering
-   * @param overallProgress Readonly lesson completion state
-   * @param navigationState Readonly current page/lesson position
-   * @param settings Readonly user preferences
-   * @param curriculumRegistry Lesson/domain lookup for validation
-   */
-  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
-    // Operations control - components can't produce messages until coordinator releases them
-    this._operationsEnabled = false;
-    this._config = config2;
-    this._progressManager = progressManager;
-    this._navigationQueueManager = new NavigationMessageQueueManager(
-      curriculumRegistry
-    );
-    this._settingsQueueManager = new SettingsMessageQueueManager();
-    this._overallProgressQueueManager = new OverallProgressMessageQueueManager(
-      curriculumRegistry
-    );
-    this._interface = this.createInterface(timeline2);
-  }
-  /**
-   * Retrieve component-specific progress messages.
-   *
-   * Main Core polls this during its update cycle.
-   * Returns empty array until operations enabled by coordinator.
-   * 
-   * Gating is enforced at base level - subclasses cannot bypass it.
-   *
-   * @returns Array of component progress messages
-   */
-  getComponentProgressMessages() {
-    if (!this._operationsEnabled) {
-      return [];
-    }
-    return this.getComponentProgressMessagesInternal();
-  }
-  // ============================================================================
-  // LIFECYCLE MANAGEMENT METHODS (called by Coordinator)
-  // ============================================================================
-  /**
-   * Check if interface is ready to render.
-   *
-   * Called by coordinator to determine when component can be displayed.
-   * Delegates to interface which tracks asset loading state.
-   *
-   * @returns true if interface ready (assets loaded or acceptable failure state)
-   */
-  isInterfaceReady() {
-    return this._interface.isReady();
-  }
-  /**
-   * Display interface and enable operations.
-   *
-   * Called by coordinator when all components ready.
-   * Performs two actions:
-   * 1. Renders component to DOM (creates timeline slot, displays content)
-   * 2. Enables message production (allows getMessages() to return queued updates)
-   *
-   * After this method, component is fully active and can interact with user.
-   */
-  displayInterface() {
-    this._interface.renderToDOM();
-    this._operationsEnabled = true;
-  }
-  // ============================================================================
-  // READONLY ACCESSORS
-  // ============================================================================
-  /**
-   * Get component configuration (readonly)
-   */
-  get config() {
-    return this._config;
-  }
-  /**
-   * Get component interface instance (readonly)
-   */
-  get interface() {
-    return this._interface;
-  }
-  // ============================================================================
-  // MESSAGE QUEUE CONVENIENCE METHODS
-  // ============================================================================
-  /**
-   * Convenience wrapper for queueing lesson completion message.
-   *
-   * Components call this when they trigger lesson completion
-   * (e.g., final quiz question answered correctly).
-   *
-   * @param lessonId Immutable lesson ID
-   */
-  queueLessonComplete(lessonId) {
-    this._overallProgressQueueManager.queueLessonComplete(lessonId);
-  }
-  /**
-   * Convenience wrapper for queueing lesson incompletion message.
-   *
-   * Used when component state changes invalidate lesson completion
-   * (e.g., quiz answer changed after lesson marked complete).
-   *
-   * @param lessonId Immutable lesson ID
-   */
-  queueLessonIncomplete(lessonId) {
-    this._overallProgressQueueManager.queueLessonIncomplete(lessonId);
-  }
-  /**
-   * Retrieve queued navigation messages.
-   *
-   * Main Core polls this during update cycle.
-   */
-  getNavigationMessages() {
-    if (!this._operationsEnabled) {
-      return [];
-    }
-    return this._navigationQueueManager.getMessages();
-  }
-  /**
-   * Retrieve queued settings messages.
-   *
-   * Main Core polls this during update cycle.
-   */
-  getSettingsMessages() {
-    if (!this._operationsEnabled) {
-      return [];
-    }
-    return this._settingsQueueManager.getMessages();
-  }
-  /**
-   * Retrieve queued overall progress messages.
-   *
-   * Main Core polls this during update cycle.
-   */
-  getOverallProgressMessages() {
-    if (!this._operationsEnabled) {
-      return [];
-    }
-    return this._overallProgressQueueManager.getMessages();
-  }
-};
-
-// src/ts/components/cores/basicTaskCore.ts
-var CheckboxItemSchema = external_exports.object({
-  content: external_exports.string().min(1).max(1e3),
-  required: external_exports.boolean().default(false)
-});
-var BasicTaskComponentConfigSchema = BaseComponentConfigSchema.extend({
-  type: external_exports.literal("basic_task"),
-  title: external_exports.string().min(1).max(200),
-  description: external_exports.string().min(1).max(1e3),
-  checkboxes: external_exports.array(CheckboxItemSchema).min(1).max(20)
-});
-var BasicTaskComponentProgressSchema = BaseComponentProgressSchema.extend({
-  checkbox_checked: external_exports.array(external_exports.boolean())
-  // NO .default() - explicit defaulting only
-});
-function isValidCheckboxIndex(index, config2) {
-  return index >= 0 && index < config2.checkboxes.length;
-}
-function isValidProgressStructure(progress, config2) {
-  return progress.checkbox_checked.length === config2.checkboxes.length;
-}
-var BasicTaskProgressManager = class extends BaseComponentProgressManager {
-  /**
-   * Set individual checkbox state with validation
-   *
-   * Uses shared validation helpers to ensure index is valid and
-   * progress structure matches config. Calls updateTimestamp() after mutation.
-   *
-   * @param index - Checkbox index to update
-   * @param checked - New checked state
-   * @throws Error if index out of bounds or structure mismatch
-   */
-  setCheckboxState(index, checked) {
-    if (!isValidProgressStructure(this.progress, this.config)) {
-      throw new Error(
-        `Progress has ${this.progress.checkbox_checked.length} checkboxes, config expects ${this.config.checkboxes.length}`
-      );
-    }
-    if (!isValidCheckboxIndex(index, this.config)) {
-      throw new Error(`Checkbox index ${index} out of range`);
-    }
-    this.progress.checkbox_checked[index] = checked;
-    this.updateTimestamp();
-  }
-  /**
-   * Create initial progress structure matching config requirements.
-   *
-   * Called for new users or when component is first encountered.
-   * Creates array of false values matching checkbox count.
-   *
-   * IMPORTANT: Explicitly sets lastUpdated to 0 (timestamp 0 = never set by user).
-   *
-   * @param config Component configuration with checkbox definitions
-   * @returns Fresh progress object with all checkboxes unchecked
-   */
-  createInitialProgress(config2) {
-    return {
-      checkbox_checked: new Array(config2.checkboxes.length).fill(false),
-      lastUpdated: 0
-      // Explicit timestamp 0 = never set by user
-    };
-  }
-};
-var BasicTaskMessageQueueManager = class {
-  constructor(componentId) {
-    this.componentId = componentId;
-    this.messageQueue = [];
-  }
-  /**
-   * Queue checkbox state change message
-   *
-   * @param index Checkbox index
-   * @param checked New checked state
-   */
-  queueCheckboxState(index, checked) {
-    this.messageQueue.push({
-      type: "component_progress",
-      componentId: this.componentId,
-      method: "setCheckboxState",
-      args: [index, checked]
-    });
-  }
-  /**
-   * Retrieve and clear all queued messages.
-   *
-   * Core polls this method to get pending updates.
-   * Messages are removed from queue after retrieval.
-   *
-   * @returns Array of queued messages
-   */
-  getMessages() {
-    const messages = [...this.messageQueue];
-    this.messageQueue = [];
-    return messages;
-  }
-};
-var BasicTaskCore = class extends BaseComponentCore {
-  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
-    super(
-      config2,
-      progressManager,
-      timeline2,
-      overallProgressManager,
-      navigationManager,
-      settingsManager,
-      curriculumRegistry
-    );
-    this._componentProgressQueueManager = new BasicTaskMessageQueueManager(
-      config2.id
-    );
-  }
-  /**
-   * Create the interface for this core
-   */
-  createInterface(timeline2) {
-    throw new Error("BasicTaskInterface not yet implemented");
-  }
-  /**
-   * Set checkbox state and queue message to main core
-   */
-  setCheckboxState(index, checked) {
-    this._progressManager.setCheckboxState(
-      index,
-      checked
-    );
-    this._componentProgressQueueManager.queueCheckboxState(index, checked);
-  }
-  /**
-   * Check if task is complete
-   *
-   * Task is complete when all required checkboxes are checked.
-   * Optional checkboxes don't affect completion status.
-   */
-  isComplete() {
-    const progress = this._progressManager.getProgress();
-    for (let i = 0; i < this._config.checkboxes.length; i++) {
-      const checkbox = this._config.checkboxes[i];
-      if (checkbox.required) {
-        if (i >= progress.checkbox_checked.length || !progress.checkbox_checked[i]) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-  /**
-   * Get component progress messages for core polling
-   */
-  getComponentProgressMessagesInternal() {
-    return this._componentProgressQueueManager.getMessages();
-  }
-};
-var BasicTaskProgressMessageHandler = class {
-  constructor(componentManagers) {
-    this.componentManagers = componentManagers;
-  }
-  getComponentType() {
-    return "basic_task";
-  }
-  handleMessage(message2) {
-    const manager = this.componentManagers.get(
-      message2.componentId
-    );
-    if (!manager) {
-      throw new Error(`No manager found for component ${message2.componentId}`);
-    }
-    switch (message2.method) {
-      case "setCheckboxState":
-        manager.setCheckboxState(
-          message2.args[0],
-          message2.args[1]
-        );
-        break;
-      default:
-        throw new Error(
-          `BasicTask components only support: setCheckboxState. Got: ${message2.method}`
-        );
-    }
-  }
-};
-
 // src/ts/core/lessonSchemas.ts
 var LessonMetadataSchema = external_exports.object({
   id: ImmutableId,
@@ -53850,136 +54001,6 @@ var SaveCleaner = class _SaveCleaner {
     }
     const totalPrimaries = offlineResult.data.length + onlineResult.data.length;
     return totalPrimaries > 4;
-  }
-};
-
-// src/ts/components/cores/newUserWelcomeCore.ts
-var NewUserWelcomeComponentConfigSchema = BaseComponentConfigSchema.extend({
-  type: external_exports.literal("new_user_welcome")
-});
-var NewUserWelcomeComponentProgressSchema = BaseComponentProgressSchema.extend({
-  // No additional fields - just lastUpdated from base
-});
-var NewUserWelcomeProgressManager = class extends BaseComponentProgressManager {
-  /**
-   * Create initial progress structure
-   * 
-   * Just the base lastUpdated field set to 0
-   */
-  createInitialProgress(config2) {
-    return {
-      lastUpdated: 0
-    };
-  }
-};
-var NewUserWelcomeSettingsMessageQueueManager = class {
-  constructor() {
-    this.queue = [];
-  }
-  /**
-   * Queue a settings message
-   */
-  queueMessage(message2) {
-    this.queue.push(message2);
-  }
-  /**
-   * Get all queued messages and clear the queue
-   */
-  getMessages() {
-    const messages = [...this.queue];
-    this.queue = [];
-    return messages;
-  }
-};
-var NewUserWelcomeNavigationMessageQueueManager = class {
-  constructor() {
-    this.queue = [];
-  }
-  /**
-   * Queue navigation to main menu
-   */
-  queueNavigationToMainMenu() {
-    this.queue.push({
-      method: "setCurrentView",
-      args: [0, 0]
-      // Entity 0 (main menu), page 0
-    });
-  }
-  /**
-   * Get all queued messages and clear the queue
-   */
-  getMessages() {
-    const messages = [...this.queue];
-    this.queue = [];
-    return messages;
-  }
-};
-var NewUserWelcomeCore = class extends BaseComponentCore {
-  constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
-    super(
-      config2,
-      progressManager,
-      timeline2,
-      overallProgressManager,
-      navigationManager,
-      settingsManager,
-      curriculumRegistry
-    );
-    this.settingsMessageQueue = new NewUserWelcomeSettingsMessageQueueManager();
-    this.navigationMessageQueue = new NewUserWelcomeNavigationMessageQueueManager();
-  }
-  /**
-   * Create the interface for this core
-   */
-  createInterface(timeline2) {
-    const { NewUserWelcomeInterface: NewUserWelcomeInterface2 } = (init_newUserWelcomeInterface(), __toCommonJS(newUserWelcomeInterface_exports));
-    return new NewUserWelcomeInterface2(this, timeline2);
-  }
-  /**
-   * Check if component is complete
-   * 
-   * Always returns true - completion determined by navigation away
-   */
-  isComplete() {
-    return true;
-  }
-  /**
-   * Get component-specific progress messages (internal)
-   * 
-   * Always returns empty array - no progress to track
-   */
-  getComponentProgressMessagesInternal() {
-    return [];
-  }
-  /**
-   * Get queued settings messages
-   */
-  getSettingsMessages() {
-    if (!this._operationsEnabled) {
-      return [];
-    }
-    return this.settingsMessageQueue.getMessages();
-  }
-  /**
-   * Get queued navigation messages
-   */
-  getNavigationMessages() {
-    if (!this._operationsEnabled) {
-      return [];
-    }
-    return this.navigationMessageQueue.getMessages();
-  }
-  /**
-   * Public interface for component to queue settings message
-   */
-  queueSettingsMessage(message2) {
-    this.settingsMessageQueue.queueMessage(message2);
-  }
-  /**
-   * Public interface for component to queue navigation to main menu
-   */
-  queueNavigationToMainMenu() {
-    this.navigationMessageQueue.queueNavigationToMainMenu();
   }
 };
 

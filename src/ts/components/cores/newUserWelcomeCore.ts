@@ -278,7 +278,7 @@ export function validateNewUserWelcomeProgress(
 /**
  * Create initial progress for new user welcome component
  */
-export function createInitialNewUserWelcomeProgress(
+export function createInitialProgress(
   config: NewUserWelcomeComponentConfig
 ): NewUserWelcomeComponentProgress {
   // Create a temporary manager instance to use its method

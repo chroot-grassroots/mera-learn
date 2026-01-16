@@ -430,3 +430,15 @@ export class BasicTaskProgressMessageHandler
     }
   }
 }
+ 
+/**
+ * Create initial progress for new users (registry builder requirement)
+ */
+export function createInitialProgress(
+  config: BasicTaskComponentConfig
+): BasicTaskComponentProgress {
+  return {
+    lastUpdated: 0,
+    checkbox_checked: new Array(config.checkboxes.length).fill(false),
+  };
+}

@@ -72,6 +72,23 @@ import type { ParsedLessonData } from "../core/parsedLessonData.js";
 
 // Re-export for consumers who use enforceDataIntegrity
 export type { ParsedLessonData };
+/**
+ * Helper: Get component config from lessonConfigs
+ * Returns config or null if not found
+ */
+function getComponentConfig(
+  componentId: number,
+  lessonConfigs: Map<number, ParsedLessonData>
+): any | null {
+  const lessonId = curriculumData.getLessonIdForComponent(componentId);
+  if (!lessonId) return null;
+  
+  const lessonConfig = lessonConfigs.get(lessonId);
+  if (!lessonConfig) return null;
+  
+  return lessonConfig.components.find(c => c.id === componentId) || null;
+}
+
 
 /**
  * Result of extracting a section with quality metrics
@@ -180,7 +197,7 @@ export function enforceDataIntegrity(
   } catch (e) {
     // Unparseable JSON - return fully defaulted bundle
     console.warn("⚠️ JSON parse failed, returning fully defaulted bundle");
-    return createFullyDefaultedResult(expectedWebId, null);
+    return createFullyDefaultedResult(expectedWebId, null, lessonConfigs);
   }
 
   // Phase 2: Extract each section independently using current schemas
@@ -848,9 +865,10 @@ function extractCombinedComponentProgress(
     if (savedProgress === undefined) {
       const componentType = curriculumData.getComponentType(componentId);
       if (componentType) {
+        const componentConfig = getComponentConfig(componentId, lessonConfigs);
         const initializer = componentInitializerMap.get(componentType);
-        components[componentIdStr] = initializer
-          ? initializer()
+        components[componentIdStr] = initializer && componentConfig
+          ? initializer(componentConfig)
           : { lastUpdated: 0 }; // Ultimate fallback only
       } else {
         // No component type - use bare fallback
@@ -865,9 +883,10 @@ function extractCombinedComponentProgress(
     if (!componentType) {
       // Component type unknown - initialize with default
       componentsDefaulted++;
+      const componentConfig = getComponentConfig(componentId, lessonConfigs);
       const initializer = componentInitializerMap.get("unknown");
-      components[componentIdStr] = initializer
-        ? initializer()
+      components[componentIdStr] = initializer && componentConfig
+        ? initializer(componentConfig)
         : { lastUpdated: 0 };
       continue;
     }
@@ -876,9 +895,10 @@ function extractCombinedComponentProgress(
     const progressSchema = progressSchemaMap.get(componentType);
     if (!progressSchema) {
       componentsDefaulted++;
+      const componentConfig = getComponentConfig(componentId, lessonConfigs);
       const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer
-        ? initializer()
+      components[componentIdStr] = initializer && componentConfig
+        ? initializer(componentConfig)
         : { lastUpdated: 0 };
       continue;
     }
@@ -887,9 +907,10 @@ function extractCombinedComponentProgress(
     if (!zodResult.success) {
       // Schema validation failed - re-initialize
       componentsDefaulted++;
+      const componentConfig = getComponentConfig(componentId, lessonConfigs);
       const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer
-        ? initializer()
+      components[componentIdStr] = initializer && componentConfig
+        ? initializer(componentConfig)
         : { lastUpdated: 0 };
       continue;
     }
@@ -980,7 +1001,9 @@ function initializeAllLessonsAndDomainsWithDefaults(): {
  *
  * @returns Record with default progress for every component
  */
-function initializeAllComponentsWithDefaults(): Record<string, any> {
+function initializeAllComponentsWithDefaults(
+  lessonConfigs: Map<number, ParsedLessonData>
+): Record<string, any> {
   const components: Record<string, any> = {};
   const allComponentIds = curriculumData.getAllComponentIds();
 
@@ -989,9 +1012,10 @@ function initializeAllComponentsWithDefaults(): Record<string, any> {
     const componentType = curriculumData.getComponentType(componentId);
 
     if (componentType) {
+      const componentConfig = getComponentConfig(componentId, lessonConfigs);
       const initializer = componentInitializerMap.get(componentType);
-      components[componentIdStr] = initializer
-        ? initializer()
+      components[componentIdStr] = initializer && componentConfig
+        ? initializer(componentConfig)
         : { lastUpdated: 0 }; // Ultimate fallback only
     } else {
       // No component type - use bare fallback
@@ -1014,7 +1038,8 @@ function initializeAllComponentsWithDefaults(): Record<string, any> {
  */
 function createFullyDefaultedResult(
   expectedWebId: string,
-  foundWebId: string | null
+  foundWebId: string | null,
+  lessonConfigs: Map<number, ParsedLessonData>
 ): EnforcementResult {
   const allComponentIds = curriculumData.getAllComponentIds();
   const { lessonCompletions, domainCompletions } =
@@ -1040,7 +1065,7 @@ function createFullyDefaultedResult(
       lastUpdated: 0,
     },
     combinedComponentProgress: {
-      components: initializeAllComponentsWithDefaults(),
+      components: initializeAllComponentsWithDefaults(lessonConfigs),
     },
   };
 

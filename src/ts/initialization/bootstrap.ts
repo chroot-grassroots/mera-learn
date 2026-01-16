@@ -225,7 +225,7 @@ function continueToNextModule(): void {
 function noSolidConnection(): void {
   console.log("🔐 No Solid connection - authentication required");
   if (errorDisplay) {
-    errorDisplay.showSolidConnectionError();
+    errorDisplay.showConnectionError('solid');
   }
 }
 

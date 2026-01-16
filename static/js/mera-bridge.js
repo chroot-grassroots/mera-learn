@@ -32760,19 +32760,25 @@ var _MeraBridge = class _MeraBridge {
    */
   async _extractPodUrl() {
     if (!this.session?.info.isLoggedIn) {
-      throw new Error("Cannot extract Pod URL: not authenticated");
+      throw new Error("Cannot extract Pod URL - not authenticated");
     }
     const webId = this.session.info.webId;
     if (!webId) {
-      throw new Error("WebID not available in session");
+      throw new Error("No WebID in authenticated session");
     }
-    const webIdUrl = new URL(webId);
-    this.podUrl = `${webIdUrl.protocol}//${webIdUrl.host}`;
-    console.log("\u{1F4E6} Pod URL extracted:", this.podUrl);
+    try {
+      const url = new URL(webId);
+      this.podUrl = `${url.protocol}//${url.host}/`;
+      console.log("\u{1F4E6} Pod URL extracted:", this.podUrl);
+    } catch (error) {
+      throw new Error(`Failed to parse WebID URL: ${webId}`);
+    }
   }
   /**
-   * Check if bridge is ready (lightweight check - doesn't trigger initialization)
-   * Use this for polling in bootstrap.ts
+   * Check if bridge is initialized and user is logged in
+   * 
+   * Lightweight check - returns cached status without triggering initialization.
+   * Bootstrap polls this method waiting for initialization to complete.
    */
   check() {
     return this.initialized && this.session?.info.isLoggedIn === true;
@@ -32796,47 +32802,186 @@ var _MeraBridge = class _MeraBridge {
     }
   }
   // ==========================================================================
-  // Local Storage Operations
+  // Pod Storage Operations
   // ==========================================================================
   /**
-   * Save data to localStorage (expects pre-stringified JSON)
+   * Save JSON data to Solid Pod
+   */
+  async solidSave(filename, data) {
+    if (!this.podUrl) {
+      return {
+        success: false,
+        error: "Not authenticated - no Pod URL available",
+        errorType: "authentication" /* Authentication */
+      };
+    }
+    try {
+      const fileUrl = `${this.podUrl}mera/${filename}`;
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json"
+      });
+      await overwriteFile(fileUrl, blob, {
+        contentType: "application/json",
+        fetch: this.session.fetch
+      });
+      return {
+        success: true,
+        data: fileUrl
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error during save",
+        errorType: this._classifyError(error)
+      };
+    }
+  }
+  /**
+   * Load JSON data from Solid Pod
+   */
+  async solidLoad(filename) {
+    if (!this.podUrl) {
+      return {
+        success: false,
+        error: "Not authenticated - no Pod URL available",
+        errorType: "authentication" /* Authentication */
+      };
+    }
+    try {
+      const fileUrl = `${this.podUrl}mera/${filename}`;
+      const file = await getFile(fileUrl, {
+        fetch: this.session.fetch
+      });
+      const text = await file.text();
+      const data = JSON.parse(text);
+      return {
+        success: true,
+        data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error during load",
+        errorType: this._classifyError(error)
+      };
+    }
+  }
+  /**
+   * Delete file from Solid Pod
+   */
+  async solidDelete(filename) {
+    if (!this.podUrl) {
+      return {
+        success: false,
+        error: "Not authenticated - no Pod URL available",
+        errorType: "authentication" /* Authentication */
+      };
+    }
+    try {
+      const fileUrl = `${this.podUrl}mera/${filename}`;
+      await deleteFile(fileUrl, {
+        fetch: this.session.fetch
+      });
+      return {
+        success: true
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error during delete",
+        errorType: this._classifyError(error)
+      };
+    }
+  }
+  /**
+   * List files in Solid Pod matching pattern
+   * 
+   * Pattern uses basic wildcards:
+   * - * matches any characters
+   * - Example: "mera.*.json" matches "mera.123.json", "mera.backup.json"
+   */
+  async solidList(pattern) {
+    if (!this.podUrl) {
+      return {
+        success: false,
+        error: "Not authenticated - no Pod URL available",
+        errorType: "authentication" /* Authentication */
+      };
+    }
+    try {
+      const containerUrl = `${this.podUrl}mera/`;
+      try {
+        await createContainerAt(containerUrl, {
+          fetch: this.session.fetch
+        });
+      } catch (error) {
+      }
+      const dataset = await getSolidDataset(containerUrl, {
+        fetch: this.session.fetch
+      });
+      const allUrls = getContainedResourceUrlAll(dataset);
+      const filenames = allUrls.map((url) => url.split("/").pop()).filter((filename) => !!filename);
+      const matched = filenames.filter(
+        (filename) => this._matchPattern(filename, pattern)
+      );
+      return {
+        success: true,
+        data: matched
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error during list",
+        errorType: this._classifyError(error)
+      };
+    }
+  }
+  // ==========================================================================
+  // LocalStorage Operations
+  // ==========================================================================
+  /**
+   * Save JSON data to localStorage
    */
   async localSave(filename, data) {
     try {
-      const key = `mera_${filename}`;
-      localStorage.setItem(key, data);
-      console.log("\u{1F4BE} Saved to localStorage:", filename);
-      return { success: true, error: null };
+      const key = `mera:${filename}`;
+      const json = JSON.stringify(data);
+      localStorage.setItem(key, json);
+      return {
+        success: true,
+        data: key
+      };
     } catch (error) {
-      console.error("\u274C localStorage save failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error during local save",
         errorType: "storage" /* Storage */
       };
     }
   }
   /**
-   * Load data from localStorage (returns JSON string)
+   * Load JSON data from localStorage
    */
   async localLoad(filename) {
     try {
-      const key = `mera_${filename}`;
-      const item = localStorage.getItem(key);
-      if (!item) {
+      const key = `mera:${filename}`;
+      const json = localStorage.getItem(key);
+      if (json === null) {
         return {
           success: false,
-          error: "File not found",
+          error: `File not found: ${filename}`,
           errorType: "not_found" /* NotFound */
         };
       }
-      console.log("\u{1F4E5} Loaded from localStorage:", filename);
-      return { success: true, data: item, error: null };
+      const data = JSON.parse(json);
+      return {
+        success: true,
+        data
+      };
     } catch (error) {
-      console.error("\u274C localStorage load failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error during local load",
         errorType: "storage" /* Storage */
       };
     }
@@ -32846,237 +32991,51 @@ var _MeraBridge = class _MeraBridge {
    */
   async localDelete(filename) {
     try {
-      const key = `mera_${filename}`;
+      const key = `mera:${filename}`;
       localStorage.removeItem(key);
-      console.log("\u{1F5D1}\uFE0F Deleted from localStorage:", filename);
-      return { success: true, error: null };
+      return {
+        success: true
+      };
     } catch (error) {
-      console.error("\u274C localStorage delete failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error during local delete",
         errorType: "storage" /* Storage */
       };
     }
   }
   /**
-   * List files in localStorage with mera_ prefix
-   * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.lofp.*.json")
+   * List files in localStorage matching pattern
    */
   async localList(pattern) {
     try {
-      const filenames = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key || !key.startsWith("mera_")) {
-          continue;
-        }
-        const filename = key.substring(5);
-        if (pattern && !this._matchesPattern(filename, pattern)) {
-          continue;
-        }
-        filenames.push(filename);
-      }
-      filenames.sort((a, b) => {
-        const timestampA = this._extractTimestamp(a);
-        const timestampB = this._extractTimestamp(b);
-        return timestampB - timestampA;
-      });
-      console.log("\u{1F4CB} Listed localStorage files:", filenames.length);
-      return { success: true, data: filenames, error: null };
+      const allKeys = Object.keys(localStorage);
+      const meraKeys = allKeys.filter((key) => key.startsWith("mera:"));
+      const filenames = meraKeys.map((key) => key.replace("mera:", ""));
+      const matched = filenames.filter(
+        (filename) => this._matchPattern(filename, pattern)
+      );
+      return {
+        success: true,
+        data: matched
+      };
     } catch (error) {
-      console.error("\u274C localStorage list failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error during local list",
         errorType: "storage" /* Storage */
       };
     }
   }
-  /**
-   * Extract timestamp from filename (expects format: *.{timestamp}.json)
-   */
-  _extractTimestamp(filename) {
-    const match = filename.match(/\.(\d+)\.json$/);
-    return match ? parseInt(match[1], 10) : 0;
-  }
   // ==========================================================================
-  // Solid Pod Operations
+  // Helper Methods
   // ==========================================================================
   /**
-   * Save data to Solid Pod (expects pre-stringified JSON)
+   * Match filename against pattern with wildcards
+   * - * matches any characters
    */
-  async solidSave(filename, data) {
-    try {
-      if (!this.initialized) {
-        await this.initialize();
-      }
-      if (!this.session?.info.isLoggedIn) {
-        return {
-          success: false,
-          error: "Not authenticated",
-          errorType: "authentication" /* Authentication */
-        };
-      }
-      if (!this.podUrl) {
-        return {
-          success: false,
-          error: "Pod URL not available",
-          errorType: "authentication" /* Authentication */
-        };
-      }
-      const containerUrl = `${this.podUrl}/mera-learn/`;
-      try {
-        await createContainerAt(containerUrl, { fetch: this.session.fetch });
-      } catch {
-      }
-      const fileUrl = `${containerUrl}${filename}`;
-      const blob = new Blob([data], { type: "application/json" });
-      await overwriteFile(fileUrl, blob, {
-        contentType: "application/json",
-        fetch: this.session.fetch
-      });
-      console.log("\u{1F4BE} Saved to Pod:", filename);
-      return { success: true, error: null };
-    } catch (error) {
-      const errorType = this._classifyError(error);
-      console.error("\u274C Pod save failed:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        errorType
-      };
-    }
-  }
-  /**
-   * Load data from Solid Pod (returns JSON string)
-   */
-  async solidLoad(filename) {
-    try {
-      if (!this.initialized) {
-        await this.initialize();
-      }
-      if (!this.session?.info.isLoggedIn) {
-        return {
-          success: false,
-          error: "Not authenticated",
-          errorType: "authentication" /* Authentication */
-        };
-      }
-      if (!this.podUrl) {
-        return {
-          success: false,
-          error: "Pod URL not available",
-          errorType: "authentication" /* Authentication */
-        };
-      }
-      const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
-      const file = await getFile(fileUrl, { fetch: this.session.fetch });
-      const text = await file.text();
-      console.log("\u{1F4E5} Loaded from Pod:", filename);
-      return { success: true, data: text, error: null };
-    } catch (error) {
-      const errorType = this._classifyError(error);
-      console.error("\u274C Pod load failed:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        errorType
-      };
-    }
-  }
-  /**
-   * Delete file from Solid Pod
-   */
-  async solidDelete(filename) {
-    try {
-      if (!this.initialized) {
-        await this.initialize();
-      }
-      if (!this.session?.info.isLoggedIn) {
-        return {
-          success: false,
-          error: "Not authenticated",
-          errorType: "authentication" /* Authentication */
-        };
-      }
-      if (!this.podUrl) {
-        return {
-          success: false,
-          error: "Pod URL not available",
-          errorType: "authentication" /* Authentication */
-        };
-      }
-      const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
-      await deleteFile(fileUrl, { fetch: this.session.fetch });
-      console.log("\u{1F5D1}\uFE0F Deleted from Pod:", filename);
-      return { success: true, error: null };
-    } catch (error) {
-      const errorType = this._classifyError(error);
-      console.error("\u274C Pod delete failed:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        errorType
-      };
-    }
-  }
-  /**
-   * List files in Solid Pod mera-learn container
-   * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.sp.*.json")
-   */
-  async solidList(pattern) {
-    try {
-      if (!this.initialized) {
-        await this.initialize();
-      }
-      if (!this.session?.info.isLoggedIn) {
-        return {
-          success: false,
-          error: "Not authenticated",
-          errorType: "authentication" /* Authentication */
-        };
-      }
-      if (!this.podUrl) {
-        return {
-          success: false,
-          error: "Pod URL not available",
-          errorType: "authentication" /* Authentication */
-        };
-      }
-      const containerUrl = `${this.podUrl}/mera-learn/`;
-      const dataset = await getSolidDataset(containerUrl, { fetch: this.session.fetch });
-      const fileUrls = getContainedResourceUrlAll(dataset);
-      const filenames = fileUrls.map((url) => {
-        const parts = url.split("/");
-        return parts[parts.length - 1];
-      }).filter((filename) => {
-        if (pattern) {
-          return this._matchesPattern(filename, pattern);
-        }
-        return true;
-      });
-      console.log("\u{1F4CB} Listed Pod files:", filenames.length);
-      return { success: true, data: filenames, error: null };
-    } catch (error) {
-      const errorType = this._classifyError(error);
-      console.error("\u274C Pod list failed:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        errorType
-      };
-    }
-  }
-  // ==========================================================================
-  // Utility Methods
-  // ==========================================================================
-  /**
-   * Simple glob pattern matcher
-   * Supports * for any characters
-   */
-  _matchesPattern(filename, pattern) {
-    const regexPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  _matchPattern(filename, pattern) {
+    const regexPattern = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
     const regex = new RegExp(`^${regexPattern}$`);
     return regex.test(filename);
   }

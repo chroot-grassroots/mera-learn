@@ -227,18 +227,25 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
                             if comp_id in component_id_to_type and component_id_to_type[comp_id] != comp_type:
                                 raise ValueError(
                                     f"FATAL: Component ID {comp_id} has conflicting types!\n"
-                                    f"  Previously seen as: '{component_id_to_type[comp_id]}'\n"
-                                    f"  Now found as: '{comp_type}'\n"
-                                    f"  in file: {yaml_file.name}\n"
-                                    f"Component IDs must be unique across all components."
+                                    f"  Found: {comp_type}\n"
+                                    f"  Existing: {component_id_to_type[comp_id]}\n"
+                                    f"  Each component ID must have exactly ONE type."
                                 )
                             component_id_to_type[comp_id] = comp_type
-                            # NEW: Build reverse index componentId -> lessonId
+                            
+                            # NEW: Build reverse index
+                            if comp_id in component_to_lesson_map:
+                                raise ValueError(
+                                    f"FATAL: Component ID {comp_id} appears in multiple lessons!\n"
+                                    f"  Current lesson: {entity_id}\n"
+                                    f"  Previous lesson: {component_to_lesson_map[comp_id]}\n"
+                                    f"  Each component must belong to exactly ONE lesson."
+                                )
                             component_to_lesson_map[comp_id] = entity_id
 
-            # Map domain to lessons (only for lesson type)
+            # Track domain-to-lesson mapping
             domain_id = entity_info.get("domainId")
-            if domain_id:
+            if domain_id is not None:
                 if domain_id not in domain_lesson_map:
                     domain_lesson_map[domain_id] = []
                 domain_lesson_map[domain_id].append(entity_id)
@@ -259,7 +266,7 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
             entity_ids.add(entity_id)
             all_entities.append(entity_info)
 
-            # Collect component IDs AND types from menus too
+            # Collect component IDs AND types from menus
             with open(yaml_file, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
                 for page in data.get("pages", []):
@@ -268,22 +275,30 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
                         comp_type = component.get("type")
                         if comp_id and comp_type:
                             component_ids.add(comp_id)
-                            # NEW: Store the mapping - FAIL on conflict
                             if comp_id in component_id_to_type and component_id_to_type[comp_id] != comp_type:
                                 raise ValueError(
                                     f"FATAL: Component ID {comp_id} has conflicting types!\n"
-                                    f"  Previously seen as: '{component_id_to_type[comp_id]}'\n"
-                                    f"  Now found as: '{comp_type}'\n"
-                                    f"  in file: {yaml_file.name}\n"
-                                    f"Component IDs must be unique across all components."
+                                    f"  Found: {comp_type}\n"
+                                    f"  Existing: {component_id_to_type[comp_id]}\n"
+                                    f"  Each component ID must have exactly ONE type."
                                 )
                             component_id_to_type[comp_id] = comp_type
+                            
+                            # Menus also need reverse index
+                            if comp_id in component_to_lesson_map:
+                                raise ValueError(
+                                    f"FATAL: Component ID {comp_id} appears in multiple entities!\n"
+                                    f"  Current menu: {entity_id}\n"
+                                    f"  Previous entity: {component_to_lesson_map[comp_id]}\n"
+                                    f"  Each component must belong to exactly ONE entity."
+                                )
+                            component_to_lesson_map[comp_id] = entity_id
 
     return all_entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type, component_to_lesson_map
 
 
 def parse_curriculum() -> Optional[Dict]:
-    """Parse curriculum YAML file."""
+    """Parse curriculum YAML file (if it exists)."""
     curriculum_path = Path(CURRICULUM_DIR)
     if not curriculum_path.exists():
         return None
@@ -391,6 +406,15 @@ def generate_component_registry(
         if 'validatorFunction' in component:
             imports_list.append(component['validatorFunction'])
         
+        # Add initializer function with alias to avoid name collision
+        if 'initializerFunction' in component:
+            # Create unique alias based on component class name
+            # e.g., NewUserWelcomeProgressManager -> createInitialNewUserWelcomeProgress
+            base_name = component['componentClass'].replace('ProgressManager', '')
+            alias = f"createInitial{base_name}Progress"
+            imports_list.append(f"{component['initializerFunction']} as {alias}")
+            component['initializerFunctionAlias'] = alias  # Store for later use
+        
         import_stmt = f"""import {{ 
     {', '.join(imports_list)}
 }} from '../components/cores/{component['file']}.js';"""
@@ -433,11 +457,11 @@ def generate_component_registry(
             validator_entries.append(entry)
     validator_content = ",\n".join(validator_entries) if validator_entries else ""
 
-    # NEW: Generate initializer function map
+    # NEW: Generate initializer function map with aliases
     initializer_entries = []
     for comp in components:
-        if 'initializerFunction' in comp:
-            entry = f'    ["{comp["typeName"]}", {comp["initializerFunction"]}]'
+        if 'initializerFunctionAlias' in comp:
+            entry = f'    ["{comp["typeName"]}", {comp["initializerFunctionAlias"]}]'
             initializer_entries.append(entry)
     initializer_content = ",\n".join(initializer_entries) if initializer_entries else ""
 
@@ -474,26 +498,29 @@ def generate_component_registry(
  * Auto-generated Complete Registry for TypeScript Bundling
  * Generated on: {datetime.now().isoformat()}
  * 
- * This file contains ALL 11 mappings and parsed YAML data.
+ * This file contains ALL 12 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
  * 
  * This file is automatically generated by dev/py/registry_builder.py
  * Do not edit manually - your changes will be overwritten
  */
 
-import {{ z }} from 'zod';
-import type {{ BaseComponentProgressManager }} from '../components/cores/baseComponentCore.js';
-
 {imports_code}
 
-export interface ComponentRegistration {{
+/**
+ * Component registration data structure
+ */
+interface ComponentRegistration {{
     componentClass: any;
-    configSchema: z.ZodType<any>;
-    progressSchema: z.ZodType<any>;
+    configSchema: any;
+    progressSchema: any;
     typeName: string;
 }}
 
-export interface LessonMetrics {{
+/**
+ * Lesson metrics data structure
+ */
+interface LessonMetrics {{
     pageCount: number;
     componentCount: number;
     title: string;
@@ -502,57 +529,57 @@ export interface LessonMetrics {{
 
 /**
  * MAPPING 1: Component Registrations
- * Array of all component registrations with classes and schemas
+ * Array of all registered component types with their associated schemas
  */
 export const componentRegistrations: ComponentRegistration[] = [
 {registrations_code}
 ];
 
 /**
- * MAPPING 2: Component Type Map
- * Maps component type string to component class
+ * MAPPING 2: Component Type to Class Map
+ * Maps component type string to constructor class
  */
 export const componentTypeMap = new Map<string, any>([
 {component_type_content}
 ]);
 
 /**
- * MAPPING 3: Config Schema Map
+ * MAPPING 3: Component Config Schema Map
  * Maps component type string to config schema
  */
-export const configSchemaMap = new Map<string, z.ZodType<any>>([
+export const configSchemaMap = new Map<string, any>([
 {config_schema_content}
 ]);
 
 /**
- * MAPPING 4: Progress Schema Map
+ * MAPPING 4: Component Progress Schema Map
  * Maps component type string to progress schema
  */
-export const progressSchemaMap = new Map<string, z.ZodType<any>>([
+export const progressSchemaMap = new Map<string, any>([
 {progress_schema_content}
 ]);
 
 /**
- * MAPPING 4.5: Component Validator Map
- * Maps component type string to validator function
- * Used by progressIntegrity to validate component progress against config
+ * MAPPING 4.5: Component Validator Function Map
+ * Maps component type string to validation function
+ * Used by progressIntegrity for recovery operations
  */
-export const componentValidatorMap = new Map<string, any>([
+export const componentValidatorMap = new Map<string, (progress: any, config: any) => {{ cleaned: any; defaultedRatio: number }}>([
 {validator_content}
 ]);
 
 /**
- * MAPPING 4.6: Component Initializer Map
- * Maps component type string to createInitialProgress function
- * Used by progressIntegrity to initialize missing/new components with defaults
+ * MAPPING 4.7: Component Initializer Function Map
+ * Maps component type string to initializer function
+ * Used to create initial progress for new users
  */
-export const componentInitializerMap = new Map<string, () => any>([
+export const componentInitializerMap = new Map<string, (config: any) => any>([
 {initializer_content}
 ]);
 
 /**
- * MAPPING 5: All Entity IDs
- * Set of all valid entity IDs in the system (lessons and menus)
+ * MAPPING 5: All Entity IDs (Lessons + Menus)
+ * Set of all entity IDs across the platform
  */
 export const allLessonIds = {entity_ids_array};
 

@@ -148,24 +148,31 @@ export class MeraBridge {
    */
   private async _extractPodUrl(): Promise<void> {
     if (!this.session?.info.isLoggedIn) {
-      throw new Error('Cannot extract Pod URL: not authenticated');
+      throw new Error('Cannot extract Pod URL - not authenticated');
     }
 
     const webId = this.session.info.webId;
     if (!webId) {
-      throw new Error('WebID not available in session');
+      throw new Error('No WebID in authenticated session');
     }
 
-    // Extract Pod URL from WebID (typically WebID = Pod URL + /profile/card#me)
-    const webIdUrl = new URL(webId);
-    this.podUrl = `${webIdUrl.protocol}//${webIdUrl.host}`;
-    
-    console.log('📦 Pod URL extracted:', this.podUrl);
+    try {
+      // Extract Pod root from WebID
+      // Example: https://alice.solidcommunity.net/profile/card#me
+      //       -> https://alice.solidcommunity.net/
+      const url = new URL(webId);
+      this.podUrl = `${url.protocol}//${url.host}/`;
+      console.log('📦 Pod URL extracted:', this.podUrl);
+    } catch (error) {
+      throw new Error(`Failed to parse WebID URL: ${webId}`);
+    }
   }
 
   /**
-   * Check if bridge is ready (lightweight check - doesn't trigger initialization)
-   * Use this for polling in bootstrap.ts
+   * Check if bridge is initialized and user is logged in
+   * 
+   * Lightweight check - returns cached status without triggering initialization.
+   * Bootstrap polls this method waiting for initialization to complete.
    */
   public check(): boolean {
     return this.initialized && this.session?.info.isLoggedIn === true;
@@ -192,57 +199,215 @@ export class MeraBridge {
   }
 
   // ==========================================================================
-  // Local Storage Operations
+  // Pod Storage Operations
   // ==========================================================================
 
   /**
-   * Save data to localStorage (expects pre-stringified JSON)
+   * Save JSON data to Solid Pod
    */
-  public async localSave(filename: string, data: string): Promise<BridgeResult> {
-    try {
-      const key = `mera_${filename}`;
-      localStorage.setItem(key, data);  // Store string directly
-      
-      console.log('💾 Saved to localStorage:', filename);
-      return { success: true, error: null };
-
-    } catch (error) {
-      console.error('❌ localStorage save failed:', error);
-      
+  public async solidSave(filename: string, data: any): Promise<BridgeResult<string>> {
+    if (!this.podUrl) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Not authenticated - no Pod URL available',
+        errorType: BridgeErrorType.Authentication,
+      };
+    }
+
+    try {
+      const fileUrl = `${this.podUrl}mera/${filename}`;
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+
+      await overwriteFile(fileUrl, blob, {
+        contentType: 'application/json',
+        fetch: this.session!.fetch,
+      });
+
+      return {
+        success: true,
+        data: fileUrl,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during save',
+        errorType: this._classifyError(error),
+      };
+    }
+  }
+
+  /**
+   * Load JSON data from Solid Pod
+   */
+  public async solidLoad(filename: string): Promise<BridgeResult<any>> {
+    if (!this.podUrl) {
+      return {
+        success: false,
+        error: 'Not authenticated - no Pod URL available',
+        errorType: BridgeErrorType.Authentication,
+      };
+    }
+
+    try {
+      const fileUrl = `${this.podUrl}mera/${filename}`;
+      const file = await getFile(fileUrl, {
+        fetch: this.session!.fetch,
+      });
+
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      return {
+        success: true,
+        data,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during load',
+        errorType: this._classifyError(error),
+      };
+    }
+  }
+
+  /**
+   * Delete file from Solid Pod
+   */
+  public async solidDelete(filename: string): Promise<BridgeResult<void>> {
+    if (!this.podUrl) {
+      return {
+        success: false,
+        error: 'Not authenticated - no Pod URL available',
+        errorType: BridgeErrorType.Authentication,
+      };
+    }
+
+    try {
+      const fileUrl = `${this.podUrl}mera/${filename}`;
+      await deleteFile(fileUrl, {
+        fetch: this.session!.fetch,
+      });
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during delete',
+        errorType: this._classifyError(error),
+      };
+    }
+  }
+
+  /**
+   * List files in Solid Pod matching pattern
+   * 
+   * Pattern uses basic wildcards:
+   * - * matches any characters
+   * - Example: "mera.*.json" matches "mera.123.json", "mera.backup.json"
+   */
+  public async solidList(pattern: string): Promise<BridgeResult<string[]>> {
+    if (!this.podUrl) {
+      return {
+        success: false,
+        error: 'Not authenticated - no Pod URL available',
+        errorType: BridgeErrorType.Authentication,
+      };
+    }
+
+    try {
+      const containerUrl = `${this.podUrl}mera/`;
+      
+      // Ensure container exists
+      try {
+        await createContainerAt(containerUrl, {
+          fetch: this.session!.fetch,
+        });
+      } catch (error) {
+        // Container might already exist - that's fine
+      }
+
+      const dataset = await getSolidDataset(containerUrl, {
+        fetch: this.session!.fetch,
+      });
+
+      const allUrls = getContainedResourceUrlAll(dataset);
+      const filenames = allUrls
+        .map((url) => url.split('/').pop())
+        .filter((filename): filename is string => !!filename);
+
+      const matched = filenames.filter((filename) =>
+        this._matchPattern(filename, pattern)
+      );
+
+      return {
+        success: true,
+        data: matched,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during list',
+        errorType: this._classifyError(error),
+      };
+    }
+  }
+
+  // ==========================================================================
+  // LocalStorage Operations
+  // ==========================================================================
+
+  /**
+   * Save JSON data to localStorage
+   */
+  public async localSave(filename: string, data: any): Promise<BridgeResult<string>> {
+    try {
+      const key = `mera:${filename}`;
+      const json = JSON.stringify(data);
+      localStorage.setItem(key, json);
+
+      return {
+        success: true,
+        data: key,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during local save',
         errorType: BridgeErrorType.Storage,
       };
     }
   }
 
   /**
-   * Load data from localStorage (returns JSON string)
+   * Load JSON data from localStorage
    */
-  public async localLoad(filename: string): Promise<BridgeResult<string>> {
+  public async localLoad(filename: string): Promise<BridgeResult<any>> {
     try {
-      const key = `mera_${filename}`;
-      const item = localStorage.getItem(key);
-      
-      if (!item) {
+      const key = `mera:${filename}`;
+      const json = localStorage.getItem(key);
+
+      if (json === null) {
         return {
           success: false,
-          error: 'File not found',
+          error: `File not found: ${filename}`,
           errorType: BridgeErrorType.NotFound,
         };
       }
 
-      // Return string directly - let caller parse if needed
-      console.log('📥 Loaded from localStorage:', filename);
-      return { success: true, data: item, error: null };
+      const data = JSON.parse(json);
 
+      return {
+        success: true,
+        data,
+      };
     } catch (error) {
-      console.error('❌ localStorage load failed:', error);
-      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error during local load',
         errorType: BridgeErrorType.Storage,
       };
     }
@@ -251,301 +416,60 @@ export class MeraBridge {
   /**
    * Delete file from localStorage
    */
-  public async localDelete(filename: string): Promise<BridgeResult> {
+  public async localDelete(filename: string): Promise<BridgeResult<void>> {
     try {
-      const key = `mera_${filename}`;
+      const key = `mera:${filename}`;
       localStorage.removeItem(key);
-      
-      console.log('🗑️ Deleted from localStorage:', filename);
-      return { success: true, error: null };
 
+      return {
+        success: true,
+      };
     } catch (error) {
-      console.error('❌ localStorage delete failed:', error);
-      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error during local delete',
         errorType: BridgeErrorType.Storage,
       };
     }
   }
 
   /**
-   * List files in localStorage with mera_ prefix
-   * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.lofp.*.json")
+   * List files in localStorage matching pattern
    */
-  public async localList(pattern?: string): Promise<BridgeResult<string[]>> {
+  public async localList(pattern: string): Promise<BridgeResult<string[]>> {
     try {
-      const filenames: string[] = [];
-      
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        
-        // Skip Solid Client's own localStorage keys
-        if (!key || !key.startsWith('mera_')) {
-          continue;
-        }
-        
-        // Extract filename (remove mera_ prefix)
-        const filename = key.substring(5);
-        
-        // Apply pattern filter if provided
-        if (pattern && !this._matchesPattern(filename, pattern)) {
-          continue;
-        }
-        
-        filenames.push(filename);
-      }
-      
-      // Sort newest first (by timestamp in filename)
-      filenames.sort((a, b) => {
-        const timestampA = this._extractTimestamp(a);
-        const timestampB = this._extractTimestamp(b);
-        return timestampB - timestampA;
-      });
+      const allKeys = Object.keys(localStorage);
+      const meraKeys = allKeys.filter((key) => key.startsWith('mera:'));
+      const filenames = meraKeys.map((key) => key.replace('mera:', ''));
 
-      console.log('📋 Listed localStorage files:', filenames.length);
-      return { success: true, data: filenames, error: null };
+      const matched = filenames.filter((filename) =>
+        this._matchPattern(filename, pattern)
+      );
 
+      return {
+        success: true,
+        data: matched,
+      };
     } catch (error) {
-      console.error('❌ localStorage list failed:', error);
-      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error during local list',
         errorType: BridgeErrorType.Storage,
       };
     }
   }
 
-  /**
-   * Extract timestamp from filename (expects format: *.{timestamp}.json)
-   */
-  private _extractTimestamp(filename: string): number {
-    const match = filename.match(/\.(\d+)\.json$/);
-    return match ? parseInt(match[1], 10) : 0;
-  }
-
   // ==========================================================================
-  // Solid Pod Operations
+  // Helper Methods
   // ==========================================================================
 
   /**
-   * Save data to Solid Pod (expects pre-stringified JSON)
+   * Match filename against pattern with wildcards
+   * - * matches any characters
    */
-  public async solidSave(filename: string, data: string): Promise<BridgeResult> {
-    try {
-      if (!this.initialized) {
-        await this.initialize();
-      }
-
-      if (!this.session?.info.isLoggedIn) {
-        return {
-          success: false,
-          error: 'Not authenticated',
-          errorType: BridgeErrorType.Authentication,
-        };
-      }
-
-      if (!this.podUrl) {
-        return {
-          success: false,
-          error: 'Pod URL not available',
-          errorType: BridgeErrorType.Authentication,
-        };
-      }
-
-      // Ensure mera-learn container exists
-      const containerUrl = `${this.podUrl}/mera-learn/`;
-      try {
-        await createContainerAt(containerUrl, { fetch: this.session.fetch });
-      } catch {
-        // Container might already exist, that's fine
-      }
-
-      // Save file - data is already a JSON string
-      const fileUrl = `${containerUrl}${filename}`;
-      const blob = new Blob([data], { type: 'application/json' });
-      
-      await overwriteFile(fileUrl, blob, { 
-        contentType: 'application/json',
-        fetch: this.session.fetch 
-      });
-
-      console.log('💾 Saved to Pod:', filename);
-      return { success: true, error: null };
-
-    } catch (error) {
-      const errorType = this._classifyError(error);
-      console.error('❌ Pod save failed:', error);
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        errorType,
-      };
-    }
-  }
-
-  /**
-   * Load data from Solid Pod (returns JSON string)
-   */
-  public async solidLoad(filename: string): Promise<BridgeResult<string>> {
-    try {
-      if (!this.initialized) {
-        await this.initialize();
-      }
-
-      if (!this.session?.info.isLoggedIn) {
-        return {
-          success: false,
-          error: 'Not authenticated',
-          errorType: BridgeErrorType.Authentication,
-        };
-      }
-
-      if (!this.podUrl) {
-        return {
-          success: false,
-          error: 'Pod URL not available',
-          errorType: BridgeErrorType.Authentication,
-        };
-      }
-
-      const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
-      const file = await getFile(fileUrl, { fetch: this.session.fetch });
-      const text = await file.text();
-      // Return string directly - let caller parse if needed
-
-      console.log('📥 Loaded from Pod:', filename);
-      return { success: true, data: text, error: null };
-
-    } catch (error) {
-      const errorType = this._classifyError(error);
-      console.error('❌ Pod load failed:', error);
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        errorType,
-      };
-    }
-  }
-
-  /**
-   * Delete file from Solid Pod
-   */
-  public async solidDelete(filename: string): Promise<BridgeResult> {
-    try {
-      if (!this.initialized) {
-        await this.initialize();
-      }
-
-      if (!this.session?.info.isLoggedIn) {
-        return {
-          success: false,
-          error: 'Not authenticated',
-          errorType: BridgeErrorType.Authentication,
-        };
-      }
-
-      if (!this.podUrl) {
-        return {
-          success: false,
-          error: 'Pod URL not available',
-          errorType: BridgeErrorType.Authentication,
-        };
-      }
-
-      const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
-      await deleteFile(fileUrl, { fetch: this.session.fetch });
-
-      console.log('🗑️ Deleted from Pod:', filename);
-      return { success: true, error: null };
-
-    } catch (error) {
-      const errorType = this._classifyError(error);
-      console.error('❌ Pod delete failed:', error);
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        errorType,
-      };
-    }
-  }
-
-  /**
-   * List files in Solid Pod mera-learn container
-   * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.sp.*.json")
-   */
-  public async solidList(pattern?: string): Promise<BridgeResult<string[]>> {
-    try {
-      if (!this.initialized) {
-        await this.initialize();
-      }
-
-      if (!this.session?.info.isLoggedIn) {
-        return {
-          success: false,
-          error: 'Not authenticated',
-          errorType: BridgeErrorType.Authentication,
-        };
-      }
-
-      if (!this.podUrl) {
-        return {
-          success: false,
-          error: 'Pod URL not available',
-          errorType: BridgeErrorType.Authentication,
-        };
-      }
-
-      const containerUrl = `${this.podUrl}/mera-learn/`;
-      const dataset = await getSolidDataset(containerUrl, { fetch: this.session.fetch });
-      const fileUrls = getContainedResourceUrlAll(dataset);
-      
-      // Extract filenames and filter by pattern if provided
-      const filenames = fileUrls
-        .map(url => {
-          const parts = url.split('/');
-          return parts[parts.length - 1];
-        })
-        .filter(filename => {
-          if (pattern) {
-            return this._matchesPattern(filename, pattern);
-          }
-          return true;
-        });
-
-      console.log('📋 Listed Pod files:', filenames.length);
-      return { success: true, data: filenames, error: null };
-
-    } catch (error) {
-      const errorType = this._classifyError(error);
-      console.error('❌ Pod list failed:', error);
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        errorType,
-      };
-    }
-  }
-
-  // ==========================================================================
-  // Utility Methods
-  // ==========================================================================
-
-  /**
-   * Simple glob pattern matcher
-   * Supports * for any characters
-   */
-  private _matchesPattern(filename: string, pattern: string): boolean {
-    // Convert glob pattern to regex
-    // Escape special regex chars except *
+  private _matchPattern(filename: string, pattern: string): boolean {
     const regexPattern = pattern
-      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')  // Escape special chars
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape regex special chars except *
       .replace(/\*/g, '.*');                    // Convert * to .*
     
     const regex = new RegExp(`^${regexPattern}$`);
@@ -597,12 +521,22 @@ export class MeraBridge {
   }
 }
 
+// ============================================================================
+// Module Initialization
+// ============================================================================
+
 // Create singleton instance and expose globally
 const bridgeInstance = MeraBridge.getInstance();
 
 // Expose to window for non-module scripts
 (window as any).meraBridge = bridgeInstance;
 (window as any).MeraBridge = MeraBridge;
+
+// Start initialization immediately (fire-and-forget)
+// Bootstrap will poll check() to wait for completion
+bridgeInstance.initialize().catch((err) => {
+  console.error('❌ Bridge initialization failed:', err);
+});
 
 // Export for ES modules
 export default bridgeInstance;

@@ -36,7 +36,7 @@ export function createComponentProgressManager(
         validated
       );
     }
-    case 'new_user_welcom': {
+    case 'new_user_welcome': {
       const validated = NewUserWelcomeComponentProgressSchema.parse(progressData);
       return new NewUserWelcomeProgressManager(
         config as NewUserWelcomeComponentConfig,  // Pass config first

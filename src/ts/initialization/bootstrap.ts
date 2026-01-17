@@ -15,6 +15,7 @@ import { TimelineContainer } from "../ui/timelineContainer.js";
 import { SolidConnectionErrorDisplay } from "../ui/errorDisplay.js";
 import { MeraBridge } from "../solid/meraBridge.js";
 import { initializationOrchestrator } from "./initializationOrchestrator.js";
+import { initializeTimeline } from '../ui/timelineContainer.js';
 
 // ============================================================================
 // Configuration Constants
@@ -79,7 +80,7 @@ function setupUI(): boolean {
     }
 
     // Initialize timeline and error display
-    timeline = new TimelineContainer("lesson-container");
+    timeline = initializeTimeline("lesson-container");
     errorDisplay = new SolidConnectionErrorDisplay(timeline);
     console.log("✅ UI components initialized");
     return true;

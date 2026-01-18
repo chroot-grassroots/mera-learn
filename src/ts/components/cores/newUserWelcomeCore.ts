@@ -1,33 +1,27 @@
 /**
- * @fileoverview New user welcome component - initial setup flow
+ * @fileoverview New user welcome component core
  * @module components/cores/newUserWelcomeCore
  * 
- * One-time welcome screen that appears for new users to configure
- * initial settings before accessing the main application.
- * 
- * Progress: Minimal - only lastUpdated (always 0, never modified)
- * Completion: Always returns true (no user progress to track)
+ * Manages message queues for settings and navigation during welcome flow
  */
 
 import { z } from "zod";
 import {
   BaseComponentCore,
-  BaseComponentConfigSchema,
-  BaseComponentProgressSchema,
   BaseComponentProgressManager,
 } from "./baseComponentCore.js";
 import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
 import { TimelineContainer } from "../../ui/timelineContainer.js";
-import { ComponentProgressMessage } from "../../core/coreTypes.js";
-import {
+import type { ComponentProgressMessage } from "../../core/coreTypes.js";
+import type {
   SettingsMessage,
   IReadonlySettingsManager,
 } from "../../core/settingsSchema.js";
-import {
+import type {
   NavigationMessage,
   IReadonlyNavigationManager,
 } from "../../core/navigationSchema.js";
-import { CurriculumRegistry } from "../../registry/mera-registry.js";
+import type { CurriculumRegistry } from "../../registry/mera-registry.js";
 import type { IReadonlyOverallProgressManager } from "../../core/overallProgressSchema.js";
 
 // ============================================================================
@@ -35,12 +29,13 @@ import type { IReadonlyOverallProgressManager } from "../../core/overallProgress
 // ============================================================================
 
 /**
- * New user welcome component configuration schema
- * 
- * No custom config needed - everything is hardcoded in the component
+ * Schema for new user welcome component configuration (from YAML)
  */
-export const NewUserWelcomeComponentConfigSchema = BaseComponentConfigSchema.extend({
+export const NewUserWelcomeComponentConfigSchema = z.object({
   type: z.literal("new_user_welcome"),
+  id: z.number(),
+  accessibility_label: z.string(),
+  order: z.number(),
 });
 
 export type NewUserWelcomeComponentConfig = z.infer<
@@ -48,13 +43,11 @@ export type NewUserWelcomeComponentConfig = z.infer<
 >;
 
 /**
- * New user welcome component progress schema
- * 
- * No actual progress to track - just inherits lastUpdated from base
- * which stays at 0 forever
+ * Schema for new user welcome component progress
+ * Minimal - no progress to track
  */
-export const NewUserWelcomeComponentProgressSchema = BaseComponentProgressSchema.extend({
-  // No additional fields - just lastUpdated from base
+export const NewUserWelcomeComponentProgressSchema = z.object({
+  lastUpdated: z.number(),
 });
 
 export type NewUserWelcomeComponentProgress = z.infer<
@@ -104,6 +97,7 @@ export class NewUserWelcomeSettingsMessageQueueManager {
    * Queue a settings message
    */
   queueMessage(message: SettingsMessage): void {
+    console.log(`📤 NewUserWelcome queuing settings message:`, message.method);
     this.queue.push(message);
   }
 
@@ -129,6 +123,7 @@ export class NewUserWelcomeNavigationMessageQueueManager {
    * Queue navigation to main menu
    */
   queueNavigationToMainMenu(): void {
+    console.log(`📤 NewUserWelcome queuing navigation to main menu`);
     this.queue.push({
       method: "setCurrentView",
       args: [0, 0], // Entity 0 (main menu), page 0

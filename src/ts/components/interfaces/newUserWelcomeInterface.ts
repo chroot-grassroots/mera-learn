@@ -4,6 +4,10 @@
  * 
  * Renders multi-step welcome flow for new users to configure initial settings
  * Uses progressive disclosure (one screen at a time) for focused UX
+ * 
+ * KEY BEHAVIOR: Settings are queued IMMEDIATELY as user makes choices,
+ * not deferred until "Finish" button. Accessibility options are applied
+ * dynamically to provide instant visual feedback.
  */
 
 import { 
@@ -213,7 +217,7 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
             </button>
             <button 
               id="btn-skip-accessibility"
-              class="bg-amber-700 hover:bg-amber-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+              class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
               No Thanks, Use Defaults
             </button>
           </div>
@@ -223,13 +227,15 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
   }
 
   private renderAccessibilityOptionsScreen(): string {
+    const opts = this.internal.userChoices.accessibilityOptions;
+    
     return `
       <div class="max-w-2xl mx-auto space-y-6">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
           Customize Accessibility
         </h2>
         <p class="text-gray-700 dark:text-gray-300">
-          Select the options that work best for you:
+          Select the options that work best for you. Changes apply immediately.
         </p>
         
         <div class="space-y-4">
@@ -241,9 +247,9 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
             <select 
               id="select-font-size"
               class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
-              <option value="small">Small</option>
-              <option value="medium" selected>Medium (Default)</option>
-              <option value="large">Large</option>
+              <option value="small" ${opts.fontSize === "small" ? "selected" : ""}>Small</option>
+              <option value="medium" ${opts.fontSize === "medium" ? "selected" : ""}>Medium (Default)</option>
+              <option value="large" ${opts.fontSize === "large" ? "selected" : ""}>Large</option>
             </select>
           </div>
 
@@ -253,6 +259,7 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
               <input 
                 type="checkbox" 
                 id="check-high-contrast"
+                ${opts.highContrast ? "checked" : ""}
                 class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
               <span class="text-sm font-semibold text-gray-900 dark:text-white">
                 High Contrast Mode
@@ -266,6 +273,7 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
               <input 
                 type="checkbox" 
                 id="check-reduced-motion"
+                ${opts.reducedMotion ? "checked" : ""}
                 class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
               <span class="text-sm font-semibold text-gray-900 dark:text-white">
                 Reduce Motion & Animations
@@ -273,16 +281,16 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
             </label>
           </div>
 
-          <!-- Focus Indicator -->
+          <!-- Focus Style -->
           <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
             <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
-              Focus Indicators
+              Focus Indicator Style
             </label>
             <select 
               id="select-focus-style"
               class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
-              <option value="default" selected>Default</option>
-              <option value="enhanced">Enhanced (More Visible)</option>
+              <option value="default" ${opts.focusIndicatorStyle === "default" ? "selected" : ""}>Default</option>
+              <option value="enhanced" ${opts.focusIndicatorStyle === "enhanced" ? "selected" : ""}>Enhanced (More Visible)</option>
             </select>
           </div>
 
@@ -292,6 +300,7 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
               <input 
                 type="checkbox" 
                 id="check-audio-enabled"
+                ${opts.audioEnabled ? "checked" : ""}
                 class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
               <span class="text-sm font-semibold text-gray-900 dark:text-white">
                 Enable Audio Descriptions
@@ -307,7 +316,7 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
             ← Back
           </button>
           <button 
-            id="btn-save-accessibility"
+            id="btn-continue-accessibility"
             class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
             Continue
           </button>
@@ -378,33 +387,35 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
         <p class="text-gray-700 dark:text-gray-300">
           How many lessons would you like to complete per week?
         </p>
+        
+        <div class="space-y-3">
+          <button 
+            id="btn-pace-accelerated"
+            class="w-full bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 hover:border-green-600 dark:hover:border-green-500 p-4 rounded-lg text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white text-lg">Accelerated (2 lessons)</div>
+            <div class="text-gray-600 dark:text-gray-400 text-sm">For those who want to move quickly</div>
+          </button>
+          
+          <button 
+            id="btn-pace-standard"
+            class="w-full bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 hover:border-green-600 dark:hover:border-green-500 p-4 rounded-lg text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white text-lg">Standard (1 lesson) ⭐ Recommended</div>
+            <div class="text-gray-600 dark:text-gray-400 text-sm">Steady progress without feeling rushed</div>
+          </button>
+          
+          <button 
+            id="btn-pace-flexible"
+            class="w-full bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 hover:border-green-600 dark:hover:border-green-500 p-4 rounded-lg text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white text-lg">Flexible (Learn at your own pace)</div>
+            <div class="text-gray-600 dark:text-gray-400 text-sm">No weekly goals, just track your progress</div>
+          </button>
+        </div>
 
-        <div class="space-y-4">
+        <div class="pt-4">
           <button 
             id="btn-back"
             class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold">
             ← Back
-          </button>
-
-          <button 
-            id="btn-pace-accelerated"
-            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
-            <div class="font-bold text-gray-900 dark:text-white">6 lessons/week</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Complete curriculum in ~3 months</div>
-          </button>
-
-          <button 
-            id="btn-pace-standard"
-            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
-            <div class="font-bold text-gray-900 dark:text-white">3 lessons/week (Recommended)</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Complete curriculum in ~6 months</div>
-          </button>
-
-          <button 
-            id="btn-pace-flexible"
-            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
-            <div class="font-bold text-gray-900 dark:text-white">Go at your own pace</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">No weekly goals, learn when you want</div>
           </button>
         </div>
       </div>
@@ -412,17 +423,19 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
   }
 
   private renderWeekStartScreen(): string {
+    const day = this.internal.userChoices.weekStartDay;
+    const time = this.internal.userChoices.weekStartTime;
+    
     return `
       <div class="max-w-2xl mx-auto space-y-6">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          Week Start Time
+          When Does Your Week Start?
         </h2>
         <p class="text-gray-700 dark:text-gray-300">
-          When should your learning week begin? Choose a day and time that works for you.
+          Weekly goals reset at the start of your week. Choose when that should be:
         </p>
-
+        
         <div class="space-y-4">
-          <!-- Day of Week -->
           <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
             <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
               Day of Week
@@ -430,25 +443,24 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
             <select 
               id="select-week-day"
               class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
-              <option value="monday" selected>Monday</option>
-              <option value="tuesday">Tuesday</option>
-              <option value="wednesday">Wednesday</option>
-              <option value="thursday">Thursday</option>
-              <option value="friday">Friday</option>
-              <option value="saturday">Saturday</option>
-              <option value="sunday">Sunday</option>
+              <option value="monday" ${day === "monday" ? "selected" : ""}>Monday</option>
+              <option value="tuesday" ${day === "tuesday" ? "selected" : ""}>Tuesday</option>
+              <option value="wednesday" ${day === "wednesday" ? "selected" : ""}>Wednesday</option>
+              <option value="thursday" ${day === "thursday" ? "selected" : ""}>Thursday</option>
+              <option value="friday" ${day === "friday" ? "selected" : ""}>Friday</option>
+              <option value="saturday" ${day === "saturday" ? "selected" : ""}>Saturday</option>
+              <option value="sunday" ${day === "sunday" ? "selected" : ""}>Sunday</option>
             </select>
           </div>
 
-          <!-- Time -->
           <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
             <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
-              Time (in your local timezone)
+              Time of Day (Your Local Time)
             </label>
             <input 
-              type="time" 
+              type="time"
               id="input-week-time"
-              value="00:00"
+              value="${time}"
               class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
           </div>
         </div>
@@ -495,6 +507,8 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
   // ==========================================================================
 
   private attachEventListeners(): void {
+    console.log(`🔗 Attaching event listeners for screen: ${this.internal.currentScreen}`);
+    
     // Back button (common to most screens)
     document.getElementById("btn-back")?.addEventListener("click", () => {
       this.goBack();
@@ -513,52 +527,165 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
 
     document.getElementById("btn-skip-accessibility")?.addEventListener("click", () => {
       this.internal.userChoices.showAccessibility = false;
+      // Queue default accessibility settings immediately
+      this.queueAccessibilitySettings();
       this.advanceToScreen("telemetry");
     });
 
-    // Accessibility options
-    document.getElementById("btn-save-accessibility")?.addEventListener("click", () => {
-      this.captureAccessibilityChoices();
+    // Accessibility options - attach listeners for IMMEDIATE queuing
+    this.attachAccessibilityListeners();
+
+    document.getElementById("btn-continue-accessibility")?.addEventListener("click", () => {
+      // No need to queue here - already queued on each change
       this.advanceToScreen("telemetry");
     });
 
     // Telemetry
     document.getElementById("btn-telemetry-accept")?.addEventListener("click", () => {
       this.internal.userChoices.optOutTelemetry = false;
+      // Queue telemetry setting immediately
+      this.queueTelemetrySettings();
       this.advanceToScreen("learning-pace");
     });
 
     document.getElementById("btn-telemetry-optout")?.addEventListener("click", () => {
       this.internal.userChoices.optOutTelemetry = true;
+      // Queue telemetry setting immediately
+      this.queueTelemetrySettings();
       this.advanceToScreen("learning-pace");
     });
 
     // Learning pace
     document.getElementById("btn-pace-accelerated")?.addEventListener("click", () => {
       this.internal.userChoices.learningPace = "accelerated";
+      // Queue learning pace immediately
+      this.componentCore.queueSettingsMessage({
+        method: "setLearningPace",
+        args: ["accelerated"],
+      });
       this.advanceToScreen("week-start");
     });
 
     document.getElementById("btn-pace-standard")?.addEventListener("click", () => {
       this.internal.userChoices.learningPace = "standard";
+      // Queue learning pace immediately
+      this.componentCore.queueSettingsMessage({
+        method: "setLearningPace",
+        args: ["standard"],
+      });
       this.advanceToScreen("week-start");
     });
 
     document.getElementById("btn-pace-flexible")?.addEventListener("click", () => {
       this.internal.userChoices.learningPace = "flexible";
+      // Queue learning pace immediately
+      this.componentCore.queueSettingsMessage({
+        method: "setLearningPace",
+        args: ["flexible"],
+      });
       // Skip week-start for flexible pace
       this.advanceToScreen("complete");
     });
 
     // Week start
     document.getElementById("btn-save-week-start")?.addEventListener("click", () => {
-      this.captureWeekStartChoices();
+      // Capture and queue week start settings
+      this.captureAndQueueWeekStartChoices();
       this.advanceToScreen("complete");
     });
 
-    // Complete
+    // Complete - queue theme and navigate
     document.getElementById("btn-finish")?.addEventListener("click", () => {
-      this.queueAllSettingsAndNavigate();
+      console.log("✅ Finish button clicked - queuing theme and navigation");
+      // Queue theme (always auto)
+      this.componentCore.queueSettingsMessage({
+        method: "setTheme",
+        args: ["auto"],
+      });
+      // Queue navigation to main menu
+      this.componentCore.queueNavigationToMainMenu();
+    });
+  }
+
+  /**
+   * Attach listeners for accessibility options that apply changes immediately
+   */
+  private attachAccessibilityListeners(): void {
+    // Font size - queue and apply immediately
+    const fontSizeSelect = document.getElementById("select-font-size") as HTMLSelectElement;
+    fontSizeSelect?.addEventListener("change", () => {
+      const fontSize = fontSizeSelect.value as "small" | "medium" | "large";
+      this.internal.userChoices.accessibilityOptions.fontSize = fontSize;
+      
+      // Queue to settings
+      this.componentCore.queueSettingsMessage({
+        method: "setFontSize",
+        args: [fontSize],
+      });
+      
+      // Apply immediately to DOM
+      this.applyFontSize(fontSize);
+    });
+
+    // High contrast - queue and apply immediately
+    const highContrastCheck = document.getElementById("check-high-contrast") as HTMLInputElement;
+    highContrastCheck?.addEventListener("change", () => {
+      const highContrast = highContrastCheck.checked;
+      this.internal.userChoices.accessibilityOptions.highContrast = highContrast;
+      
+      // Queue to settings
+      this.componentCore.queueSettingsMessage({
+        method: "setHighContrast",
+        args: [highContrast],
+      });
+      
+      // Apply immediately to DOM
+      this.applyHighContrast(highContrast);
+    });
+
+    // Reduced motion - queue and apply immediately
+    const reducedMotionCheck = document.getElementById("check-reduced-motion") as HTMLInputElement;
+    reducedMotionCheck?.addEventListener("change", () => {
+      const reducedMotion = reducedMotionCheck.checked;
+      this.internal.userChoices.accessibilityOptions.reducedMotion = reducedMotion;
+      
+      // Queue to settings
+      this.componentCore.queueSettingsMessage({
+        method: "setReducedMotion",
+        args: [reducedMotion],
+      });
+      
+      // Apply immediately to DOM
+      this.applyReducedMotion(reducedMotion);
+    });
+
+    // Focus style - queue and apply immediately
+    const focusStyleSelect = document.getElementById("select-focus-style") as HTMLSelectElement;
+    focusStyleSelect?.addEventListener("change", () => {
+      const focusStyle = focusStyleSelect.value as "default" | "enhanced";
+      this.internal.userChoices.accessibilityOptions.focusIndicatorStyle = focusStyle;
+      
+      // Queue to settings
+      this.componentCore.queueSettingsMessage({
+        method: "setFocusIndicatorStyle",
+        args: [focusStyle],
+      });
+      
+      // Apply immediately to DOM
+      this.applyFocusStyle(focusStyle);
+    });
+
+    // Audio enabled - queue immediately
+    const audioEnabledCheck = document.getElementById("check-audio-enabled") as HTMLInputElement;
+    audioEnabledCheck?.addEventListener("change", () => {
+      const audioEnabled = audioEnabledCheck.checked;
+      this.internal.userChoices.accessibilityOptions.audioEnabled = audioEnabled;
+      
+      // Queue to settings
+      this.componentCore.queueSettingsMessage({
+        method: "setAudioEnabled",
+        args: [audioEnabled],
+      });
     });
   }
 
@@ -582,55 +709,12 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
     }
   }
 
-  private captureAccessibilityChoices(): void {
-    const fontSize = (document.getElementById("select-font-size") as HTMLSelectElement)?.value || "medium";
-    const highContrast = (document.getElementById("check-high-contrast") as HTMLInputElement)?.checked || false;
-    const reducedMotion = (document.getElementById("check-reduced-motion") as HTMLInputElement)?.checked || false;
-    const focusStyle = (document.getElementById("select-focus-style") as HTMLSelectElement)?.value || "default";
-    const audioEnabled = (document.getElementById("check-audio-enabled") as HTMLInputElement)?.checked || false;
-
-    this.internal.userChoices.accessibilityOptions = {
-      fontSize: fontSize as "small" | "medium" | "large",
-      highContrast,
-      reducedMotion,
-      focusIndicatorStyle: focusStyle as "default" | "enhanced",
-      audioEnabled,
-    };
-  }
-
-  private captureWeekStartChoices(): void {
-    const day = (document.getElementById("select-week-day") as HTMLSelectElement)?.value || "monday";
-    const time = (document.getElementById("input-week-time") as HTMLInputElement)?.value || "00:00";
-
-    this.internal.userChoices.weekStartDay = day as WeekDay;
-    this.internal.userChoices.weekStartTime = time;
-  }
-
-  private queueAllSettingsAndNavigate(): void {
-    // Queue theme (always auto)
-    this.componentCore.queueSettingsMessage({
-      method: "setTheme",
-      args: ["auto"],
-    });
-
-    // Queue learning pace
-    this.componentCore.queueSettingsMessage({
-      method: "setLearningPace",
-      args: [this.internal.userChoices.learningPace],
-    });
-
-    // Queue telemetry
-    this.componentCore.queueSettingsMessage({
-      method: "setOptOutDailyPing",
-      args: [this.internal.userChoices.optOutTelemetry],
-    });
-    this.componentCore.queueSettingsMessage({
-      method: "setOptOutErrorPing",
-      args: [this.internal.userChoices.optOutTelemetry],
-    });
-
-    // Queue accessibility options
+  /**
+   * Queue all accessibility settings (used when skipping accessibility options)
+   */
+  private queueAccessibilitySettings(): void {
     const opts = this.internal.userChoices.accessibilityOptions;
+    
     this.componentCore.queueSettingsMessage({
       method: "setFontSize",
       args: [opts.fontSize],
@@ -651,26 +735,44 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
       method: "setAudioEnabled",
       args: [opts.audioEnabled],
     });
+  }
 
-    // Queue week start (if not flexible)
-    if (this.internal.userChoices.learningPace !== "flexible") {
-      this.componentCore.queueSettingsMessage({
-        method: "setWeekStartDay",
-        args: [this.internal.userChoices.weekStartDay],
-      });
+  /**
+   * Queue telemetry settings
+   */
+  private queueTelemetrySettings(): void {
+    this.componentCore.queueSettingsMessage({
+      method: "setOptOutDailyPing",
+      args: [this.internal.userChoices.optOutTelemetry],
+    });
+    this.componentCore.queueSettingsMessage({
+      method: "setOptOutErrorPing",
+      args: [this.internal.userChoices.optOutTelemetry],
+    });
+  }
 
-      // Convert local time to UTC
-      const utcTime = this.convertLocalTimeToUTC(this.internal.userChoices.weekStartTime);
-      this.componentCore.queueSettingsMessage({
-        method: "setWeekStartTimeUTC",
-        args: [utcTime],
-      });
-    }
+  /**
+   * Capture week start choices from DOM and queue immediately
+   */
+  private captureAndQueueWeekStartChoices(): void {
+    const day = (document.getElementById("select-week-day") as HTMLSelectElement)?.value || "monday";
+    const time = (document.getElementById("input-week-time") as HTMLInputElement)?.value || "00:00";
 
-    // Queue navigation to main menu
-    this.componentCore.queueNavigationToMainMenu();
+    this.internal.userChoices.weekStartDay = day as WeekDay;
+    this.internal.userChoices.weekStartTime = time;
 
-    console.log("✅ Welcome flow complete - settings and navigation queued");
+    // Queue week start day
+    this.componentCore.queueSettingsMessage({
+      method: "setWeekStartDay",
+      args: [day as WeekDay],
+    });
+
+    // Convert local time to UTC and queue
+    const utcTime = this.convertLocalTimeToUTC(time);
+    this.componentCore.queueSettingsMessage({
+      method: "setWeekStartTimeUTC",
+      args: [utcTime],
+    });
   }
 
   /**
@@ -694,5 +796,55 @@ export class NewUserWelcomeInterface extends BaseComponentInterface<
     const utcTime = `${String(utcHours).padStart(2, "0")}:${String(utcMinutes).padStart(2, "0")}`;
     
     return utcTime;
+  }
+
+  // ==========================================================================
+  // DYNAMIC ACCESSIBILITY APPLICATION
+  // ==========================================================================
+
+  /**
+   * Apply font size changes to the document root
+   */
+  private applyFontSize(size: "small" | "medium" | "large"): void {
+    const root = document.documentElement;
+    root.classList.remove("font-size-small", "font-size-medium", "font-size-large");
+    root.classList.add(`font-size-${size}`);
+    console.log(`✨ Applied font size: ${size}`);
+  }
+
+  /**
+   * Apply high contrast changes to the document root
+   */
+  private applyHighContrast(enabled: boolean): void {
+    const root = document.documentElement;
+    if (enabled) {
+      root.classList.add("high-contrast");
+    } else {
+      root.classList.remove("high-contrast");
+    }
+    console.log(`✨ Applied high contrast: ${enabled}`);
+  }
+
+  /**
+   * Apply reduced motion changes to the document root
+   */
+  private applyReducedMotion(enabled: boolean): void {
+    const root = document.documentElement;
+    if (enabled) {
+      root.classList.add("reduce-motion");
+    } else {
+      root.classList.remove("reduce-motion");
+    }
+    console.log(`✨ Applied reduced motion: ${enabled}`);
+  }
+
+  /**
+   * Apply focus indicator style changes to the document root
+   */
+  private applyFocusStyle(style: "default" | "enhanced"): void {
+    const root = document.documentElement;
+    root.classList.remove("focus-default", "focus-enhanced");
+    root.classList.add(`focus-${style}`);
+    console.log(`✨ Applied focus style: ${style}`);
   }
 }

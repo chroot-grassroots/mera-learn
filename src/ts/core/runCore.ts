@@ -110,12 +110,12 @@ export async function runCore(params: RunCoreParams): Promise<void> {
         params.curriculumData,
         params.settingsManager,
         params.overallProgressManager,
-        params.navigationManager
+        params.navigationManager,
       );
 
       pageChanged = false;
       console.log(
-        `📦 Instantiated ${currentComponents.componentCores.size} components`
+        `📦 Instantiated ${currentComponents.componentCores.size} components`,
       );
     }
 
@@ -135,7 +135,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
         throw new Error(
           `CRITICAL: Component ${componentId} exists in componentCores but has no type in registry.` +
             ` This indicates registry generation bug or deployment error.` +
-            ` Registry must be regenerated with current curriculum.`
+            ` Registry must be regenerated with current curriculum.`,
         );
       }
 
@@ -153,7 +153,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
               if (!handler) {
                 // Developer error - every component type needs a handler
                 console.error(
-                  `No handler found for component type: ${componentType}`
+                  `No handler found for component type: ${componentType}`,
                 );
                 continue;
               }
@@ -260,13 +260,13 @@ export async function runCore(params: RunCoreParams): Promise<void> {
       const integrityCheck = enforceDataIntegrity(
         bundleJSON,
         params.webId,
-        params.lessonConfigs
+        params.lessonConfigs,
       );
 
       if (!integrityCheck.perfectlyValidInput) {
         console.error("💥 CRITICAL: Generated corrupt bundle:", integrityCheck);
         throw new Error(
-          "Bundle failed integrity check - this is a bug in state managers"
+          "Bundle failed integrity check - this is a bug in state managers",
         );
       }
     } catch (error) {
@@ -278,14 +278,24 @@ export async function runCore(params: RunCoreParams): Promise<void> {
     const now = Date.now();
     const timeSinceLastSave = now - lastSaveQueueTime;
     const shouldQueueSave =
-      hasChanged || timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS;
+      (hasChanged && timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS) || overallProgressChanged;
 
     if (shouldQueueSave) {
-      // Pass criticalSave flag if overall progress changed (lesson completion, etc.)
       saveManager.queueSave(bundleJSON, hasChanged, overallProgressChanged);
       lastSaveQueueTime = now;
-      hasChanged = false; // Reset for next iteration
-      overallProgressChanged = false; // Reset critical save flag
+      console.log(
+        `💾 Save queued (hasChanged=${hasChanged}, critical=${overallProgressChanged})`,
+      );
+      hasChanged = false;
+      overallProgressChanged = false;
+    } else {
+      // Only log occasionally to prove loop is running
+      if (timeSinceLastSave % 30000 < 100) {
+        // Every ~30s
+        console.log(
+          `⏭️ Core running, no save needed (no changes, last save ${Math.floor(timeSinceLastSave / 1000)}s ago)`,
+        );
+      }
     }
 
     // ========================================================================

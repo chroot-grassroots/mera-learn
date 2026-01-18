@@ -30,7 +30,7 @@ enum SaveResult {
 
 /**
  * Results of concurrent session check.
- * 
+ *
  * Determines whether to proceed with solid saves and whether to show errors.
  */
 enum ConcurrenceCheckResult {
@@ -129,7 +129,7 @@ class SaveManager {
       await this.checkAndSave();
       setTimeout(poll, 50); // Wait 50ms before next check
     };
-    poll(); 
+    poll();
   }
 
   // ============================================================================
@@ -179,10 +179,13 @@ class SaveManager {
       const concurrenceCheck = await this.checkConcurrentSessions();
 
       // Handle critical failures - show error and stop everything
-      if (concurrenceCheck === ConcurrenceCheckResult.ConcurrentSessionDetected) {
+      if (
+        concurrenceCheck === ConcurrenceCheckResult.ConcurrentSessionDetected
+      ) {
         showCriticalError({
           title: "Concurrent Session Detected",
-          message: "Another device or tab is using this account. Please refresh to continue.",
+          message:
+            "Another device or tab is using this account. Please refresh to continue.",
           technicalDetails: "Session ID mismatch detected in Pod",
           errorCode: "concurrent-session",
         });
@@ -193,8 +196,10 @@ class SaveManager {
       if (concurrenceCheck === ConcurrenceCheckResult.InitializationFailed) {
         showCriticalError({
           title: "Save System Failure",
-          message: "Failed to initialize session protection. Progress is not being saved.",
-          technicalDetails: "Could not write or verify session file after retries",
+          message:
+            "Failed to initialize session protection. Progress is not being saved.",
+          technicalDetails:
+            "Could not write or verify session file after retries",
           errorCode: "session-init-failure",
         });
         this.lastSaveResult = SaveResult.BothFailed;
@@ -205,11 +210,28 @@ class SaveManager {
       // NetworkError: block solid saves but allow local saves to continue
       // Passed: proceed normally with all saves
       try {
-        const allowSolidSaves = (concurrenceCheck === ConcurrenceCheckResult.Passed);
-        const result = await orchestrateSave(bundleSnapshot, timestamp, allowSolidSaves);
+        const allowSolidSaves =
+          concurrenceCheck === ConcurrenceCheckResult.Passed;
+        const result = await orchestrateSave(
+          bundleSnapshot,
+          timestamp,
+          allowSolidSaves,
+        );
 
         // Store result for retry logic and online status
         this.lastSaveResult = result;
+        // Log outcome
+        if (result === SaveResult.BothSucceeded) {
+          console.log(`✅ Save completed: Pod + localStorage`);
+        } else if (result === SaveResult.OnlyLocalSucceeded) {
+          console.log(`⚠️ Save completed: localStorage only (Pod failed)`);
+        } else if (result === SaveResult.OnlySolidSucceeded) {
+          console.error(
+            "⚠️ localStorage save failed - offline mode unavailable",
+          );
+        } else {
+          console.log(`❌ Save failed: both Pod and localStorage`);
+        }
 
         // Clear critical save flag if this save succeeded AND the flag was set when we started
         if (wasCriticalPending && result !== SaveResult.BothFailed) {
@@ -219,7 +241,7 @@ class SaveManager {
         // Log localStorage failures (rare edge case)
         if (result === SaveResult.OnlySolidSucceeded) {
           console.error(
-            "⚠️ localStorage save failed - offline mode unavailable"
+            "⚠️ localStorage save failed - offline mode unavailable",
           );
         }
       } catch (error: any) {
@@ -251,10 +273,14 @@ class SaveManager {
    * @param hasChanged - True if bundle differs from last save
    * @param criticalSave - Optional: True if this save represents critical progress (e.g., lesson completion)
    */
-  queueSave(bundleJSON: string, hasChanged: boolean, criticalSave?: boolean): void {
+  queueSave(
+    bundleJSON: string,
+    hasChanged: boolean,
+    criticalSave?: boolean,
+  ): void {
     this.queuedSave = bundleJSON;
     this.saveHasChanged = hasChanged;
-    
+
     if (criticalSave) {
       this.criticalSavePending = true;
     }
@@ -314,7 +340,7 @@ class SaveManager {
     const array = new Uint8Array(16); // 128 bits = 16 bytes
     crypto.getRandomValues(array);
     return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
-      ""
+      "",
     );
   }
 
@@ -346,18 +372,21 @@ class SaveManager {
         try {
           await bridge.solidSave(
             this.SESSION_FILE_PATH,
-            JSON.stringify(sessionFile)
+            JSON.stringify(sessionFile),
           );
           writeSucceeded = true;
         } catch (error) {
           retryCount++;
           if (retryCount >= maxRetries) {
-            console.error(`Failed to write session protection file after ${maxRetries} attempts:`, error);
+            console.error(
+              `Failed to write session protection file after ${maxRetries} attempts:`,
+              error,
+            );
             return ConcurrenceCheckResult.InitializationFailed;
           }
           // Exponential backoff: 50ms, 100ms, 200ms, 400ms, 800ms
           await new Promise((resolve) =>
-            setTimeout(resolve, 50 * Math.pow(2, retryCount - 1))
+            setTimeout(resolve, 50 * Math.pow(2, retryCount - 1)),
           );
         }
       }
@@ -375,7 +404,9 @@ class SaveManager {
         const verified: SessionProtectionFile = JSON.parse(readBackResult.data);
 
         if (verified.sessionId !== newSessionId) {
-          console.error("Concurrent session detected during initialization - another device/tab overwrote session ID");
+          console.error(
+            "Concurrent session detected during initialization - another device/tab overwrote session ID",
+          );
           return ConcurrenceCheckResult.ConcurrentSessionDetected;
         }
 
@@ -392,18 +423,23 @@ class SaveManager {
         const currentResult = await bridge.solidLoad(this.SESSION_FILE_PATH);
         if (!currentResult.success || !currentResult.data) {
           // Network error reading session file - degrade gracefully
-          console.warn("Session check network error, blocking solid saves:", currentResult.error);
+          console.warn(
+            "Session check network error, blocking solid saves:",
+            currentResult.error,
+          );
           return ConcurrenceCheckResult.NetworkError;
         }
         const currentFile: SessionProtectionFile = JSON.parse(
-          currentResult.data
+          currentResult.data,
         );
 
         if (currentFile.sessionId !== this.sessionId) {
-          console.error("Concurrent session detected - session ID changed. Another device/tab is active.");
+          console.error(
+            "Concurrent session detected - session ID changed. Another device/tab is active.",
+          );
           return ConcurrenceCheckResult.ConcurrentSessionDetected;
         }
-        
+
         return ConcurrenceCheckResult.Passed;
       } catch (error: any) {
         // Parse error or other unexpected failure - degrade gracefully

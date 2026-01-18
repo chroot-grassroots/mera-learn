@@ -560,8 +560,8 @@ describe('runCore', () => {
       // First iteration - process message (sets hasChanged = true)
       await vi.advanceTimersByTimeAsync(50);
 
-      // Second iteration - should trigger save because hasChanged was true
-      await vi.advanceTimersByTimeAsync(50);
+      // Advance 15 seconds - should trigger save because hasChanged was true
+      await vi.advanceTimersByTimeAsync(15000);
 
       expect(mockSaveManager.queueSave).toHaveBeenCalled();
     });
@@ -736,7 +736,7 @@ describe('runCore', () => {
   });
 
   describe('Save Triggering', () => {
-    it('triggers save when hasChanged=true', async () => {
+    it('triggers save when hasChanged=true after 15 seconds', async () => {
       // Setup: message processing sets hasChanged
       vi.mocked(mockComponentCore1.getNavigationMessages).mockReturnValueOnce([
         { method: 'setCurrentView', args: [1, 1] }
@@ -747,8 +747,8 @@ describe('runCore', () => {
       // First iteration - process message (hasChanged = true)
       await vi.advanceTimersByTimeAsync(50);
 
-      // Second iteration - should trigger save
-      await vi.advanceTimersByTimeAsync(50);
+      // Advance 15 seconds for save throttle
+      await vi.advanceTimersByTimeAsync(15000);
 
       expect(mockSaveManager.queueSave).toHaveBeenCalled();
     });
@@ -774,12 +774,12 @@ describe('runCore', () => {
       // First iteration - sets hasChanged=true
       await vi.advanceTimersByTimeAsync(50);
 
-      // Second iteration - triggers save, resets hasChanged
-      await vi.advanceTimersByTimeAsync(50);
+      // Advance 15 seconds - triggers save, resets hasChanged
+      await vi.advanceTimersByTimeAsync(15000);
       expect(mockSaveManager.queueSave).toHaveBeenCalledTimes(1);
 
-      // Third iteration - should not trigger save again
-      await vi.advanceTimersByTimeAsync(50);
+      // More time passes - should not trigger save again (no new changes)
+      await vi.advanceTimersByTimeAsync(15000);
       expect(mockSaveManager.queueSave).toHaveBeenCalledTimes(1);
     });
 
@@ -791,7 +791,7 @@ describe('runCore', () => {
       const runPromise = runCore(params);
 
       await vi.advanceTimersByTimeAsync(50);
-      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(15000); // Wait for 15-second throttle
 
       expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
         expect.any(String), // bundleJSON
@@ -809,7 +809,7 @@ describe('runCore', () => {
       const runPromise = runCore(params);
 
       await vi.advanceTimersByTimeAsync(50); // Process message
-      await vi.advanceTimersByTimeAsync(50); // Trigger save
+      await vi.advanceTimersByTimeAsync(15000); // Trigger save after 15 seconds
 
       // Save should be triggered
       expect(mockSaveManager.queueSave).toHaveBeenCalled();
@@ -834,12 +834,12 @@ describe('runCore', () => {
       await vi.advanceTimersByTimeAsync(50);
       await vi.advanceTimersByTimeAsync(50);
 
-      // Save triggered after each message
-      await vi.advanceTimersByTimeAsync(50);
+      // Advance 15 seconds for save to trigger
+      await vi.advanceTimersByTimeAsync(15000);
       expect(mockSaveManager.queueSave).toHaveBeenCalled();
     });
 
-    it('passes criticalSave=true when overall progress changes', async () => {
+    it('passes criticalSave=true when overall progress changes (immediate save)', async () => {
       // Setup: overall progress message
       vi.mocked(mockComponentCore1.getOverallProgressMessages).mockReturnValueOnce([
         { method: 'markLessonComplete', args: [1] }
@@ -847,7 +847,7 @@ describe('runCore', () => {
 
       const runPromise = runCore(params);
 
-      await vi.advanceTimersByTimeAsync(50);
+      // Critical saves bypass the 15-second throttle
       await vi.advanceTimersByTimeAsync(50);
 
       expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
@@ -866,7 +866,7 @@ describe('runCore', () => {
       const runPromise = runCore(params);
 
       await vi.advanceTimersByTimeAsync(50);
-      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(15000); // Wait 15 seconds for non-critical save
 
       expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
         expect.any(String),
@@ -883,8 +883,7 @@ describe('runCore', () => {
 
       const runPromise = runCore(params);
 
-      // First save with critical=true
-      await vi.advanceTimersByTimeAsync(50);
+      // First save with critical=true (immediate)
       await vi.advanceTimersByTimeAsync(50);
       expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
         expect.any(String),
@@ -897,7 +896,7 @@ describe('runCore', () => {
         .mockReturnValueOnce([{ method: 'setCurrentView', args: [1, 2] }] as NavigationMessage[]);
 
       await vi.advanceTimersByTimeAsync(50);
-      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(15000); // Wait 15 seconds for non-critical save
 
       // Second save should not be critical
       expect(mockSaveManager.queueSave).toHaveBeenCalledTimes(2);
@@ -1219,9 +1218,12 @@ describe('runCore', () => {
 
       const runPromise = runCore(params);
 
-      // First iteration happens immediately: process message (sets hasChanged = true), 
-      // then queueSave called same iteration
+      // First iteration: process message (sets hasChanged = true)
+      await vi.advanceTimersByTimeAsync(50);
       expect(mockNavigationHandler.handleMessage).toHaveBeenCalledTimes(1);
+      
+      // Advance 15 seconds: save is triggered
+      await vi.advanceTimersByTimeAsync(15000);
       expect(mockSaveManager.queueSave).toHaveBeenCalledTimes(1);
       expect(mockSaveManager.queueSave).toHaveBeenCalledWith(
         expect.any(String),
@@ -1263,7 +1265,7 @@ describe('runCore', () => {
       const runPromise = runCore(params);
 
       await vi.advanceTimersByTimeAsync(50); // Process message
-      await vi.advanceTimersByTimeAsync(50); // Trigger save
+      await vi.advanceTimersByTimeAsync(15000); // Trigger save after 15 seconds
 
       // Save triggered (fire-and-forget means loop continues)
       expect(mockSaveManager.queueSave).toHaveBeenCalled();
@@ -1294,7 +1296,8 @@ describe('runCore', () => {
       // Should process all messages
       expect(mockNavigationHandler.handleMessage).toHaveBeenCalledTimes(5);
 
-      // Should trigger save after first message batch
+      // Advance 15 seconds to trigger save
+      await vi.advanceTimersByTimeAsync(15000);
       expect(mockSaveManager.queueSave).toHaveBeenCalled();
     });
 

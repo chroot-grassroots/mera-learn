@@ -48531,7 +48531,7 @@ var init_newUserWelcomeInterface = __esm({
             </button>
             <button 
               id="btn-skip-accessibility"
-              class="bg-amber-700 hover:bg-amber-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+              class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
               No Thanks, Use Defaults
             </button>
           </div>
@@ -48540,13 +48540,14 @@ var init_newUserWelcomeInterface = __esm({
     `;
       }
       renderAccessibilityOptionsScreen() {
+        const opts = this.internal.userChoices.accessibilityOptions;
         return `
       <div class="max-w-2xl mx-auto space-y-6">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
           Customize Accessibility
         </h2>
         <p class="text-gray-700 dark:text-gray-300">
-          Select the options that work best for you:
+          Select the options that work best for you. Changes apply immediately.
         </p>
         
         <div class="space-y-4">
@@ -48558,9 +48559,9 @@ var init_newUserWelcomeInterface = __esm({
             <select 
               id="select-font-size"
               class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
-              <option value="small">Small</option>
-              <option value="medium" selected>Medium (Default)</option>
-              <option value="large">Large</option>
+              <option value="small" ${opts.fontSize === "small" ? "selected" : ""}>Small</option>
+              <option value="medium" ${opts.fontSize === "medium" ? "selected" : ""}>Medium (Default)</option>
+              <option value="large" ${opts.fontSize === "large" ? "selected" : ""}>Large</option>
             </select>
           </div>
 
@@ -48570,6 +48571,7 @@ var init_newUserWelcomeInterface = __esm({
               <input 
                 type="checkbox" 
                 id="check-high-contrast"
+                ${opts.highContrast ? "checked" : ""}
                 class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
               <span class="text-sm font-semibold text-gray-900 dark:text-white">
                 High Contrast Mode
@@ -48583,6 +48585,7 @@ var init_newUserWelcomeInterface = __esm({
               <input 
                 type="checkbox" 
                 id="check-reduced-motion"
+                ${opts.reducedMotion ? "checked" : ""}
                 class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
               <span class="text-sm font-semibold text-gray-900 dark:text-white">
                 Reduce Motion & Animations
@@ -48590,16 +48593,16 @@ var init_newUserWelcomeInterface = __esm({
             </label>
           </div>
 
-          <!-- Focus Indicator -->
+          <!-- Focus Style -->
           <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
             <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
-              Focus Indicators
+              Focus Indicator Style
             </label>
             <select 
               id="select-focus-style"
               class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
-              <option value="default" selected>Default</option>
-              <option value="enhanced">Enhanced (More Visible)</option>
+              <option value="default" ${opts.focusIndicatorStyle === "default" ? "selected" : ""}>Default</option>
+              <option value="enhanced" ${opts.focusIndicatorStyle === "enhanced" ? "selected" : ""}>Enhanced (More Visible)</option>
             </select>
           </div>
 
@@ -48609,6 +48612,7 @@ var init_newUserWelcomeInterface = __esm({
               <input 
                 type="checkbox" 
                 id="check-audio-enabled"
+                ${opts.audioEnabled ? "checked" : ""}
                 class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
               <span class="text-sm font-semibold text-gray-900 dark:text-white">
                 Enable Audio Descriptions
@@ -48624,7 +48628,7 @@ var init_newUserWelcomeInterface = __esm({
             \u2190 Back
           </button>
           <button 
-            id="btn-save-accessibility"
+            id="btn-continue-accessibility"
             class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
             Continue
           </button>
@@ -48693,50 +48697,53 @@ var init_newUserWelcomeInterface = __esm({
         <p class="text-gray-700 dark:text-gray-300">
           How many lessons would you like to complete per week?
         </p>
+        
+        <div class="space-y-3">
+          <button 
+            id="btn-pace-accelerated"
+            class="w-full bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 hover:border-green-600 dark:hover:border-green-500 p-4 rounded-lg text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white text-lg">Accelerated (2 lessons)</div>
+            <div class="text-gray-600 dark:text-gray-400 text-sm">For those who want to move quickly</div>
+          </button>
+          
+          <button 
+            id="btn-pace-standard"
+            class="w-full bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 hover:border-green-600 dark:hover:border-green-500 p-4 rounded-lg text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white text-lg">Standard (1 lesson) \u2B50 Recommended</div>
+            <div class="text-gray-600 dark:text-gray-400 text-sm">Steady progress without feeling rushed</div>
+          </button>
+          
+          <button 
+            id="btn-pace-flexible"
+            class="w-full bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 hover:border-green-600 dark:hover:border-green-500 p-4 rounded-lg text-left transition-colors">
+            <div class="font-bold text-gray-900 dark:text-white text-lg">Flexible (Learn at your own pace)</div>
+            <div class="text-gray-600 dark:text-gray-400 text-sm">No weekly goals, just track your progress</div>
+          </button>
+        </div>
 
-        <div class="space-y-4">
+        <div class="pt-4">
           <button 
             id="btn-back"
             class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-semibold">
             \u2190 Back
-          </button>
-
-          <button 
-            id="btn-pace-accelerated"
-            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
-            <div class="font-bold text-gray-900 dark:text-white">6 lessons/week</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Complete curriculum in ~3 months</div>
-          </button>
-
-          <button 
-            id="btn-pace-standard"
-            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
-            <div class="font-bold text-gray-900 dark:text-white">3 lessons/week (Recommended)</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">Complete curriculum in ~6 months</div>
-          </button>
-
-          <button 
-            id="btn-pace-flexible"
-            class="w-full bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg p-4 text-left transition-colors">
-            <div class="font-bold text-gray-900 dark:text-white">Go at your own pace</div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">No weekly goals, learn when you want</div>
           </button>
         </div>
       </div>
     `;
       }
       renderWeekStartScreen() {
+        const day2 = this.internal.userChoices.weekStartDay;
+        const time3 = this.internal.userChoices.weekStartTime;
         return `
       <div class="max-w-2xl mx-auto space-y-6">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          Week Start Time
+          When Does Your Week Start?
         </h2>
         <p class="text-gray-700 dark:text-gray-300">
-          When should your learning week begin? Choose a day and time that works for you.
+          Weekly goals reset at the start of your week. Choose when that should be:
         </p>
-
+        
         <div class="space-y-4">
-          <!-- Day of Week -->
           <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
             <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
               Day of Week
@@ -48744,25 +48751,24 @@ var init_newUserWelcomeInterface = __esm({
             <select 
               id="select-week-day"
               class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
-              <option value="monday" selected>Monday</option>
-              <option value="tuesday">Tuesday</option>
-              <option value="wednesday">Wednesday</option>
-              <option value="thursday">Thursday</option>
-              <option value="friday">Friday</option>
-              <option value="saturday">Saturday</option>
-              <option value="sunday">Sunday</option>
+              <option value="monday" ${day2 === "monday" ? "selected" : ""}>Monday</option>
+              <option value="tuesday" ${day2 === "tuesday" ? "selected" : ""}>Tuesday</option>
+              <option value="wednesday" ${day2 === "wednesday" ? "selected" : ""}>Wednesday</option>
+              <option value="thursday" ${day2 === "thursday" ? "selected" : ""}>Thursday</option>
+              <option value="friday" ${day2 === "friday" ? "selected" : ""}>Friday</option>
+              <option value="saturday" ${day2 === "saturday" ? "selected" : ""}>Saturday</option>
+              <option value="sunday" ${day2 === "sunday" ? "selected" : ""}>Sunday</option>
             </select>
           </div>
 
-          <!-- Time -->
           <div class="bg-white dark:bg-gray-700 p-4 rounded-lg">
             <label class="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
-              Time (in your local timezone)
+              Time of Day (Your Local Time)
             </label>
             <input 
-              type="time" 
+              type="time"
               id="input-week-time"
-              value="00:00"
+              value="${time3}"
               class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white">
           </div>
         </div>
@@ -48806,6 +48812,7 @@ var init_newUserWelcomeInterface = __esm({
       // EVENT HANDLERS
       // ==========================================================================
       attachEventListeners() {
+        console.log(`\u{1F517} Attaching event listeners for screen: ${this.internal.currentScreen}`);
         document.getElementById("btn-back")?.addEventListener("click", () => {
           this.goBack();
         });
@@ -48818,38 +48825,112 @@ var init_newUserWelcomeInterface = __esm({
         });
         document.getElementById("btn-skip-accessibility")?.addEventListener("click", () => {
           this.internal.userChoices.showAccessibility = false;
+          this.queueAccessibilitySettings();
           this.advanceToScreen("telemetry");
         });
-        document.getElementById("btn-save-accessibility")?.addEventListener("click", () => {
-          this.captureAccessibilityChoices();
+        this.attachAccessibilityListeners();
+        document.getElementById("btn-continue-accessibility")?.addEventListener("click", () => {
           this.advanceToScreen("telemetry");
         });
         document.getElementById("btn-telemetry-accept")?.addEventListener("click", () => {
           this.internal.userChoices.optOutTelemetry = false;
+          this.queueTelemetrySettings();
           this.advanceToScreen("learning-pace");
         });
         document.getElementById("btn-telemetry-optout")?.addEventListener("click", () => {
           this.internal.userChoices.optOutTelemetry = true;
+          this.queueTelemetrySettings();
           this.advanceToScreen("learning-pace");
         });
         document.getElementById("btn-pace-accelerated")?.addEventListener("click", () => {
           this.internal.userChoices.learningPace = "accelerated";
+          this.componentCore.queueSettingsMessage({
+            method: "setLearningPace",
+            args: ["accelerated"]
+          });
           this.advanceToScreen("week-start");
         });
         document.getElementById("btn-pace-standard")?.addEventListener("click", () => {
           this.internal.userChoices.learningPace = "standard";
+          this.componentCore.queueSettingsMessage({
+            method: "setLearningPace",
+            args: ["standard"]
+          });
           this.advanceToScreen("week-start");
         });
         document.getElementById("btn-pace-flexible")?.addEventListener("click", () => {
           this.internal.userChoices.learningPace = "flexible";
+          this.componentCore.queueSettingsMessage({
+            method: "setLearningPace",
+            args: ["flexible"]
+          });
           this.advanceToScreen("complete");
         });
         document.getElementById("btn-save-week-start")?.addEventListener("click", () => {
-          this.captureWeekStartChoices();
+          this.captureAndQueueWeekStartChoices();
           this.advanceToScreen("complete");
         });
         document.getElementById("btn-finish")?.addEventListener("click", () => {
-          this.queueAllSettingsAndNavigate();
+          console.log("\u2705 Finish button clicked - queuing theme and navigation");
+          this.componentCore.queueSettingsMessage({
+            method: "setTheme",
+            args: ["auto"]
+          });
+          this.componentCore.queueNavigationToMainMenu();
+        });
+      }
+      /**
+       * Attach listeners for accessibility options that apply changes immediately
+       */
+      attachAccessibilityListeners() {
+        const fontSizeSelect = document.getElementById("select-font-size");
+        fontSizeSelect?.addEventListener("change", () => {
+          const fontSize = fontSizeSelect.value;
+          this.internal.userChoices.accessibilityOptions.fontSize = fontSize;
+          this.componentCore.queueSettingsMessage({
+            method: "setFontSize",
+            args: [fontSize]
+          });
+          this.applyFontSize(fontSize);
+        });
+        const highContrastCheck = document.getElementById("check-high-contrast");
+        highContrastCheck?.addEventListener("change", () => {
+          const highContrast = highContrastCheck.checked;
+          this.internal.userChoices.accessibilityOptions.highContrast = highContrast;
+          this.componentCore.queueSettingsMessage({
+            method: "setHighContrast",
+            args: [highContrast]
+          });
+          this.applyHighContrast(highContrast);
+        });
+        const reducedMotionCheck = document.getElementById("check-reduced-motion");
+        reducedMotionCheck?.addEventListener("change", () => {
+          const reducedMotion = reducedMotionCheck.checked;
+          this.internal.userChoices.accessibilityOptions.reducedMotion = reducedMotion;
+          this.componentCore.queueSettingsMessage({
+            method: "setReducedMotion",
+            args: [reducedMotion]
+          });
+          this.applyReducedMotion(reducedMotion);
+        });
+        const focusStyleSelect = document.getElementById("select-focus-style");
+        focusStyleSelect?.addEventListener("change", () => {
+          const focusStyle = focusStyleSelect.value;
+          this.internal.userChoices.accessibilityOptions.focusIndicatorStyle = focusStyle;
+          this.componentCore.queueSettingsMessage({
+            method: "setFocusIndicatorStyle",
+            args: [focusStyle]
+          });
+          this.applyFocusStyle(focusStyle);
+        });
+        const audioEnabledCheck = document.getElementById("check-audio-enabled");
+        audioEnabledCheck?.addEventListener("change", () => {
+          const audioEnabled = audioEnabledCheck.checked;
+          this.internal.userChoices.accessibilityOptions.audioEnabled = audioEnabled;
+          this.componentCore.queueSettingsMessage({
+            method: "setAudioEnabled",
+            args: [audioEnabled]
+          });
         });
       }
       // ==========================================================================
@@ -48867,43 +48948,10 @@ var init_newUserWelcomeInterface = __esm({
           this.render();
         }
       }
-      captureAccessibilityChoices() {
-        const fontSize = document.getElementById("select-font-size")?.value || "medium";
-        const highContrast = document.getElementById("check-high-contrast")?.checked || false;
-        const reducedMotion = document.getElementById("check-reduced-motion")?.checked || false;
-        const focusStyle = document.getElementById("select-focus-style")?.value || "default";
-        const audioEnabled = document.getElementById("check-audio-enabled")?.checked || false;
-        this.internal.userChoices.accessibilityOptions = {
-          fontSize,
-          highContrast,
-          reducedMotion,
-          focusIndicatorStyle: focusStyle,
-          audioEnabled
-        };
-      }
-      captureWeekStartChoices() {
-        const day2 = document.getElementById("select-week-day")?.value || "monday";
-        const time3 = document.getElementById("input-week-time")?.value || "00:00";
-        this.internal.userChoices.weekStartDay = day2;
-        this.internal.userChoices.weekStartTime = time3;
-      }
-      queueAllSettingsAndNavigate() {
-        this.componentCore.queueSettingsMessage({
-          method: "setTheme",
-          args: ["auto"]
-        });
-        this.componentCore.queueSettingsMessage({
-          method: "setLearningPace",
-          args: [this.internal.userChoices.learningPace]
-        });
-        this.componentCore.queueSettingsMessage({
-          method: "setOptOutDailyPing",
-          args: [this.internal.userChoices.optOutTelemetry]
-        });
-        this.componentCore.queueSettingsMessage({
-          method: "setOptOutErrorPing",
-          args: [this.internal.userChoices.optOutTelemetry]
-        });
+      /**
+       * Queue all accessibility settings (used when skipping accessibility options)
+       */
+      queueAccessibilitySettings() {
         const opts = this.internal.userChoices.accessibilityOptions;
         this.componentCore.queueSettingsMessage({
           method: "setFontSize",
@@ -48925,19 +48973,37 @@ var init_newUserWelcomeInterface = __esm({
           method: "setAudioEnabled",
           args: [opts.audioEnabled]
         });
-        if (this.internal.userChoices.learningPace !== "flexible") {
-          this.componentCore.queueSettingsMessage({
-            method: "setWeekStartDay",
-            args: [this.internal.userChoices.weekStartDay]
-          });
-          const utcTime = this.convertLocalTimeToUTC(this.internal.userChoices.weekStartTime);
-          this.componentCore.queueSettingsMessage({
-            method: "setWeekStartTimeUTC",
-            args: [utcTime]
-          });
-        }
-        this.componentCore.queueNavigationToMainMenu();
-        console.log("\u2705 Welcome flow complete - settings and navigation queued");
+      }
+      /**
+       * Queue telemetry settings
+       */
+      queueTelemetrySettings() {
+        this.componentCore.queueSettingsMessage({
+          method: "setOptOutDailyPing",
+          args: [this.internal.userChoices.optOutTelemetry]
+        });
+        this.componentCore.queueSettingsMessage({
+          method: "setOptOutErrorPing",
+          args: [this.internal.userChoices.optOutTelemetry]
+        });
+      }
+      /**
+       * Capture week start choices from DOM and queue immediately
+       */
+      captureAndQueueWeekStartChoices() {
+        const day2 = document.getElementById("select-week-day")?.value || "monday";
+        const time3 = document.getElementById("input-week-time")?.value || "00:00";
+        this.internal.userChoices.weekStartDay = day2;
+        this.internal.userChoices.weekStartTime = time3;
+        this.componentCore.queueSettingsMessage({
+          method: "setWeekStartDay",
+          args: [day2]
+        });
+        const utcTime = this.convertLocalTimeToUTC(time3);
+        this.componentCore.queueSettingsMessage({
+          method: "setWeekStartTimeUTC",
+          args: [utcTime]
+        });
       }
       /**
        * Convert local time to UTC for storage
@@ -48953,6 +49019,51 @@ var init_newUserWelcomeInterface = __esm({
         const utcMinutes = localDate.getUTCMinutes();
         const utcTime = `${String(utcHours).padStart(2, "0")}:${String(utcMinutes).padStart(2, "0")}`;
         return utcTime;
+      }
+      // ==========================================================================
+      // DYNAMIC ACCESSIBILITY APPLICATION
+      // ==========================================================================
+      /**
+       * Apply font size changes to the document root
+       */
+      applyFontSize(size) {
+        const root = document.documentElement;
+        root.classList.remove("font-size-small", "font-size-medium", "font-size-large");
+        root.classList.add(`font-size-${size}`);
+        console.log(`\u2728 Applied font size: ${size}`);
+      }
+      /**
+       * Apply high contrast changes to the document root
+       */
+      applyHighContrast(enabled) {
+        const root = document.documentElement;
+        if (enabled) {
+          root.classList.add("high-contrast");
+        } else {
+          root.classList.remove("high-contrast");
+        }
+        console.log(`\u2728 Applied high contrast: ${enabled}`);
+      }
+      /**
+       * Apply reduced motion changes to the document root
+       */
+      applyReducedMotion(enabled) {
+        const root = document.documentElement;
+        if (enabled) {
+          root.classList.add("reduce-motion");
+        } else {
+          root.classList.remove("reduce-motion");
+        }
+        console.log(`\u2728 Applied reduced motion: ${enabled}`);
+      }
+      /**
+       * Apply focus indicator style changes to the document root
+       */
+      applyFocusStyle(style) {
+        const root = document.documentElement;
+        root.classList.remove("focus-default", "focus-enhanced");
+        root.classList.add(`focus-${style}`);
+        console.log(`\u2728 Applied focus style: ${style}`);
       }
     };
   }
@@ -48972,11 +49083,14 @@ var init_newUserWelcomeCore = __esm({
     "use strict";
     init_zod();
     init_baseComponentCore();
-    NewUserWelcomeComponentConfigSchema = BaseComponentConfigSchema.extend({
-      type: external_exports.literal("new_user_welcome")
+    NewUserWelcomeComponentConfigSchema = external_exports.object({
+      type: external_exports.literal("new_user_welcome"),
+      id: external_exports.number(),
+      accessibility_label: external_exports.string(),
+      order: external_exports.number()
     });
-    NewUserWelcomeComponentProgressSchema = BaseComponentProgressSchema.extend({
-      // No additional fields - just lastUpdated from base
+    NewUserWelcomeComponentProgressSchema = external_exports.object({
+      lastUpdated: external_exports.number()
     });
     NewUserWelcomeProgressManager = class extends BaseComponentProgressManager {
       /**
@@ -48998,6 +49112,7 @@ var init_newUserWelcomeCore = __esm({
        * Queue a settings message
        */
       queueMessage(message2) {
+        console.log(`\u{1F4E4} NewUserWelcome queuing settings message:`, message2.method);
         this.queue.push(message2);
       }
       /**
@@ -49017,6 +49132,7 @@ var init_newUserWelcomeCore = __esm({
        * Queue navigation to main menu
        */
       queueNavigationToMainMenu() {
+        console.log(`\u{1F4E4} NewUserWelcome queuing navigation to main menu`);
         this.queue.push({
           method: "setCurrentView",
           args: [0, 0]
@@ -49315,12 +49431,23 @@ var init_basicTaskCore = __esm({
 });
 
 // src/ts/registry/mera-registry.ts
-var componentRegistrations, progressSchemaMap, componentValidatorMap, componentInitializerMap, allLessonIds, allComponentIds, lessonMetrics, componentIdToTypeMap, componentToLessonMap, domainLessonMap, curriculumDataRaw, CurriculumRegistry, curriculumData, lessonMetadata;
+var progressSchemaMap, componentValidatorMap, componentInitializerMap, componentRegistrations, allLessonIds, allComponentIds, lessonMetrics, componentIdToTypeMap, componentToLessonMap, domainLessonMap, curriculumDataRaw, CurriculumRegistry, curriculumData, lessonMetadata;
 var init_mera_registry = __esm({
   "src/ts/registry/mera-registry.ts"() {
     "use strict";
     init_newUserWelcomeCore();
     init_basicTaskCore();
+    progressSchemaMap = /* @__PURE__ */ new Map([
+      ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
+      ["basic_task", BasicTaskComponentProgressSchema]
+    ]);
+    componentValidatorMap = /* @__PURE__ */ new Map([
+      ["basic_task", validateBasicTaskStructure]
+    ]);
+    componentInitializerMap = /* @__PURE__ */ new Map([
+      ["new_user_welcome", createInitialProgress],
+      ["basic_task", createInitialProgress2]
+    ]);
     componentRegistrations = [
       {
         componentClass: NewUserWelcomeProgressManager,
@@ -49335,17 +49462,6 @@ var init_mera_registry = __esm({
         typeName: "basic_task"
       }
     ];
-    progressSchemaMap = /* @__PURE__ */ new Map([
-      ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
-      ["basic_task", BasicTaskComponentProgressSchema]
-    ]);
-    componentValidatorMap = /* @__PURE__ */ new Map([
-      ["basic_task", validateBasicTaskStructure]
-    ]);
-    componentInitializerMap = /* @__PURE__ */ new Map([
-      ["new_user_welcome", createInitialProgress],
-      ["basic_task", createInitialProgress2]
-    ]);
     allLessonIds = [1, 12345];
     allComponentIds = [123456, 123457, 1000001];
     lessonMetrics = /* @__PURE__ */ new Map([
@@ -49363,7 +49479,10 @@ var init_mera_registry = __esm({
       [1000001, 1]
     ]);
     domainLessonMap = /* @__PURE__ */ new Map([
-      [1001, [12345]]
+      [1002, []],
+      [1001, [12345]],
+      [1e3, []],
+      [1003, []]
     ]);
     curriculumDataRaw = null;
     CurriculumRegistry = class {
@@ -54072,8 +54191,23 @@ var SaveManager = class _SaveManager {
       }
       try {
         const allowSolidSaves = concurrenceCheck === 0 /* Passed */;
-        const result = await orchestrateSave(bundleSnapshot, timestamp2, allowSolidSaves);
+        const result = await orchestrateSave(
+          bundleSnapshot,
+          timestamp2,
+          allowSolidSaves
+        );
         this.lastSaveResult = result;
+        if (result === 0 /* BothSucceeded */) {
+          console.log(`\u2705 Save completed: Pod + localStorage`);
+        } else if (result === 2 /* OnlyLocalSucceeded */) {
+          console.log(`\u26A0\uFE0F Save completed: localStorage only (Pod failed)`);
+        } else if (result === 3 /* OnlySolidSucceeded */) {
+          console.error(
+            "\u26A0\uFE0F localStorage save failed - offline mode unavailable"
+          );
+        } else {
+          console.log(`\u274C Save failed: both Pod and localStorage`);
+        }
         if (wasCriticalPending && result !== 1 /* BothFailed */) {
           this.criticalSavePending = false;
         }
@@ -54195,7 +54329,10 @@ var SaveManager = class _SaveManager {
         } catch (error46) {
           retryCount++;
           if (retryCount >= maxRetries) {
-            console.error(`Failed to write session protection file after ${maxRetries} attempts:`, error46);
+            console.error(
+              `Failed to write session protection file after ${maxRetries} attempts:`,
+              error46
+            );
             return 2 /* InitializationFailed */;
           }
           await new Promise(
@@ -54212,7 +54349,9 @@ var SaveManager = class _SaveManager {
         }
         const verified = JSON.parse(readBackResult.data);
         if (verified.sessionId !== newSessionId) {
-          console.error("Concurrent session detected during initialization - another device/tab overwrote session ID");
+          console.error(
+            "Concurrent session detected during initialization - another device/tab overwrote session ID"
+          );
           return 1 /* ConcurrentSessionDetected */;
         }
         this.sessionId = newSessionId;
@@ -54225,14 +54364,19 @@ var SaveManager = class _SaveManager {
       try {
         const currentResult = await bridge.solidLoad(this.SESSION_FILE_PATH);
         if (!currentResult.success || !currentResult.data) {
-          console.warn("Session check network error, blocking solid saves:", currentResult.error);
+          console.warn(
+            "Session check network error, blocking solid saves:",
+            currentResult.error
+          );
           return 3 /* NetworkError */;
         }
         const currentFile = JSON.parse(
           currentResult.data
         );
         if (currentFile.sessionId !== this.sessionId) {
-          console.error("Concurrent session detected - session ID changed. Another device/tab is active.");
+          console.error(
+            "Concurrent session detected - session ID changed. Another device/tab is active."
+          );
           return 1 /* ConcurrentSessionDetected */;
         }
         return 0 /* Passed */;
@@ -55234,12 +55378,21 @@ async function runCore(params) {
     }
     const now = Date.now();
     const timeSinceLastSave = now - lastSaveQueueTime;
-    const shouldQueueSave = hasChanged || timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS;
+    const shouldQueueSave = hasChanged && timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS || overallProgressChanged;
     if (shouldQueueSave) {
       saveManager.queueSave(bundleJSON, hasChanged, overallProgressChanged);
       lastSaveQueueTime = now;
+      console.log(
+        `\u{1F4BE} Save queued (hasChanged=${hasChanged}, critical=${overallProgressChanged})`
+      );
       hasChanged = false;
       overallProgressChanged = false;
+    } else {
+      if (timeSinceLastSave % 3e4 < 100) {
+        console.log(
+          `\u23ED\uFE0F Core running, no save needed (no changes, last save ${Math.floor(timeSinceLastSave / 1e3)}s ago)`
+        );
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
     if (pageChanged && currentComponents !== null) {

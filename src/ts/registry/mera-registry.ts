@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2026-01-16T21:33:21.677172
+ * Generated on: 2026-01-18T11:25:40.216767
  * 
  * This file contains ALL 12 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -17,30 +17,49 @@ import {
 } from '../components/cores/basicTaskCore.js';
 
 /**
- * Component registration data structure
+ * MAPPING 1: Component Type to Class
  */
-interface ComponentRegistration {
-    componentClass: any;
-    configSchema: any;
-    progressSchema: any;
-    typeName: string;
-}
+export const componentTypeMap = new Map<string, any>([
+    ["new_user_welcome", NewUserWelcomeProgressManager],
+    ["basic_task", BasicTaskProgressManager]
+]);
 
 /**
- * Lesson metrics data structure
+ * MAPPING 2: Component Type to Config Schema
  */
-interface LessonMetrics {
-    pageCount: number;
-    componentCount: number;
-    title: string;
-    difficulty: string;
-}
+export const configSchemaMap = new Map<string, any>([
+    ["new_user_welcome", NewUserWelcomeComponentConfigSchema],
+    ["basic_task", BasicTaskComponentConfigSchema]
+]);
 
 /**
- * MAPPING 1: Component Registrations
- * Array of all registered component types with their associated schemas
+ * MAPPING 3: Component Type to Progress Schema
  */
-export const componentRegistrations: ComponentRegistration[] = [
+export const progressSchemaMap = new Map<string, any>([
+    ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
+    ["basic_task", BasicTaskComponentProgressSchema]
+]);
+
+/**
+ * MAPPING 4: Component Type to Validator Function
+ */
+export const componentValidatorMap = new Map<string, Function>([
+    ["basic_task", validateBasicTaskStructure]
+]);
+
+/**
+ * MAPPING 5: Component Type to Initializer Function
+ */
+export const componentInitializerMap = new Map<string, Function>([
+    ["new_user_welcome", createInitialNewUserWelcomeProgress],
+    ["basic_task", createInitialBasicTaskProgress]
+]);
+
+/**
+ * MAPPING 6: Component Registration Array
+ * Used by component factory for instantiation
+ */
+export const componentRegistrations = [
     {
         componentClass: NewUserWelcomeProgressManager,
         configSchema: NewUserWelcomeComponentConfigSchema,
@@ -56,66 +75,28 @@ export const componentRegistrations: ComponentRegistration[] = [
 ];
 
 /**
- * MAPPING 2: Component Type to Class Map
- * Maps component type string to constructor class
- */
-export const componentTypeMap = new Map<string, any>([
-    ["new_user_welcome", NewUserWelcomeProgressManager],
-    ["basic_task", BasicTaskProgressManager]
-]);
-
-/**
- * MAPPING 3: Component Config Schema Map
- * Maps component type string to config schema
- */
-export const configSchemaMap = new Map<string, any>([
-    ["new_user_welcome", NewUserWelcomeComponentConfigSchema],
-    ["basic_task", BasicTaskComponentConfigSchema]
-]);
-
-/**
- * MAPPING 4: Component Progress Schema Map
- * Maps component type string to progress schema
- */
-export const progressSchemaMap = new Map<string, any>([
-    ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
-    ["basic_task", BasicTaskComponentProgressSchema]
-]);
-
-/**
- * MAPPING 4.5: Component Validator Function Map
- * Maps component type string to validation function
- * Used by progressIntegrity for recovery operations
- */
-export const componentValidatorMap = new Map<string, (progress: any, config: any) => { cleaned: any; defaultedRatio: number }>([
-    ["basic_task", validateBasicTaskStructure]
-]);
-
-/**
- * MAPPING 4.7: Component Initializer Function Map
- * Maps component type string to initializer function
- * Used to create initial progress for new users
- */
-export const componentInitializerMap = new Map<string, (config: any) => any>([
-    ["new_user_welcome", createInitialNewUserWelcomeProgress],
-    ["basic_task", createInitialBasicTaskProgress]
-]);
-
-/**
- * MAPPING 5: All Entity IDs (Lessons + Menus)
- * Set of all entity IDs across the platform
+ * MAPPING 7: All Entity IDs (Lessons + Menus)
  */
 export const allLessonIds = [1, 12345];
 
 /**
- * MAPPING 6: All Component IDs
- * Set of all component IDs used across all entities
+ * MAPPING 7.5: All Component IDs
  */
 export const allComponentIds = [123456, 123457, 1000001];
 
 /**
- * MAPPING 7: Entity Metrics Map
- * Maps entity ID to metrics (page count, component count, etc.)
+ * Lesson Metrics Type
+ */
+export interface LessonMetrics {
+    pageCount: number;
+    componentCount: number;
+    title: string;
+    difficulty: string;
+}
+
+/**
+ * MAPPING 7.75: Lesson Metrics
+ * Maps lesson ID to page count and component count
  */
 export const lessonMetrics = new Map<number, LessonMetrics>([
     [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
@@ -149,7 +130,10 @@ export const componentToLessonMap = new Map<number, number>([
  * Maps domain ID to array of lesson IDs in that domain
  */
 export const domainLessonMap = new Map<number, number[]>([
-    [1001, [12345]]
+    [1002, []],
+    [1001, [12345]],
+    [1000, []],
+    [1003, []]
 ]);
 
 /**
@@ -192,7 +176,8 @@ export class CurriculumRegistry {
         const metrics = lessonMetrics.get(entityId);
         if (!metrics) {
             throw new Error(
-                `Entity ${entityId} not found in registry. Cannot determine page count.`
+                `Entity ${entityId} not found in registry. ` +
+                `Cannot determine page count.`
             );
         }
         return metrics.pageCount;
@@ -239,7 +224,150 @@ export const curriculumData = new CurriculumRegistry(
  * MAPPING 11: Domain Data
  * Array of all domain definitions
  */
-export const domainData = [];
+export const domainData = [
+  {
+    "id": 1002,
+    "title": "Communicate Securely",
+    "description": "Understand what's protected versus exposed in different communication channels. Learn to match communication tools to threat models and use appropriate encryption for sensitive conversations.",
+    "order": 3,
+    "lessonCount": 20,
+    "estimatedHours": 3.33,
+    "learningObjectives": [
+      "Master Signal setup including safety number verification",
+      "Understand different secure messenger use cases",
+      "Recognize email encryption limitations and alternatives",
+      "Configure and use VPN appropriately",
+      "Protect communications on public WiFi",
+      "Establish communication protocols for organizing work"
+    ],
+    "keyTopics": [
+      "Signal deep dive (safety numbers, disappearing messages, group security)",
+      "Alternative messengers (SimpleX, Briar) and their use cases",
+      "Email security and metadata exposure",
+      "Voice call security and when to meet in-person",
+      "Understanding encryption (end-to-end vs transport, HTTPS limitations)",
+      "VPN basics (what it protects, what it doesn't, provider selection)",
+      "Public WiFi risks and mitigation",
+      "Network monitoring awareness",
+      "Browser privacy settings",
+      "DNS privacy and DoH setup",
+      "Communication escalation ladder (public \u2192 secure messenger \u2192 in-person)"
+    ],
+    "threatsCovered": [
+      "Unencrypted communications interception",
+      "Metadata exposure (who, when, even if content encrypted)",
+      "Man-in-the-middle attacks on public WiFi",
+      "ISP-level surveillance and network monitoring",
+      "DNS query logging",
+      "Compromised communication channels"
+    ],
+    "version": "1.0.0"
+  },
+  {
+    "id": 1001,
+    "title": "Secure Your Accounts & Devices",
+    "description": "Secure what you already have through password management, two-factor authentication, device security, and privacy settings. Move from default settings to basic hardening that's achievable for everyone.",
+    "order": 2,
+    "lessonCount": 20,
+    "estimatedHours": 3.33,
+    "learningObjectives": [
+      "Implement password manager for all accounts",
+      "Enable two-factor authentication on critical accounts",
+      "Configure device security for checkpoint scenarios",
+      "Audit and restrict app permissions",
+      "Establish secure backup and recovery procedures",
+      "Maintain security through regular updates and hygiene"
+    ],
+    "keyTopics": [
+      "Password manager installation and master passphrase",
+      "Authenticator apps vs SMS 2FA (SIM swap risks)",
+      "Phone/device lockdown (auto-lock, FaceID timing, USB restrictions)",
+      "App permissions audit (location, camera, contacts)",
+      "Encrypted local backups (not cloud)",
+      "Account recovery setup (to activist email, not civilian)",
+      "Digital hygiene and cleanup",
+      "Update practices and patch management"
+    ],
+    "threatsCovered": [
+      "Device seizure at checkpoints and borders",
+      "Credential theft and account takeover",
+      "SIM-swap and SS7 attacks",
+      "Unauthorized app permissions",
+      "Cloud backup subpoenas",
+      "Known vulnerabilities in outdated software"
+    ],
+    "version": "1.0.0"
+  },
+  {
+    "id": 1000,
+    "title": "Control Your Activist Data",
+    "description": "Learn to compartmentalize your digital life by controlling where your activist data lives. Create and maintain separate accounts for activist work. Protect future actions through strategic data separation.",
+    "order": 1,
+    "lessonCount": 20,
+    "estimatedHours": 3.33,
+    "learningObjectives": [
+      "Understand why compartmentalization matters for activist safety",
+      "Create and maintain separate activist email and messaging accounts",
+      "Migrate sensitive accounts to protected identity",
+      "Establish boundaries between activist and civilian digital presence",
+      "Audit and maintain identity separation over time"
+    ],
+    "keyTopics": [
+      "Meta/ICE cooperation documentation and other data handover cases",
+      "Building activist identity (Proton Mail, Signal username)",
+      "Account migration strategy and password reset migration",
+      "Social media compartmentalization",
+      "Decision framework for what goes where",
+      "Monthly audit procedures"
+    ],
+    "threatsCovered": [
+      "Corporate platform data handovers to law enforcement",
+      "Geofence warrants and location tracking",
+      "Social graph analysis from contact lists",
+      "Historical data exposure via subpoena",
+      "Cross-account identity linking"
+    ],
+    "version": "1.0.0"
+  },
+  {
+    "id": 1003,
+    "title": "Recognize & Respond to Attacks",
+    "description": "Develop skills to recognize when you're being attacked and respond appropriately. Learn to identify phishing, social engineering, surveillance, and compromise, then execute appropriate response protocols.",
+    "order": 4,
+    "lessonCount": 18,
+    "estimatedHours": 3.0,
+    "learningObjectives": [
+      "Identify phishing and spear-phishing attempts",
+      "Recognize social engineering tactics",
+      "Detect signs of physical and digital surveillance",
+      "Execute checkpoint and seizure protocols",
+      "Identify signs of account compromise",
+      "Perform emergency lockdown and damage assessment"
+    ],
+    "keyTopics": [
+      "Phishing recognition (visual cues, pressure tactics, verification procedures)",
+      "Advanced phishing (spear phishing, compromised colleagues, fake platforms)",
+      "Social engineering (phone, in-person, information gathering)",
+      "Fake apps and trojanized software",
+      "Physical surveillance recognition",
+      "Checkpoint and seizure protocols",
+      "Signs of compromise (unexpected activity, unknown devices)",
+      "Emergency lockdown procedures",
+      "Warning your network securely",
+      "Damage assessment and recovery"
+    ],
+    "threatsCovered": [
+      "Targeted phishing and credential theft",
+      "Social engineering attacks",
+      "Malicious apps and software",
+      "Physical surveillance and following",
+      "Device seizure at checkpoints",
+      "Account compromise and takeover",
+      "Network compromise and lateral movement"
+    ],
+    "version": "1.0.0"
+  }
+];
 
 /**
  * MAPPING 12: Entity Metadata

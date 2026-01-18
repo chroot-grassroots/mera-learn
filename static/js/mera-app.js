@@ -47061,6 +47061,37 @@ var init_overallProgressSchema = __esm({
         this.progress.currentStreak += 1;
         this.progress.lastStreakCheck = Math.floor(Date.now() / 1e3);
       }
+      /**
+       * Get progress for a specific domain.
+       *
+       * Counts completed lessons vs total lessons in the domain.
+       * Used by main menu for domain progress visualization.
+       *
+       * @param domainId - Domain to check
+       * @returns Object with completed and total lesson counts
+       * @throws Error if domain ID invalid
+       */
+      getDomainProgress(domainId) {
+        if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+          throw new Error(`Invalid domain ID: ${domainId}`);
+        }
+        const lessonsInDomain = this.curriculumRegistry.getLessonsInDomain(domainId);
+        if (!lessonsInDomain) {
+          return { completed: 0, total: 0 };
+        }
+        let completed = 0;
+        for (const lessonId of lessonsInDomain) {
+          const lessonKey = lessonId.toString();
+          const completion = this.progress.lessonCompletions[lessonKey];
+          if (completion && completion.timeCompleted !== null) {
+            completed++;
+          }
+        }
+        return {
+          completed,
+          total: lessonsInDomain.length
+        };
+      }
     };
     OverallProgressMessageSchema = external_exports.object({
       method: external_exports.enum([
@@ -49219,6 +49250,207 @@ var init_newUserWelcomeCore = __esm({
   }
 });
 
+// src/ts/components/interfaces/mainMenuInterface.ts
+var mainMenuInterface_exports = {};
+__export(mainMenuInterface_exports, {
+  MainMenuInterface: () => MainMenuInterface
+});
+var MainMenuInterface;
+var init_mainMenuInterface = __esm({
+  "src/ts/components/interfaces/mainMenuInterface.ts"() {
+    "use strict";
+    init_baseComponentInterface();
+    MainMenuInterface = class extends BaseComponentInterface {
+      constructor(core2, timeline2) {
+        super(core2, timeline2);
+      }
+      /**
+       * Create initial internal state.
+       */
+      createInternalState() {
+        return {
+          rendered: false,
+          expandedDomain: null
+        };
+      }
+      /**
+       * Load component-specific assets.
+       * Main menu has no assets to load.
+       */
+      async loadComponentSpecificAssets() {
+        this.setAssetLoadingState("ready");
+      }
+      /**
+       * Render the main menu.
+       * 
+       * Phase 2: Just a placeholder
+       * Phase 3-7: Full implementation with cards, accordions, etc.
+       */
+      render() {
+        const slot = this.timelineContainer.getComponentArea(this.componentCore.config.id);
+        if (!slot) {
+          console.error(`Main menu: No render area found for component ${this.componentCore.config.id}`);
+          return;
+        }
+        slot.innerHTML = "";
+        const placeholder = document.createElement("div");
+        placeholder.className = "p-8 text-center";
+        placeholder.innerHTML = `
+      <h1 class="text-3xl font-bold text-gray-800 mb-4">
+        Main Menu
+      </h1>
+      <p class="text-gray-600">
+        Component successfully loaded! UI implementation coming in Phase 3+
+      </p>
+    `;
+        slot.appendChild(placeholder);
+        this.internal.rendered = true;
+      }
+      /**
+       * Handle domain card click - expand/collapse lesson list.
+       */
+      handleDomainClick(domainId) {
+        if (this.internal.expandedDomain === domainId) {
+          this.internal.expandedDomain = null;
+        } else {
+          this.internal.expandedDomain = domainId;
+        }
+        this.render();
+      }
+      /**
+       * Handle lesson click - queue navigation message.
+       */
+      handleLessonClick(lessonId) {
+        console.log(`Navigate to lesson ${lessonId} - not yet implemented`);
+      }
+      /**
+       * Handle reset button click - queue reset messages.
+       */
+      handleResetClick(lessonId) {
+        this.componentCore.queueResetLesson(lessonId);
+      }
+      /**
+       * Cleanup event listeners on destroy.
+       */
+      destroy() {
+      }
+    };
+  }
+});
+
+// src/ts/components/cores/mainMenuCore.ts
+function createInitialProgress2(config2) {
+  const tempManager = new MainMenuProgressManager(config2, { lastUpdated: 0 });
+  return tempManager.createInitialProgress(config2);
+}
+var MainMenuComponentConfigSchema, MainMenuComponentProgressSchema, MainMenuProgressManager, MainMenuCore;
+var init_mainMenuCore = __esm({
+  "src/ts/components/cores/mainMenuCore.ts"() {
+    "use strict";
+    init_zod();
+    init_baseComponentCore();
+    MainMenuComponentConfigSchema = BaseComponentConfigSchema.extend({
+      type: external_exports.literal("main_menu")
+    });
+    MainMenuComponentProgressSchema = BaseComponentProgressSchema.extend({
+      // No additional fields needed
+    });
+    MainMenuProgressManager = class extends BaseComponentProgressManager {
+      /**
+       * Create initial progress for new users.
+       */
+      createInitialProgress(config2) {
+        return {
+          lastUpdated: 0
+        };
+      }
+    };
+    MainMenuCore = class extends BaseComponentCore {
+      constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumData2) {
+        super(
+          config2,
+          progressManager,
+          timeline2,
+          overallProgressManager,
+          navigationManager,
+          settingsManager,
+          curriculumData2
+        );
+        this.overallProgress = overallProgressManager;
+        this.curriculum = curriculumData2;
+      }
+      /**
+       * Create the interface for this core
+       */
+      createInterface(timeline2) {
+        const { MainMenuInterface: MainMenuInterface2 } = (init_mainMenuInterface(), __toCommonJS(mainMenuInterface_exports));
+        return new MainMenuInterface2(this, timeline2);
+      }
+      /**
+       * Check if component is complete.
+       * Main menu is never "complete" - it's always accessible.
+       */
+      isComplete() {
+        return false;
+      }
+      /**
+       * Main menu has no component progress messages (doesn't modify its own progress).
+       * Cross-component messages are queued directly via the queue manager.
+       */
+      getComponentProgressMessagesInternal() {
+        return [];
+      }
+      /**
+       * Public method for interface to queue lesson reset.
+       * 
+       * This is where the main menu's special authorization is used -
+       * it queues messages targeting OTHER components' progress managers.
+       * 
+       * @param lessonId - Lesson to reset
+       */
+      queueResetLesson(lessonId) {
+        console.log(`Reset lesson ${lessonId} - not yet implemented`);
+      }
+      /**
+       * Get streak data for interface rendering.
+       */
+      getStreakData() {
+        const progress = this.overallProgress.getProgress();
+        return {
+          current: progress.currentStreak,
+          lastActivity: progress.lastStreakCheck
+        };
+      }
+      /**
+       * Get domain progress for all domains.
+       */
+      getAllDomainProgress() {
+        const domainIds = this.curriculum.getAllDomainIds();
+        const progress = this.overallProgress.getProgress();
+        return domainIds.map((domainId) => {
+          const lessonsInDomain = this.curriculum.getLessonsInDomain(domainId) || [];
+          const total = lessonsInDomain.length;
+          const completed = lessonsInDomain.filter((lessonId) => {
+            const completion = progress.lessonCompletions[lessonId.toString()];
+            return completion && completion.timeCompleted !== null;
+          }).length;
+          return {
+            domainId,
+            completed,
+            total
+          };
+        });
+      }
+      /**
+       * Get lessons for a specific domain.
+       */
+      getLessonsInDomain(domainId) {
+        return this.curriculum.getLessonsInDomain(domainId) || [];
+      }
+    };
+  }
+});
+
 // src/ts/components/cores/basicTaskCore.ts
 function isValidCheckboxIndex(index, config2) {
   return index >= 0 && index < config2.checkboxes.length;
@@ -49242,7 +49474,7 @@ function validateBasicTaskStructure(progress, config2) {
     defaultedRatio: 0
   };
 }
-function createInitialProgress2(config2) {
+function createInitialProgress3(config2) {
   return {
     lastUpdated: 0,
     checkbox_checked: new Array(config2.checkboxes.length).fill(false)
@@ -49436,9 +49668,11 @@ var init_mera_registry = __esm({
   "src/ts/registry/mera-registry.ts"() {
     "use strict";
     init_newUserWelcomeCore();
+    init_mainMenuCore();
     init_basicTaskCore();
     progressSchemaMap = /* @__PURE__ */ new Map([
       ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
+      ["main_menu", MainMenuComponentProgressSchema],
       ["basic_task", BasicTaskComponentProgressSchema]
     ]);
     componentValidatorMap = /* @__PURE__ */ new Map([
@@ -49446,7 +49680,8 @@ var init_mera_registry = __esm({
     ]);
     componentInitializerMap = /* @__PURE__ */ new Map([
       ["new_user_welcome", createInitialProgress],
-      ["basic_task", createInitialProgress2]
+      ["main_menu", createInitialProgress2],
+      ["basic_task", createInitialProgress3]
     ]);
     componentRegistrations = [
       {
@@ -49454,6 +49689,12 @@ var init_mera_registry = __esm({
         configSchema: NewUserWelcomeComponentConfigSchema,
         progressSchema: NewUserWelcomeComponentProgressSchema,
         typeName: "new_user_welcome"
+      },
+      {
+        componentClass: MainMenuProgressManager,
+        configSchema: MainMenuComponentConfigSchema,
+        progressSchema: MainMenuComponentProgressSchema,
+        typeName: "main_menu"
       },
       {
         componentClass: BasicTaskProgressManager,
@@ -54678,6 +54919,7 @@ init_mera_registry();
 // src/ts/components/componentManagerFactory.ts
 init_basicTaskCore();
 init_newUserWelcomeCore();
+init_mainMenuCore();
 function createComponentProgressManager(componentType, config2, progressData) {
   switch (componentType) {
     case "basic_task": {
@@ -54693,6 +54935,13 @@ function createComponentProgressManager(componentType, config2, progressData) {
       return new NewUserWelcomeProgressManager(
         config2,
         // Pass config first
+        validated
+      );
+    }
+    case "main_menu": {
+      const validated = MainMenuComponentProgressSchema.parse(progressData);
+      return new MainMenuProgressManager(
+        config2,
         validated
       );
     }
@@ -54736,6 +54985,16 @@ var MESSAGE_TYPE_PERMISSIONS = {
     // Can navigate
     settings: true
     // Can change settings
+  },
+  "main_menu": {
+    componentProgress: true,
+    // Special: can modify OTHER components' progress
+    overallProgress: true,
+    // Can mark lessons incomplete or complete
+    navigation: true,
+    // Can navigate to lessons
+    settings: false
+    // Cannot change settings
   }
   // Add additional components here
 };
@@ -54859,6 +55118,7 @@ function getTimelineInstance() {
 
 // src/ts/components/componentCoreFactory.ts
 init_newUserWelcomeCore();
+init_mainMenuCore();
 function createComponentCore(componentType, config2, progressManager, curriculumData2, overallProgressManager, navigationManager, settingsManager) {
   const timeline2 = getTimelineInstance();
   switch (componentType) {
@@ -54874,6 +55134,16 @@ function createComponentCore(componentType, config2, progressManager, curriculum
       );
     case "new_user_welcome":
       return new NewUserWelcomeCore(
+        config2,
+        progressManager,
+        timeline2,
+        overallProgressManager,
+        navigationManager,
+        settingsManager,
+        curriculumData2
+      );
+    case "main_menu":
+      return new MainMenuCore(
         config2,
         progressManager,
         timeline2,
@@ -55291,24 +55561,56 @@ async function runCore(params) {
         const messages = core2.getComponentProgressMessages();
         if (messages.length > 0) {
           hasChanged = true;
-          for (const msg of messages) {
-            try {
-              const handler = params.componentProgressHandlers.get(componentType);
-              if (!handler) {
+          const MAIN_MENU_COMPONENT_ID = 1e6;
+          if (componentId !== MAIN_MENU_COMPONENT_ID) {
+            for (const msg of messages) {
+              try {
+                if (msg.componentId !== componentId) {
+                  throw new Error(
+                    `Component ${componentId} attempted to modify component ${msg.componentId} (unauthorized)`
+                  );
+                }
+                const handler = params.componentProgressHandlers.get(componentType);
+                if (!handler) {
+                  console.error(
+                    `No handler for component type ${componentType}`
+                  );
+                  continue;
+                }
+                handler(msg);
+              } catch (error46) {
                 console.error(
-                  `No handler found for component type: ${componentType}`
+                  `Component ${componentId} message failed:`,
+                  error46
                 );
-                continue;
               }
-              handler.handleMessage(msg);
-            } catch (error46) {
-              console.error(`Component ${componentId} message error:`, error46);
-              currentComponents.componentCores.delete(componentId);
-              currentComponents.componentProgressPolling.delete(componentId);
-              currentComponents.overallProgressPolling.delete(componentId);
-              currentComponents.navigationPolling.delete(componentId);
-              currentComponents.settingsPolling.delete(componentId);
-              continue;
+            }
+          } else {
+            for (const msg of messages) {
+              try {
+                const targetComponentType = componentIdToTypeMap.get(
+                  msg.componentId
+                );
+                if (!targetComponentType) {
+                  console.error(
+                    `Main menu targeted unknown component ${msg.componentId}`
+                  );
+                  continue;
+                }
+                const handler = params.componentProgressHandlers.get(targetComponentType);
+                if (!handler) {
+                  console.error(
+                    `No handler for component type ${targetComponentType}`
+                  );
+                  continue;
+                }
+                handler.handleMessage(msg);
+              } catch (error46) {
+                console.error(
+                  `Main menu message failed for component ${msg.componentId}:`,
+                  error46
+                );
+              }
             }
           }
         }

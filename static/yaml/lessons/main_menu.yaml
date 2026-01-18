@@ -1,0 +1,22 @@
+# Main Menu YAML
+# Entity ID: 0 (system menu range)
+# Component ID: 1000000 (main menu component - special authorization)
+
+metadata:
+  id: 0
+  entityType: menu
+  title: "Main Menu"
+  description: "Application home base - displays progress, streak, and navigation"
+  difficulty: beginner
+  estimatedMinutes: 1
+  version: "1.0.0"
+
+pages:
+  - id: 100000
+    title: "Main Menu"
+    order: 0
+    components:
+      - id: 1000000
+        type: main_menu
+        accessibility_label: "Main menu - view progress and navigate curriculum"
+        order: 100

@@ -39,6 +39,12 @@ export const MESSAGE_TYPE_PERMISSIONS: Record<string, {
     navigation: true,         // Can navigate
     settings: true           // Can change settings
   },
+   'main_menu': {
+    componentProgress: true,   // Special: can modify OTHER components' progress
+    overallProgress: true,     // Can mark lessons incomplete or complete
+    navigation: true,          // Can navigate to lessons
+    settings: false           // Cannot change settings
+  },
   // Add additional components here
 
 };

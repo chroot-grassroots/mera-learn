@@ -23,6 +23,9 @@ import { getTimelineInstance } from "../ui/timelineContainer.js";
 import { NewUserWelcomeCore } from "./cores/newUserWelcomeCore.js";
 import type { NewUserWelcomeComponentConfig } from "./cores/newUserWelcomeCore.js";
 import type { NewUserWelcomeProgressManager } from "./cores/newUserWelcomeCore.js";
+import { MainMenuCore } from "./cores/mainMenuCore.js";
+import type { MainMenuComponentConfig } from "./cores/mainMenuCore.js";
+import type { MainMenuProgressManager } from "./cores/mainMenuCore.js";
 
 /**
  * Create a component Core instance based on type string.
@@ -44,10 +47,9 @@ export function createComponentCore(
   curriculumData: CurriculumRegistry,
   overallProgressManager: IReadonlyOverallProgressManager,
   navigationManager: IReadonlyNavigationManager,
-  settingsManager: IReadonlySettingsManager
+  settingsManager: IReadonlySettingsManager,
 ): BaseComponentCore<any, any> {
-
-const timeline = getTimelineInstance();
+  const timeline = getTimelineInstance();
 
   switch (componentType) {
     case "basic_task":
@@ -58,7 +60,7 @@ const timeline = getTimelineInstance();
         overallProgressManager,
         navigationManager,
         settingsManager,
-        curriculumData
+        curriculumData,
       );
 
     case "new_user_welcome":
@@ -69,7 +71,18 @@ const timeline = getTimelineInstance();
         overallProgressManager,
         navigationManager,
         settingsManager,
-        curriculumData
+        curriculumData,
+      );
+
+    case "main_menu":
+      return new MainMenuCore(
+        config as MainMenuComponentConfig,
+        progressManager as MainMenuProgressManager,
+        timeline,
+        overallProgressManager,
+        navigationManager,
+        settingsManager,
+        curriculumData,
       );
 
     // TODO: Add other component types as they're implemented
@@ -83,7 +96,7 @@ const timeline = getTimelineInstance();
     default:
       throw new Error(
         `Unknown component type: '${componentType}'. ` +
-          `Add to componentCoreFactory.ts when implementing new component types.`
+          `Add to componentCoreFactory.ts when implementing new component types.`,
       );
   }
 }

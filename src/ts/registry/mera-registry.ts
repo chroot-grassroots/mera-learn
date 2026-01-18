@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2026-01-18T11:25:40.216767
+ * Generated on: 2026-01-18T16:05:39.582237
  * 
  * This file contains ALL 12 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -13,6 +13,9 @@ import {
     NewUserWelcomeProgressManager, NewUserWelcomeComponentConfigSchema, NewUserWelcomeComponentProgressSchema, createInitialProgress as createInitialNewUserWelcomeProgress
 } from '../components/cores/newUserWelcomeCore.js';
 import { 
+    MainMenuProgressManager, MainMenuComponentConfigSchema, MainMenuComponentProgressSchema, createInitialProgress as createInitialMainMenuProgress
+} from '../components/cores/mainMenuCore.js';
+import { 
     BasicTaskProgressManager, BasicTaskComponentConfigSchema, BasicTaskComponentProgressSchema, validateBasicTaskStructure, createInitialProgress as createInitialBasicTaskProgress
 } from '../components/cores/basicTaskCore.js';
 
@@ -21,6 +24,7 @@ import {
  */
 export const componentTypeMap = new Map<string, any>([
     ["new_user_welcome", NewUserWelcomeProgressManager],
+    ["main_menu", MainMenuProgressManager],
     ["basic_task", BasicTaskProgressManager]
 ]);
 
@@ -29,6 +33,7 @@ export const componentTypeMap = new Map<string, any>([
  */
 export const configSchemaMap = new Map<string, any>([
     ["new_user_welcome", NewUserWelcomeComponentConfigSchema],
+    ["main_menu", MainMenuComponentConfigSchema],
     ["basic_task", BasicTaskComponentConfigSchema]
 ]);
 
@@ -37,6 +42,7 @@ export const configSchemaMap = new Map<string, any>([
  */
 export const progressSchemaMap = new Map<string, any>([
     ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
+    ["main_menu", MainMenuComponentProgressSchema],
     ["basic_task", BasicTaskComponentProgressSchema]
 ]);
 
@@ -52,6 +58,7 @@ export const componentValidatorMap = new Map<string, Function>([
  */
 export const componentInitializerMap = new Map<string, Function>([
     ["new_user_welcome", createInitialNewUserWelcomeProgress],
+    ["main_menu", createInitialMainMenuProgress],
     ["basic_task", createInitialBasicTaskProgress]
 ]);
 
@@ -65,6 +72,12 @@ export const componentRegistrations = [
         configSchema: NewUserWelcomeComponentConfigSchema,
         progressSchema: NewUserWelcomeComponentProgressSchema,
         typeName: 'new_user_welcome'
+    },
+    {
+        componentClass: MainMenuProgressManager,
+        configSchema: MainMenuComponentConfigSchema,
+        progressSchema: MainMenuComponentProgressSchema,
+        typeName: 'main_menu'
     },
     {
         componentClass: BasicTaskProgressManager,

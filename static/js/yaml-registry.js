@@ -1,6 +1,6 @@
 /*
  * Auto-generated YAML File Registry for Runtime Loading
- * Generated on: 2026-01-16T21:33:21.677115
+ * Generated on: 2026-01-18T11:25:40.216680
  * 
  * This file contains ONLY file paths for loading YAML content at runtime.
  * All parsed data and mappings are in mera-registry.ts (bundled with TypeScript).
@@ -33,7 +33,28 @@ export const curriculumFiles = [];
 /**
  * Domain files to load
  */
-export const domainFiles = [];
+export const domainFiles = [
+  {
+    "path": "/static/yaml/domains/domain_3_communicate_securely.yaml",
+    "filename": "domain_3_communicate_securely.yaml",
+    "type": "domain"
+  },
+  {
+    "path": "/static/yaml/domains/domain_2_secure_accounts_devices.yaml",
+    "filename": "domain_2_secure_accounts_devices.yaml",
+    "type": "domain"
+  },
+  {
+    "path": "/static/yaml/domains/domain_1_control_activist_data.yaml",
+    "filename": "domain_1_control_activist_data.yaml",
+    "type": "domain"
+  },
+  {
+    "path": "/static/yaml/domains/domain_4_recognize_respond_attacks.yaml",
+    "filename": "domain_4_recognize_respond_attacks.yaml",
+    "type": "domain"
+  }
+];
 
 /**
  * Menu files to load

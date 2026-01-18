@@ -1,0 +1,45 @@
+# Domain 2: Secure Your Accounts & Devices
+# Immutable ID: 1001 (domains use range 1,000-9,999)
+# Lesson count: 20 lessons
+# Focus: Basic hardening of existing accounts and devices
+
+id: 1001
+title: "Secure Your Accounts & Devices"
+description: "Secure what you already have through password management, two-factor authentication, device security, and privacy settings. Move from default settings to basic hardening that's achievable for everyone."
+order: 2
+lessonCount: 20
+estimatedHours: 3.33
+
+# Pedagogical rationale:
+# - Assumes users starting from: default settings, reused passwords, no 2FA, FaceID enabled, auto-cloud backup
+# - Goal: Basic hardening that's achievable for everyone
+# - Focus on securing existing infrastructure before building new systems
+# - Practical defenses against most common attacks
+
+learningObjectives:
+  - "Implement password manager for all accounts"
+  - "Enable two-factor authentication on critical accounts"
+  - "Configure device security for checkpoint scenarios"
+  - "Audit and restrict app permissions"
+  - "Establish secure backup and recovery procedures"
+  - "Maintain security through regular updates and hygiene"
+
+keyTopics:
+  - "Password manager installation and master passphrase"
+  - "Authenticator apps vs SMS 2FA (SIM swap risks)"
+  - "Phone/device lockdown (auto-lock, FaceID timing, USB restrictions)"
+  - "App permissions audit (location, camera, contacts)"
+  - "Encrypted local backups (not cloud)"
+  - "Account recovery setup (to activist email, not civilian)"
+  - "Digital hygiene and cleanup"
+  - "Update practices and patch management"
+
+threatsCovered:
+  - "Device seizure at checkpoints and borders"
+  - "Credential theft and account takeover"
+  - "SIM-swap and SS7 attacks"
+  - "Unauthorized app permissions"
+  - "Cloud backup subpoenas"
+  - "Known vulnerabilities in outdated software"
+
+version: "1.0.0"

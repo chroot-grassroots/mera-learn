@@ -1,0 +1,48 @@
+# Domain 4: Recognize & Respond to Attacks
+# Immutable ID: 1003 (domains use range 1,000-9,999)
+# Lesson count: 18 lessons
+# Focus: Attack recognition and response protocols
+
+id: 1003
+title: "Recognize & Respond to Attacks"
+description: "Develop skills to recognize when you're being attacked and respond appropriately. Learn to identify phishing, social engineering, surveillance, and compromise, then execute appropriate response protocols."
+order: 4
+lessonCount: 18
+estimatedHours: 3.0
+
+# Pedagogical rationale:
+# - Defense in depth: Layers 1-2 (setup and habits) will fail sometimes
+# - Users need recognition skills and response protocols
+# - Focus on realistic, documented attacks against activists
+# - Emphasis on practical response checklists
+
+learningObjectives:
+  - "Identify phishing and spear-phishing attempts"
+  - "Recognize social engineering tactics"
+  - "Detect signs of physical and digital surveillance"
+  - "Execute checkpoint and seizure protocols"
+  - "Identify signs of account compromise"
+  - "Perform emergency lockdown and damage assessment"
+
+keyTopics:
+  - "Phishing recognition (visual cues, pressure tactics, verification procedures)"
+  - "Advanced phishing (spear phishing, compromised colleagues, fake platforms)"
+  - "Social engineering (phone, in-person, information gathering)"
+  - "Fake apps and trojanized software"
+  - "Physical surveillance recognition"
+  - "Checkpoint and seizure protocols"
+  - "Signs of compromise (unexpected activity, unknown devices)"
+  - "Emergency lockdown procedures"
+  - "Warning your network securely"
+  - "Damage assessment and recovery"
+
+threatsCovered:
+  - "Targeted phishing and credential theft"
+  - "Social engineering attacks"
+  - "Malicious apps and software"
+  - "Physical surveillance and following"
+  - "Device seizure at checkpoints"
+  - "Account compromise and takeover"
+  - "Network compromise and lateral movement"
+
+version: "1.0.0"

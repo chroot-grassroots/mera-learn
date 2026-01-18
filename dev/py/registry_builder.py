@@ -180,8 +180,28 @@ def parse_entity_yaml(yaml_file: Path, entity_type: str) -> Optional[Dict]:
         return None
 
 
-def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List[int]], Dict[int, str], Dict[int, int]]:
+def parse_domains() -> List[Dict]:
+    """Parse domain YAML files."""
+    domains_path = Path(DOMAINS_DIR)
+    if not domains_path.exists():
+        return []
+
+    domains = []
+    for yaml_file in domains_path.glob("*.yaml"):
+        try:
+            with open(yaml_file, "r", encoding="utf-8") as f:
+                domain_data = yaml.safe_load(f)
+                domains.append(domain_data)
+        except Exception as e:
+            print(f"❌ Error parsing domain {yaml_file.name}: {e}")
+
+    return domains
+
+
+def parse_all_entities(domains: List[Dict]) -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List[int]], Dict[int, str], Dict[int, int]]:
     """Parse all entity YAML files (lessons and menus).
+    
+    UPDATED: Now accepts domains list to pre-initialize domain_lesson_map.
     
     Returns:
         - all_entities: List of entity metadata
@@ -189,14 +209,21 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
         - component_ids: Set of all component IDs
         - domain_lesson_map: Map of domain ID to lesson IDs
         - component_id_to_type: Map of component ID to component type string
-        - component_to_lesson_map: Map of component ID to lesson ID (NEW!)
+        - component_to_lesson_map: Map of component ID to lesson ID
     """
     all_entities = []
     entity_ids = set()
     component_ids = set()
-    domain_lesson_map = {}
     component_id_to_type = {}
-    component_to_lesson_map = {}  # NEW: Reverse index componentId -> lessonId
+    component_to_lesson_map = {}
+
+    # CONSERVATIVE FIX: Initialize domain_lesson_map from domain YAMLs
+    # This ensures all domains exist even if no lessons reference them yet
+    domain_lesson_map = {}
+    for domain in domains:
+        domain_id = domain.get("id")
+        if domain_id is not None:
+            domain_lesson_map[domain_id] = []
 
     # Parse lesson entities
     lessons_path = Path(LESSONS_DIR)
@@ -233,7 +260,7 @@ def parse_all_entities() -> Tuple[List[Dict], Set[int], Set[int], Dict[int, List
                                 )
                             component_id_to_type[comp_id] = comp_type
                             
-                            # NEW: Build reverse index
+                            # Build reverse index
                             if comp_id in component_to_lesson_map:
                                 raise ValueError(
                                     f"FATAL: Component ID {comp_id} appears in multiple lessons!\n"
@@ -315,24 +342,6 @@ def parse_curriculum() -> Optional[Dict]:
         return None
 
 
-def parse_domains() -> List[Dict]:
-    """Parse domain YAML files."""
-    domains_path = Path(DOMAINS_DIR)
-    if not domains_path.exists():
-        return []
-
-    domains = []
-    for yaml_file in domains_path.glob("*.yaml"):
-        try:
-            with open(yaml_file, "r", encoding="utf-8") as f:
-                domain_data = yaml.safe_load(f)
-                domains.append(domain_data)
-        except Exception as e:
-            print(f"❌ Error parsing domain {yaml_file.name}: {e}")
-
-    return domains
-
-
 def generate_yaml_registry(yaml_files: Dict[str, List[Dict[str, str]]]) -> str:
     """Generate simple YAML registry with just file paths for loading."""
 
@@ -388,11 +397,11 @@ def generate_component_registry(
     component_ids: Set,
     domain_lesson_map: Dict[int, List[int]],
     component_id_to_type: Dict[int, str],
-    component_to_lesson_map: Dict[int, int],  # NEW parameter!
+    component_to_lesson_map: Dict[int, int],
     curriculum: Optional[Dict],
     domains: List[Dict],
 ) -> str:
-    """Generate complete TypeScript registry with all 13 mappings."""
+    """Generate complete TypeScript registry with all 12 mappings."""
     imports = []
     registrations = []
 
@@ -409,11 +418,10 @@ def generate_component_registry(
         # Add initializer function with alias to avoid name collision
         if 'initializerFunction' in component:
             # Create unique alias based on component class name
-            # e.g., NewUserWelcomeProgressManager -> createInitialNewUserWelcomeProgress
             base_name = component['componentClass'].replace('ProgressManager', '')
             alias = f"createInitial{base_name}Progress"
             imports_list.append(f"{component['initializerFunction']} as {alias}")
-            component['initializerFunctionAlias'] = alias  # Store for later use
+            component['initializerFunctionAlias'] = alias
         
         import_stmt = f"""import {{ 
     {', '.join(imports_list)}
@@ -449,7 +457,6 @@ def generate_component_registry(
         progress_schema_entries.append(entry)
     progress_schema_content = ",\n".join(progress_schema_entries) if progress_schema_entries else ""
 
-    # NEW: Generate validator function map
     validator_entries = []
     for comp in components:
         if 'validatorFunction' in comp:
@@ -457,7 +464,6 @@ def generate_component_registry(
             validator_entries.append(entry)
     validator_content = ",\n".join(validator_entries) if validator_entries else ""
 
-    # NEW: Generate initializer function map with aliases
     initializer_entries = []
     for comp in components:
         if 'initializerFunctionAlias' in comp:
@@ -477,14 +483,12 @@ def generate_component_registry(
         domain_lesson_entries.append(entry)
     domain_lesson_content = ",\n".join(domain_lesson_entries) if domain_lesson_entries else ""
 
-    # NEW: Generate MAPPING 8 - Component ID to Type
     component_id_to_type_entries = []
     for comp_id, comp_type in sorted(component_id_to_type.items()):
         entry = f'    [{comp_id}, "{comp_type}"]'
         component_id_to_type_entries.append(entry)
     component_id_to_type_content = ",\n".join(component_id_to_type_entries) if component_id_to_type_entries else ""
 
-    # NEW: Generate MAPPING 8.5 - Component ID to Lesson ID
     component_to_lesson_entries = []
     for comp_id, lesson_id in sorted(component_to_lesson_map.items()):
         entry = f'    [{comp_id}, {lesson_id}]'
@@ -508,19 +512,62 @@ def generate_component_registry(
 {imports_code}
 
 /**
- * Component registration data structure
+ * MAPPING 1: Component Type to Class
  */
-interface ComponentRegistration {{
-    componentClass: any;
-    configSchema: any;
-    progressSchema: any;
-    typeName: string;
-}}
+export const componentTypeMap = new Map<string, any>([
+{component_type_content}
+]);
 
 /**
- * Lesson metrics data structure
+ * MAPPING 2: Component Type to Config Schema
  */
-interface LessonMetrics {{
+export const configSchemaMap = new Map<string, any>([
+{config_schema_content}
+]);
+
+/**
+ * MAPPING 3: Component Type to Progress Schema
+ */
+export const progressSchemaMap = new Map<string, any>([
+{progress_schema_content}
+]);
+
+/**
+ * MAPPING 4: Component Type to Validator Function
+ */
+export const componentValidatorMap = new Map<string, Function>([
+{validator_content}
+]);
+
+/**
+ * MAPPING 5: Component Type to Initializer Function
+ */
+export const componentInitializerMap = new Map<string, Function>([
+{initializer_content}
+]);
+
+/**
+ * MAPPING 6: Component Registration Array
+ * Used by component factory for instantiation
+ */
+export const componentRegistrations = [
+{registrations_code}
+];
+
+/**
+ * MAPPING 7: All Entity IDs (Lessons + Menus)
+ */
+export const allLessonIds = {entity_ids_array};
+
+/**
+ * MAPPING 7.5: All Component IDs
+ */
+export const allComponentIds = {component_ids_array};
+
+/**
+ * Lesson Metrics Type
+ */
+export interface LessonMetrics {{
     pageCount: number;
     componentCount: number;
     title: string;
@@ -528,70 +575,8 @@ interface LessonMetrics {{
 }}
 
 /**
- * MAPPING 1: Component Registrations
- * Array of all registered component types with their associated schemas
- */
-export const componentRegistrations: ComponentRegistration[] = [
-{registrations_code}
-];
-
-/**
- * MAPPING 2: Component Type to Class Map
- * Maps component type string to constructor class
- */
-export const componentTypeMap = new Map<string, any>([
-{component_type_content}
-]);
-
-/**
- * MAPPING 3: Component Config Schema Map
- * Maps component type string to config schema
- */
-export const configSchemaMap = new Map<string, any>([
-{config_schema_content}
-]);
-
-/**
- * MAPPING 4: Component Progress Schema Map
- * Maps component type string to progress schema
- */
-export const progressSchemaMap = new Map<string, any>([
-{progress_schema_content}
-]);
-
-/**
- * MAPPING 4.5: Component Validator Function Map
- * Maps component type string to validation function
- * Used by progressIntegrity for recovery operations
- */
-export const componentValidatorMap = new Map<string, (progress: any, config: any) => {{ cleaned: any; defaultedRatio: number }}>([
-{validator_content}
-]);
-
-/**
- * MAPPING 4.7: Component Initializer Function Map
- * Maps component type string to initializer function
- * Used to create initial progress for new users
- */
-export const componentInitializerMap = new Map<string, (config: any) => any>([
-{initializer_content}
-]);
-
-/**
- * MAPPING 5: All Entity IDs (Lessons + Menus)
- * Set of all entity IDs across the platform
- */
-export const allLessonIds = {entity_ids_array};
-
-/**
- * MAPPING 6: All Component IDs
- * Set of all component IDs used across all entities
- */
-export const allComponentIds = {component_ids_array};
-
-/**
- * MAPPING 7: Entity Metrics Map
- * Maps entity ID to metrics (page count, component count, etc.)
+ * MAPPING 7.75: Lesson Metrics
+ * Maps lesson ID to page count and component count
  */
 export const lessonMetrics = new Map<number, LessonMetrics>([
 {entity_metrics_content}
@@ -663,7 +648,8 @@ export class CurriculumRegistry {{
         const metrics = lessonMetrics.get(entityId);
         if (!metrics) {{
             throw new Error(
-                `Entity ${{entityId}} not found in registry. Cannot determine page count.`
+                `Entity ${{entityId}} not found in registry. ` +
+                `Cannot determine page count.`
             );
         }}
         return metrics.pageCount;
@@ -765,9 +751,10 @@ def main():
     yaml_files = scan_all_yaml_files()
 
     print("\n📚 Phase 3: YAML Content Parsing")
-    entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type, component_to_lesson_map = parse_all_entities()
-    curriculum = parse_curriculum()
+    # CONSERVATIVE FIX: Parse domains first, pass to parse_all_entities
     domains = parse_domains()
+    entities, entity_ids, component_ids, domain_lesson_map, component_id_to_type, component_to_lesson_map = parse_all_entities(domains)
+    curriculum = parse_curriculum()
 
     print("\n🗃️ Generating registry files...")
     yaml_registry = generate_yaml_registry(yaml_files)
@@ -778,7 +765,7 @@ def main():
         component_ids,
         domain_lesson_map,
         component_id_to_type,
-        component_to_lesson_map,  # NEW: Pass the reverse index!
+        component_to_lesson_map,
         curriculum,
         domains,
     )

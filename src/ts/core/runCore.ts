@@ -146,44 +146,76 @@ export async function runCore(params: RunCoreParams): Promise<void> {
         if (messages.length > 0) {
           hasChanged = true;
 
-          for (const msg of messages) {
-            try {
-              const handler =
-                params.componentProgressHandlers.get(componentType);
-              if (!handler) {
-                // Developer error - every component type needs a handler
+          // SPLIT: Normal components vs. Main menu special authority
+          const MAIN_MENU_COMPONENT_ID = 1000000;
+
+          if (componentId !== MAIN_MENU_COMPONENT_ID) {
+            // ================================================================
+            // NORMAL COMPONENTS: Can only modify themselves
+            // ================================================================
+            for (const msg of messages) {
+              try {
+                // Enforce: message must target this component only
+                if (msg.componentId !== componentId) {
+                  throw new Error(
+                    `Component ${componentId} attempted to modify component ${msg.componentId} (unauthorized)`,
+                  );
+                }
+
+                const handler =
+                  params.componentProgressHandlers.get(componentType);
+
+                if (!handler) {
+                  console.error(
+                    `No handler for component type ${componentType}`,
+                  );
+                  continue;
+                }
+
+                handler(msg);
+              } catch (error) {
                 console.error(
-                  `No handler found for component type: ${componentType}`,
+                  `Component ${componentId} message failed:`,
+                  error,
                 );
-                continue;
+                // Don't break - continue processing other messages
               }
+            }
+          } else {
+            // ================================================================
+            // MAIN MENU SPECIAL CASE: Can send messages to ANY component
+            // ================================================================
+            for (const msg of messages) {
+              try {
+                // Main menu can target any component - look up target's type
+                const targetComponentType = componentIdToTypeMap.get(
+                  msg.componentId,
+                );
 
-              handler.handleMessage(msg);
-            } catch (error) {
-              // Component bug - log but continue processing
-              console.error(`Component ${componentId} message error:`, error);
+                if (!targetComponentType) {
+                  console.error(
+                    `Main menu targeted unknown component ${msg.componentId}`,
+                  );
+                  continue;
+                }
 
-              // TODO: Consider component-level error recovery here
-              // Could destroy and recreate component with recovered progress
-              // For now, just log and continue
+                const handler =
+                  params.componentProgressHandlers.get(targetComponentType);
 
-              // Future enhancement: If errors persist, could trigger:
-              // 1. Component Core destruction
-              // 2. Heartbeat timeout detection
-              // 3. Component recreation with recovered state
-              //
-              // This prevents buggy components from permanently hanging
-              // Interface.destroy() calls componentCoordinator.removeComponent()
-              // This prevents coordinator from holding stale references after component failure
-              // Interface will need componentCoordinator passed to constructor
+                if (!handler) {
+                  console.error(
+                    `No handler for component type ${targetComponentType}`,
+                  );
+                  continue;
+                }
 
-              currentComponents.componentCores.delete(componentId);
-              currentComponents.componentProgressPolling.delete(componentId);
-              currentComponents.overallProgressPolling.delete(componentId);
-              currentComponents.navigationPolling.delete(componentId);
-              currentComponents.settingsPolling.delete(componentId);
-
-              continue; // Skip to next component
+                handler.handleMessage(msg);
+              } catch (error) {
+                console.error(
+                  `Main menu message failed for component ${msg.componentId}:`,
+                  error,
+                );
+              }
             }
           }
         }
@@ -278,7 +310,8 @@ export async function runCore(params: RunCoreParams): Promise<void> {
     const now = Date.now();
     const timeSinceLastSave = now - lastSaveQueueTime;
     const shouldQueueSave =
-      (hasChanged && timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS) || overallProgressChanged;
+      (hasChanged && timeSinceLastSave >= SAVE_QUEUE_INTERVAL_MS) ||
+      overallProgressChanged;
 
     if (shouldQueueSave) {
       saveManager.queueSave(bundleJSON, hasChanged, overallProgressChanged);

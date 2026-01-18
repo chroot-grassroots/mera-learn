@@ -26,7 +26,7 @@ import { CurriculumRegistry } from "../registry/mera-registry.js";
  */
 function isValidLessonId(
   lessonId: number,
-  registry: CurriculumRegistry
+  registry: CurriculumRegistry,
 ): boolean {
   return registry.hasLesson(lessonId);
 }
@@ -38,7 +38,7 @@ function isValidLessonId(
  */
 function isValidDomainId(
   domainId: number,
-  registry: CurriculumRegistry
+  registry: CurriculumRegistry,
 ): boolean {
   return registry.hasDomain(domainId);
 }
@@ -145,7 +145,7 @@ export class OverallProgressManager implements IReadonlyOverallProgressManager {
 
   constructor(
     initialProgress: OverallProgressData,
-    private curriculumRegistry: CurriculumRegistry
+    private curriculumRegistry: CurriculumRegistry,
   ) {
     // Clone input data - manager owns its own copy
     this.progress = structuredClone(initialProgress);
@@ -360,6 +360,44 @@ export class OverallProgressManager implements IReadonlyOverallProgressManager {
     this.progress.currentStreak += 1;
     this.progress.lastStreakCheck = Math.floor(Date.now() / 1000);
   }
+
+  /**
+   * Get progress for a specific domain.
+   *
+   * Counts completed lessons vs total lessons in the domain.
+   * Used by main menu for domain progress visualization.
+   *
+   * @param domainId - Domain to check
+   * @returns Object with completed and total lesson counts
+   * @throws Error if domain ID invalid
+   */
+  getDomainProgress(domainId: number): { completed: number; total: number } {
+    if (!isValidDomainId(domainId, this.curriculumRegistry)) {
+      throw new Error(`Invalid domain ID: ${domainId}`);
+    }
+
+    const lessonsInDomain =
+      this.curriculumRegistry.getLessonsInDomain(domainId);
+
+    if (!lessonsInDomain) {
+      return { completed: 0, total: 0 };
+    }
+
+    let completed = 0;
+    for (const lessonId of lessonsInDomain) {
+      const lessonKey = lessonId.toString();
+      const completion = this.progress.lessonCompletions[lessonKey];
+
+      if (completion && completion.timeCompleted !== null) {
+        completed++;
+      }
+    }
+
+    return {
+      completed,
+      total: lessonsInDomain.length,
+    };
+  }
 }
 
 // ============================================================================
@@ -424,13 +462,13 @@ export class OverallProgressMessageQueueManager {
     const parseResult = ImmutableId.safeParse(lessonId);
     if (!parseResult.success) {
       throw new Error(
-        `lessonId must be a valid immutable ID, got: ${lessonId}`
+        `lessonId must be a valid immutable ID, got: ${lessonId}`,
       );
     }
 
     if (!isValidLessonId(lessonId, this.curriculumRegistry)) {
       throw new Error(
-        `Invalid lesson ID: ${lessonId} does not exist in curriculum`
+        `Invalid lesson ID: ${lessonId} does not exist in curriculum`,
       );
     }
 
@@ -458,13 +496,13 @@ export class OverallProgressMessageQueueManager {
     const parseResult = ImmutableId.safeParse(lessonId);
     if (!parseResult.success) {
       throw new Error(
-        `lessonId must be a valid immutable ID, got: ${lessonId}`
+        `lessonId must be a valid immutable ID, got: ${lessonId}`,
       );
     }
 
     if (!isValidLessonId(lessonId, this.curriculumRegistry)) {
       throw new Error(
-        `Invalid lesson ID: ${lessonId} does not exist in curriculum`
+        `Invalid lesson ID: ${lessonId} does not exist in curriculum`,
       );
     }
 
@@ -492,13 +530,13 @@ export class OverallProgressMessageQueueManager {
     const parseResult = ImmutableId.safeParse(domainId);
     if (!parseResult.success) {
       throw new Error(
-        `domainId must be a valid immutable ID, got: ${domainId}`
+        `domainId must be a valid immutable ID, got: ${domainId}`,
       );
     }
 
     if (!isValidDomainId(domainId, this.curriculumRegistry)) {
       throw new Error(
-        `Invalid domain ID: ${domainId} does not exist in curriculum`
+        `Invalid domain ID: ${domainId} does not exist in curriculum`,
       );
     }
 
@@ -526,13 +564,13 @@ export class OverallProgressMessageQueueManager {
     const parseResult = ImmutableId.safeParse(domainId);
     if (!parseResult.success) {
       throw new Error(
-        `domainId must be a valid immutable ID, got: ${domainId}`
+        `domainId must be a valid immutable ID, got: ${domainId}`,
       );
     }
 
     if (!isValidDomainId(domainId, this.curriculumRegistry)) {
       throw new Error(
-        `Invalid domain ID: ${domainId} does not exist in curriculum`
+        `Invalid domain ID: ${domainId} does not exist in curriculum`,
       );
     }
 
@@ -611,7 +649,7 @@ export class OverallProgressMessageQueueManager {
 export class OverallProgressMessageHandler {
   constructor(
     private progressManager: OverallProgressManager,
-    private curriculumRegistry: CurriculumRegistry
+    private curriculumRegistry: CurriculumRegistry,
   ) {}
 
   /**
@@ -627,7 +665,7 @@ export class OverallProgressMessageHandler {
     const zodResult = OverallProgressMessageSchema.safeParse(message);
     if (!zodResult.success) {
       throw new Error(
-        `Invalid overall progress message: ${zodResult.error.message}`
+        `Invalid overall progress message: ${zodResult.error.message}`,
       );
     }
 
@@ -645,7 +683,7 @@ export class OverallProgressMessageHandler {
     const expectedCount = argCounts[message.method];
     if (message.args.length !== expectedCount) {
       throw new Error(
-        `${message.method} requires ${expectedCount} argument(s), got ${message.args.length}`
+        `${message.method} requires ${expectedCount} argument(s), got ${message.args.length}`,
       );
     }
   }

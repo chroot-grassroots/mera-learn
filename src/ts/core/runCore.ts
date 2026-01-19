@@ -172,7 +172,7 @@ export async function runCore(params: RunCoreParams): Promise<void> {
                   continue;
                 }
 
-                handler(msg);
+                handler.handleMessage(msg);
               } catch (error) {
                 console.error(
                   `Component ${componentId} message failed:`,

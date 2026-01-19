@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2026-01-18T16:05:39.582237
+ * Generated on: 2026-01-18T20:40:57.141589
  * 
  * This file contains ALL 12 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -90,12 +90,12 @@ export const componentRegistrations = [
 /**
  * MAPPING 7: All Entity IDs (Lessons + Menus)
  */
-export const allLessonIds = [1, 12345];
+export const allLessonIds = [0, 1, 12345, 12346, 12347, 12348];
 
 /**
  * MAPPING 7.5: All Component IDs
  */
-export const allComponentIds = [123456, 123457, 1000001];
+export const allComponentIds = [123456, 123457, 223456, 223457, 323456, 323457, 423456, 423457, 1000000, 1000001];
 
 /**
  * Lesson Metrics Type
@@ -112,8 +112,12 @@ export interface LessonMetrics {
  * Maps lesson ID to page count and component count
  */
 export const lessonMetrics = new Map<number, LessonMetrics>([
+    [12348, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
+    [0, { pageCount: 1, componentCount: 1, title: "Main Menu", difficulty: "beginner" }],
     [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
-    [1, { pageCount: 1, componentCount: 1, title: "Welcome to Mera", difficulty: "beginner" }]
+    [1, { pageCount: 1, componentCount: 1, title: "Welcome to Mera", difficulty: "beginner" }],
+    [12346, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
+    [12347, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }]
 ]);
 
 /**
@@ -124,6 +128,13 @@ export const lessonMetrics = new Map<number, LessonMetrics>([
 export const componentIdToTypeMap = new Map<number, string>([
     [123456, "basic_task"],
     [123457, "basic_task"],
+    [223456, "basic_task"],
+    [223457, "basic_task"],
+    [323456, "basic_task"],
+    [323457, "basic_task"],
+    [423456, "basic_task"],
+    [423457, "basic_task"],
+    [1000000, "main_menu"],
     [1000001, "new_user_welcome"]
 ]);
 
@@ -135,6 +146,13 @@ export const componentIdToTypeMap = new Map<number, string>([
 export const componentToLessonMap = new Map<number, number>([
     [123456, 12345],
     [123457, 12345],
+    [223456, 12346],
+    [223457, 12346],
+    [323456, 12347],
+    [323457, 12347],
+    [423456, 12348],
+    [423457, 12348],
+    [1000000, 0],
     [1000001, 1]
 ]);
 
@@ -143,10 +161,10 @@ export const componentToLessonMap = new Map<number, number>([
  * Maps domain ID to array of lesson IDs in that domain
  */
 export const domainLessonMap = new Map<number, number[]>([
-    [1002, []],
+    [1004, [12348]],
     [1001, [12345]],
-    [1000, []],
-    [1003, []]
+    [1002, [12346]],
+    [1003, [12347]]
 ]);
 
 /**
@@ -239,146 +257,67 @@ export const curriculumData = new CurriculumRegistry(
  */
 export const domainData = [
   {
-    "id": 1002,
-    "title": "Communicate Securely",
-    "description": "Understand what's protected versus exposed in different communication channels. Learn to match communication tools to threat models and use appropriate encryption for sensitive conversations.",
-    "order": 3,
-    "lessonCount": 20,
-    "estimatedHours": 3.33,
-    "learningObjectives": [
-      "Master Signal setup including safety number verification",
-      "Understand different secure messenger use cases",
-      "Recognize email encryption limitations and alternatives",
-      "Configure and use VPN appropriately",
-      "Protect communications on public WiFi",
-      "Establish communication protocols for organizing work"
-    ],
-    "keyTopics": [
-      "Signal deep dive (safety numbers, disappearing messages, group security)",
-      "Alternative messengers (SimpleX, Briar) and their use cases",
-      "Email security and metadata exposure",
-      "Voice call security and when to meet in-person",
-      "Understanding encryption (end-to-end vs transport, HTTPS limitations)",
-      "VPN basics (what it protects, what it doesn't, provider selection)",
-      "Public WiFi risks and mitigation",
-      "Network monitoring awareness",
-      "Browser privacy settings",
-      "DNS privacy and DoH setup",
-      "Communication escalation ladder (public \u2192 secure messenger \u2192 in-person)"
-    ],
-    "threatsCovered": [
-      "Unencrypted communications interception",
-      "Metadata exposure (who, when, even if content encrypted)",
-      "Man-in-the-middle attacks on public WiFi",
-      "ISP-level surveillance and network monitoring",
-      "DNS query logging",
-      "Compromised communication channels"
-    ],
-    "version": "1.0.0"
-  },
-  {
-    "id": 1001,
-    "title": "Secure Your Accounts & Devices",
-    "description": "Secure what you already have through password management, two-factor authentication, device security, and privacy settings. Move from default settings to basic hardening that's achievable for everyone.",
-    "order": 2,
-    "lessonCount": 20,
-    "estimatedHours": 3.33,
-    "learningObjectives": [
-      "Implement password manager for all accounts",
-      "Enable two-factor authentication on critical accounts",
-      "Configure device security for checkpoint scenarios",
-      "Audit and restrict app permissions",
-      "Establish secure backup and recovery procedures",
-      "Maintain security through regular updates and hygiene"
-    ],
-    "keyTopics": [
-      "Password manager installation and master passphrase",
-      "Authenticator apps vs SMS 2FA (SIM swap risks)",
-      "Phone/device lockdown (auto-lock, FaceID timing, USB restrictions)",
-      "App permissions audit (location, camera, contacts)",
-      "Encrypted local backups (not cloud)",
-      "Account recovery setup (to activist email, not civilian)",
-      "Digital hygiene and cleanup",
-      "Update practices and patch management"
-    ],
-    "threatsCovered": [
-      "Device seizure at checkpoints and borders",
-      "Credential theft and account takeover",
-      "SIM-swap and SS7 attacks",
-      "Unauthorized app permissions",
-      "Cloud backup subpoenas",
-      "Known vulnerabilities in outdated software"
-    ],
-    "version": "1.0.0"
-  },
-  {
-    "id": 1000,
-    "title": "Control Your Activist Data",
-    "description": "Learn to compartmentalize your digital life by controlling where your activist data lives. Create and maintain separate accounts for activist work. Protect future actions through strategic data separation.",
-    "order": 1,
-    "lessonCount": 20,
-    "estimatedHours": 3.33,
-    "learningObjectives": [
-      "Understand why compartmentalization matters for activist safety",
-      "Create and maintain separate activist email and messaging accounts",
-      "Migrate sensitive accounts to protected identity",
-      "Establish boundaries between activist and civilian digital presence",
-      "Audit and maintain identity separation over time"
-    ],
-    "keyTopics": [
-      "Meta/ICE cooperation documentation and other data handover cases",
-      "Building activist identity (Proton Mail, Signal username)",
-      "Account migration strategy and password reset migration",
-      "Social media compartmentalization",
-      "Decision framework for what goes where",
-      "Monthly audit procedures"
-    ],
-    "threatsCovered": [
-      "Corporate platform data handovers to law enforcement",
-      "Geofence warrants and location tracking",
-      "Social graph analysis from contact lists",
-      "Historical data exposure via subpoena",
-      "Cross-account identity linking"
-    ],
-    "version": "1.0.0"
-  },
-  {
-    "id": 1003,
-    "title": "Recognize & Respond to Attacks",
-    "description": "Develop skills to recognize when you're being attacked and respond appropriately. Learn to identify phishing, social engineering, surveillance, and compromise, then execute appropriate response protocols.",
+    "domain_id": 1003,
+    "title": "Recognize & Respond to Threats",
+    "description": "Identify phishing, social engineering, and surveillance, then respond appropriately",
+    "pedagogical_focus": "Threat recognition and incident response for activist contexts",
+    "lesson_count": 18,
+    "estimated_weeks": 6,
     "order": 4,
-    "lessonCount": 18,
-    "estimatedHours": 3.0,
-    "learningObjectives": [
-      "Identify phishing and spear-phishing attempts",
-      "Recognize social engineering tactics",
-      "Detect signs of physical and digital surveillance",
-      "Execute checkpoint and seizure protocols",
-      "Identify signs of account compromise",
-      "Perform emergency lockdown and damage assessment"
+    "key_outcomes": [
+      "Recognize phishing attempts and social engineering",
+      "Identify surveillance indicators",
+      "Respond appropriately to device seizure",
+      "Implement threat-appropriate security measures"
     ],
-    "keyTopics": [
-      "Phishing recognition (visual cues, pressure tactics, verification procedures)",
-      "Advanced phishing (spear phishing, compromised colleagues, fake platforms)",
-      "Social engineering (phone, in-person, information gathering)",
-      "Fake apps and trojanized software",
-      "Physical surveillance recognition",
-      "Checkpoint and seizure protocols",
-      "Signs of compromise (unexpected activity, unknown devices)",
-      "Emergency lockdown procedures",
-      "Warning your network securely",
-      "Damage assessment and recovery"
+    "core_concept": "Threat modeling - recognize attacks and respond proportionally to actual risk"
+  },
+  {
+    "domain_id": 1002,
+    "title": "Lock Down Your Accounts",
+    "description": "Secure existing accounts with strong passwords, 2FA, and proper device settings",
+    "pedagogical_focus": "Basic account security and device hardening for everyday protection",
+    "lesson_count": 20,
+    "estimated_weeks": 7,
+    "order": 2,
+    "key_outcomes": [
+      "Implement strong unique passwords with password manager",
+      "Enable two-factor authentication on critical accounts",
+      "Configure secure device settings (disable FaceID, auto-backup)",
+      "Understand and manage app permissions"
     ],
-    "threatsCovered": [
-      "Targeted phishing and credential theft",
-      "Social engineering attacks",
-      "Malicious apps and software",
-      "Physical surveillance and following",
-      "Device seizure at checkpoints",
-      "Account compromise and takeover",
-      "Network compromise and lateral movement"
+    "core_concept": "Defense in depth - multiple layers of security on devices and accounts"
+  },
+  {
+    "domain_id": 1001,
+    "title": "Separate Your Identities",
+    "description": "Learn to compartmentalize your digital life between activist and civilian identities",
+    "pedagogical_focus": "Identity separation and account isolation to protect activist work from surveillance",
+    "lesson_count": 20,
+    "estimated_weeks": 7,
+    "order": 1,
+    "key_outcomes": [
+      "Create separate activist and civilian email accounts",
+      "Migrate sensitive accounts to protected identity",
+      "Understand metadata risks in social media",
+      "Maintain boundaries between identities"
     ],
-    "version": "1.0.0"
+    "core_concept": "Compartmentalization - assume civilian identity is compromised, protect activist identity"
+  },
+  {
+    "domain_id": 1004,
+    "title": "Recognize & Respond to Threats",
+    "description": "Identify phishing, social engineering, and surveillance, and respond appropriately",
+    "pedagogical_focus": "Threat recognition and incident response",
+    "lesson_count": 18,
+    "estimated_weeks": 6,
+    "order": 4,
+    "key_outcomes": [
+      "Recognize phishing attempts and social engineering",
+      "Identify surveillance indicators",
+      "Respond appropriately to device seizure",
+      "Implement threat-appropriate security measures"
+    ]
   }
 ];
 
@@ -387,6 +326,30 @@ export const domainData = [
  * Complete metadata for all entities (lessons and menus)
  */
 export const lessonMetadata = [
+  {
+    "id": 12348,
+    "path": "static/yaml/lessons/phishing-basics-4.yaml",
+    "title": "Phishing Recognition Basics",
+    "entityType": "lesson",
+    "pageCount": 2,
+    "componentCount": 2,
+    "difficulty": "beginner",
+    "estimatedMinutes": 8,
+    "required": true,
+    "domainId": 1004
+  },
+  {
+    "id": 0,
+    "path": "static/yaml/lessons/main_menu.yaml",
+    "title": "Main Menu",
+    "entityType": "lesson",
+    "pageCount": 1,
+    "componentCount": 1,
+    "difficulty": "beginner",
+    "estimatedMinutes": 1,
+    "required": true,
+    "domainId": null
+  },
   {
     "id": 12345,
     "path": "static/yaml/lessons/phishing-basics.yaml",
@@ -410,6 +373,30 @@ export const lessonMetadata = [
     "estimatedMinutes": 5,
     "required": true,
     "domainId": null
+  },
+  {
+    "id": 12346,
+    "path": "static/yaml/lessons/phishing-basics-2.yaml",
+    "title": "Phishing Recognition Basics",
+    "entityType": "lesson",
+    "pageCount": 2,
+    "componentCount": 2,
+    "difficulty": "beginner",
+    "estimatedMinutes": 8,
+    "required": true,
+    "domainId": 1002
+  },
+  {
+    "id": 12347,
+    "path": "static/yaml/lessons/phishing-basics-3.yaml",
+    "title": "Phishing Recognition Basics",
+    "entityType": "lesson",
+    "pageCount": 2,
+    "componentCount": 2,
+    "difficulty": "beginner",
+    "estimatedMinutes": 8,
+    "required": true,
+    "domainId": 1003
   }
 ];
 

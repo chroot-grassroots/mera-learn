@@ -49703,27 +49703,45 @@ var init_mera_registry = __esm({
         typeName: "basic_task"
       }
     ];
-    allLessonIds = [1, 12345];
-    allComponentIds = [123456, 123457, 1000001];
+    allLessonIds = [0, 1, 12345, 12346, 12347, 12348];
+    allComponentIds = [123456, 123457, 223456, 223457, 323456, 323457, 423456, 423457, 1e6, 1000001];
     lessonMetrics = /* @__PURE__ */ new Map([
+      [12348, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
+      [0, { pageCount: 1, componentCount: 1, title: "Main Menu", difficulty: "beginner" }],
       [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
-      [1, { pageCount: 1, componentCount: 1, title: "Welcome to Mera", difficulty: "beginner" }]
+      [1, { pageCount: 1, componentCount: 1, title: "Welcome to Mera", difficulty: "beginner" }],
+      [12346, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
+      [12347, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }]
     ]);
     componentIdToTypeMap = /* @__PURE__ */ new Map([
       [123456, "basic_task"],
       [123457, "basic_task"],
+      [223456, "basic_task"],
+      [223457, "basic_task"],
+      [323456, "basic_task"],
+      [323457, "basic_task"],
+      [423456, "basic_task"],
+      [423457, "basic_task"],
+      [1e6, "main_menu"],
       [1000001, "new_user_welcome"]
     ]);
     componentToLessonMap = /* @__PURE__ */ new Map([
       [123456, 12345],
       [123457, 12345],
+      [223456, 12346],
+      [223457, 12346],
+      [323456, 12347],
+      [323457, 12347],
+      [423456, 12348],
+      [423457, 12348],
+      [1e6, 0],
       [1000001, 1]
     ]);
     domainLessonMap = /* @__PURE__ */ new Map([
-      [1002, []],
+      [1004, [12348]],
       [1001, [12345]],
-      [1e3, []],
-      [1003, []]
+      [1002, [12346]],
+      [1003, [12347]]
     ]);
     curriculumDataRaw = null;
     CurriculumRegistry = class {
@@ -49788,6 +49806,30 @@ var init_mera_registry = __esm({
     );
     lessonMetadata = [
       {
+        "id": 12348,
+        "path": "static/yaml/lessons/phishing-basics-4.yaml",
+        "title": "Phishing Recognition Basics",
+        "entityType": "lesson",
+        "pageCount": 2,
+        "componentCount": 2,
+        "difficulty": "beginner",
+        "estimatedMinutes": 8,
+        "required": true,
+        "domainId": 1004
+      },
+      {
+        "id": 0,
+        "path": "static/yaml/lessons/main_menu.yaml",
+        "title": "Main Menu",
+        "entityType": "lesson",
+        "pageCount": 1,
+        "componentCount": 1,
+        "difficulty": "beginner",
+        "estimatedMinutes": 1,
+        "required": true,
+        "domainId": null
+      },
+      {
         "id": 12345,
         "path": "static/yaml/lessons/phishing-basics.yaml",
         "title": "Phishing Recognition Basics",
@@ -49810,6 +49852,30 @@ var init_mera_registry = __esm({
         "estimatedMinutes": 5,
         "required": true,
         "domainId": null
+      },
+      {
+        "id": 12346,
+        "path": "static/yaml/lessons/phishing-basics-2.yaml",
+        "title": "Phishing Recognition Basics",
+        "entityType": "lesson",
+        "pageCount": 2,
+        "componentCount": 2,
+        "difficulty": "beginner",
+        "estimatedMinutes": 8,
+        "required": true,
+        "domainId": 1002
+      },
+      {
+        "id": 12347,
+        "path": "static/yaml/lessons/phishing-basics-3.yaml",
+        "title": "Phishing Recognition Basics",
+        "entityType": "lesson",
+        "pageCount": 2,
+        "componentCount": 2,
+        "difficulty": "beginner",
+        "estimatedMinutes": 8,
+        "required": true,
+        "domainId": 1003
       }
     ];
     console.log(`Mera Registry loaded with all 12 mappings:`);
@@ -53918,6 +53984,7 @@ init_zod();
 init_coreTypes();
 init_basicTaskCore();
 init_newUserWelcomeCore();
+init_mainMenuCore();
 var LessonMetadataSchema = external_exports.object({
   id: ImmutableId,
   entityType: external_exports.enum(["lesson", "menu"]),
@@ -53932,7 +53999,8 @@ var LessonMetadataSchema = external_exports.object({
 });
 var ComponentConfigSchema = external_exports.discriminatedUnion("type", [
   BasicTaskComponentConfigSchema,
-  NewUserWelcomeComponentConfigSchema
+  NewUserWelcomeComponentConfigSchema,
+  MainMenuComponentConfigSchema
   // Add new component schemas here as you create them
   // Example: QuizComponentConfigSchema,
   // Example: VideoComponentConfigSchema,
@@ -54030,7 +54098,9 @@ async function retryFetchYAML(filename, path) {
   let lastError = "Unknown error";
   for (let attempt = 1; attempt <= MAX_FETCH_RETRIES; attempt++) {
     try {
-      console.log(`  \u{1F4E1} Attempt ${attempt}/${MAX_FETCH_RETRIES} for ${filename}...`);
+      console.log(
+        `  \u{1F4E1} Attempt ${attempt}/${MAX_FETCH_RETRIES} for ${filename}...`
+      );
       const response = await fetch(path);
       if (!response.ok) {
         lastError = `HTTP ${response.status}: ${response.statusText}`;
@@ -54048,7 +54118,9 @@ async function retryFetchYAML(filename, path) {
         throw new YAMLFetchError(filename, path, attempt, lastError);
       }
       const yamlText = await response.text();
-      console.log(`  \u2705 Successfully fetched ${filename} on attempt ${attempt}`);
+      console.log(
+        `  \u2705 Successfully fetched ${filename} on attempt ${attempt}`
+      );
       return yamlText;
     } catch (error46) {
       if (error46 instanceof YAMLFetchError) {
@@ -54124,6 +54196,10 @@ function parseAllLessons() {
   }
   console.log(`\u{1F4DA} Processing ${entries.length} lesson file(s)...`);
   for (const [filename, yamlText] of entries) {
+    if (filename.startsWith("domain_") || filename.startsWith("curriculum_")) {
+      console.log(`\u23ED\uFE0F  Skipping non-lesson file: ${filename}`);
+      continue;
+    }
     console.log(`\u{1F4C4} Parsing ${filename}...`);
     let parsed;
     try {
@@ -54137,7 +54213,10 @@ function parseAllLessons() {
     try {
       lesson = LessonSchema.parse(parsed);
     } catch (error46) {
-      console.error(`\u274C Validation error in ${filename} (lesson ${lessonId}):`, error46);
+      console.error(
+        `\u274C Validation error in ${filename} (lesson ${lessonId}):`,
+        error46
+      );
       throw new YAMLValidationError(filename, lessonId, error46);
     }
     if (lessons.has(lesson.metadata.id)) {
@@ -55577,7 +55656,7 @@ async function runCore(params) {
                   );
                   continue;
                 }
-                handler(msg);
+                handler.handleMessage(msg);
               } catch (error46) {
                 console.error(
                   `Component ${componentId} message failed:`,

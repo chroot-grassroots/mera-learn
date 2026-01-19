@@ -151,7 +151,7 @@ def parse_entity_yaml(yaml_file: Path, entity_type: str) -> Optional[Dict]:
         metadata = data.get("metadata", {})
         entity_id = metadata.get("id")
 
-        if not entity_id:
+        if entity_id is None:  # ← Allows 0 but catches missing ID
             return None
 
         pages = data.get("pages", [])

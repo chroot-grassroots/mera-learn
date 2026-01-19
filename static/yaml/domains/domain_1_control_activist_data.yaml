@@ -1,41 +1,13 @@
-# Domain 1: Control Your Activist Data
-# Immutable ID: 1000 (domains use range 1,000-9,999)
-# Lesson count: 20 lessons
-# Focus: Compartmentalization and data sovereignty
-
-id: 1000
-title: "Control Your Activist Data"
-description: "Learn to compartmentalize your digital life by controlling where your activist data lives. Create and maintain separate accounts for activist work. Protect future actions through strategic data separation."
+domain_id: 1001
+title: "Separate Your Identities"
+description: "Learn to compartmentalize your digital life between activist and civilian identities"
+pedagogical_focus: "Identity separation and account isolation to protect activist work from surveillance"
+lesson_count: 20
+estimated_weeks: 7
 order: 1
-lessonCount: 20
-estimatedHours: 3.33
-
-# Pedagogical rationale:
-# - Highest priority for activists given documented corporate cooperation with law enforcement
-# - "Already compromised" reality: focus on protecting FUTURE actions, not erasing past
-# - Framing: "Create a new identity" rather than "abandon your old one"
-# - Core concept: Activist identity (assume NOT compromised) vs Civilian identity (assume IS compromised)
-
-learningObjectives:
-  - "Understand why compartmentalization matters for activist safety"
-  - "Create and maintain separate activist email and messaging accounts"
+key_outcomes:
+  - "Create separate activist and civilian email accounts"
   - "Migrate sensitive accounts to protected identity"
-  - "Establish boundaries between activist and civilian digital presence"
-  - "Audit and maintain identity separation over time"
-
-keyTopics:
-  - "Meta/ICE cooperation documentation and other data handover cases"
-  - "Building activist identity (Proton Mail, Signal username)"
-  - "Account migration strategy and password reset migration"
-  - "Social media compartmentalization"
-  - "Decision framework for what goes where"
-  - "Monthly audit procedures"
-
-threatsCovered:
-  - "Corporate platform data handovers to law enforcement"
-  - "Geofence warrants and location tracking"
-  - "Social graph analysis from contact lists"
-  - "Historical data exposure via subpoena"
-  - "Cross-account identity linking"
-
-version: "1.0.0"
+  - "Understand metadata risks in social media"
+  - "Maintain boundaries between identities"
+core_concept: "Compartmentalization - assume civilian identity is compromised, protect activist identity"

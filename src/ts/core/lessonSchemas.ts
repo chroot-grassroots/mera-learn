@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ImmutableId } from './coreTypes.js';
 import { BasicTaskComponentConfigSchema } from '../components/cores/basicTaskCore.js';
 import { NewUserWelcomeComponentConfigSchema } from '../components/cores/newUserWelcomeCore.js';
+import { MainMenuComponentConfigSchema } from "../components/cores/mainMenuCore.js";
 
 // ============================================================================
 // LESSON METADATA SCHEMA
@@ -49,6 +50,7 @@ export const LessonMetadataSchema = z.object({
 export const ComponentConfigSchema = z.discriminatedUnion("type", [
   BasicTaskComponentConfigSchema,
   NewUserWelcomeComponentConfigSchema,
+  MainMenuComponentConfigSchema,
   // Add new component schemas here as you create them
   // Example: QuizComponentConfigSchema,
   // Example: VideoComponentConfigSchema,

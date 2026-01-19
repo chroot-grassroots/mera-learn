@@ -1,48 +1,16 @@
-# Domain 3: Communicate Securely
-# Immutable ID: 1002 (domains use range 1,000-9,999)
-# Lesson count: 20 lessons
-# Focus: Understanding and using appropriate secure communication tools
+# Domain 4: Recognize & Respond to Threats
+# Metadata file describing this learning domain
 
-id: 1002
-title: "Communicate Securely"
-description: "Understand what's protected versus exposed in different communication channels. Learn to match communication tools to threat models and use appropriate encryption for sensitive conversations."
-order: 3
-lessonCount: 20
-estimatedHours: 3.33
-
-# Pedagogical rationale:
-# - Most users currently: SMS for everything, unencrypted email, no VPN, unprotected public WiFi
-# - Goal: Understand what's protected vs exposed, use appropriate tools for context
-# - Focus on achievable secure communication practices
-# - Threat-model driven tool selection
-
-learningObjectives:
-  - "Master Signal setup including safety number verification"
-  - "Understand different secure messenger use cases"
-  - "Recognize email encryption limitations and alternatives"
-  - "Configure and use VPN appropriately"
-  - "Protect communications on public WiFi"
-  - "Establish communication protocols for organizing work"
-
-keyTopics:
-  - "Signal deep dive (safety numbers, disappearing messages, group security)"
-  - "Alternative messengers (SimpleX, Briar) and their use cases"
-  - "Email security and metadata exposure"
-  - "Voice call security and when to meet in-person"
-  - "Understanding encryption (end-to-end vs transport, HTTPS limitations)"
-  - "VPN basics (what it protects, what it doesn't, provider selection)"
-  - "Public WiFi risks and mitigation"
-  - "Network monitoring awareness"
-  - "Browser privacy settings"
-  - "DNS privacy and DoH setup"
-  - "Communication escalation ladder (public → secure messenger → in-person)"
-
-threatsCovered:
-  - "Unencrypted communications interception"
-  - "Metadata exposure (who, when, even if content encrypted)"
-  - "Man-in-the-middle attacks on public WiFi"
-  - "ISP-level surveillance and network monitoring"
-  - "DNS query logging"
-  - "Compromised communication channels"
-
-version: "1.0.0"
+domain_id: 1003
+title: "Recognize & Respond to Threats"
+description: "Identify phishing, social engineering, and surveillance, then respond appropriately"
+pedagogical_focus: "Threat recognition and incident response for activist contexts"
+lesson_count: 18
+estimated_weeks: 6
+order: 4
+key_outcomes:
+  - "Recognize phishing attempts and social engineering"
+  - "Identify surveillance indicators"
+  - "Respond appropriately to device seizure"
+  - "Implement threat-appropriate security measures"
+core_concept: "Threat modeling - recognize attacks and respond proportionally to actual risk"

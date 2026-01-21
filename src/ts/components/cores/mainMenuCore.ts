@@ -2,29 +2,38 @@
  * @fileoverview Main Menu Component Core
  * @module components/cores/mainMenuCore
  * 
- * Main menu serves as the application home base, displaying:
- * - Learning streak tracking
- * - Domain progress overview
- * - Jump In recommendations
- * - Tree of Knowledge badges
+ * Singleton component serving as user's home base.
+ * Displays progress, manages streaks, enables navigation and lesson resets.
  * 
- * Special authorization: Can send messages to modify other components (for reset)
+ * Special permissions:
+ * - Can modify overall progress (streak tracking)
+ * - Can modify navigation (lesson clicks)
+ * - Can modify other components' progress (lesson reset - Phase 7)
  */
 
 import { z } from "zod";
 import {
   BaseComponentCore,
-  BaseComponentProgressManager,
   BaseComponentConfigSchema,
   BaseComponentProgressSchema,
+  BaseComponentProgressManager,
 } from "./baseComponentCore.js";
-import type { ComponentProgressMessage } from "../../core/coreTypes.js";
+import { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
+import { MainMenuInterface } from "../interfaces/mainMenuInterface.js";
 import type { IReadonlyOverallProgressManager } from "../../core/overallProgressSchema.js";
 import type { IReadonlyNavigationManager } from "../../core/navigationSchema.js";
 import type { IReadonlySettingsManager } from "../../core/settingsSchema.js";
 import type { CurriculumRegistry } from "../../registry/mera-registry.js";
-import type { TimelineContainer } from "../../ui/timelineContainer.js";
-import type { BaseComponentInterface } from "../interfaces/baseComponentInterface.js";
+import { TimelineContainer } from "../../ui/timelineContainer.js";
+import { ComponentProgressMessage } from "../../core/coreTypes.js";
+import { 
+  OverallProgressMessageQueueManager,
+  type OverallProgressMessage 
+} from "../../core/overallProgressSchema.js";
+import { 
+  NavigationMessageQueueManager,
+  type NavigationMessage 
+} from "../../core/navigationSchema.js";
 
 // ============================================================================
 // SCHEMAS
@@ -32,35 +41,33 @@ import type { BaseComponentInterface } from "../interfaces/baseComponentInterfac
 
 /**
  * Main menu component configuration schema.
- * No custom fields beyond base requirements.
+ * Boilerplate only - no custom fields beyond base requirements.
  */
 export const MainMenuComponentConfigSchema = BaseComponentConfigSchema.extend({
   type: z.literal("main_menu"),
 });
 
-export type MainMenuComponentConfig = z.infer<
-  typeof MainMenuComponentConfigSchema
->;
+export type MainMenuComponentConfig = z.infer<typeof MainMenuComponentConfigSchema>;
 
 /**
  * Main menu component progress schema.
- * No custom progress - just tracks lastUpdated.
+ * Boilerplate only - tracks lastUpdated but no custom progress state.
  */
 export const MainMenuComponentProgressSchema = BaseComponentProgressSchema.extend({
   // No additional fields needed
 });
 
-export type MainMenuComponentProgress = z.infer<
-  typeof MainMenuComponentProgressSchema
->;
+export type MainMenuComponentProgress = z.infer<typeof MainMenuComponentProgressSchema>;
 
 // ============================================================================
 // PROGRESS MANAGER
 // ============================================================================
 
 /**
- * Progress manager for main menu component.
- * Minimal - no progress to track.
+ * Main Menu Progress Manager - minimal implementation.
+ * 
+ * Main menu doesn't track component-specific progress.
+ * This class exists to satisfy the architecture but does minimal work.
  */
 export class MainMenuProgressManager extends BaseComponentProgressManager<
   MainMenuComponentConfig,
@@ -68,10 +75,9 @@ export class MainMenuProgressManager extends BaseComponentProgressManager<
 > {
   /**
    * Create initial progress for new users.
+   * Main menu has no progress fields, just timestamp.
    */
-  createInitialProgress(
-    config: MainMenuComponentConfig
-  ): MainMenuComponentProgress {
+  createInitialProgress(config: MainMenuComponentConfig): MainMenuComponentProgress {
     return {
       lastUpdated: 0,
     };
@@ -79,24 +85,32 @@ export class MainMenuProgressManager extends BaseComponentProgressManager<
 }
 
 // ============================================================================
-// COMPONENT CORE
+// CORE
 // ============================================================================
 
 /**
- * Main menu component core.
+ * Main Menu Core - manages streak checking and message queuing.
  * 
- * Handles:
- * - Queuing navigation messages when user clicks lessons
- * - Queuing component progress messages to reset lessons
- * - Providing data to interface for rendering
+ * Responsibilities:
+ * - Check for complete weeks since last streak check
+ * - Calculate lessons completed per week
+ * - Queue streak increment/reset messages
+ * - Queue navigation messages for lesson clicks
+ * - (Phase 7) Queue lesson reset messages
  */
 export class MainMenuCore extends BaseComponentCore<
   MainMenuComponentConfig,
   MainMenuComponentProgress
 > {
-  // Store readonly managers we need (following NewUserWelcomeCore pattern)
-  private readonly overallProgress: IReadonlyOverallProgressManager;
-  private readonly curriculum: CurriculumRegistry;
+  // Store readonly managers for business logic access
+  private _overallProgressManager: IReadonlyOverallProgressManager;
+  private _navigationManager: IReadonlyNavigationManager;
+  private _settingsManager: IReadonlySettingsManager;
+  private _curriculumRegistry: CurriculumRegistry;
+
+  // Message queues for special permissions
+  private overallProgressMessageQueue: OverallProgressMessageQueueManager;
+  private navigationMessageQueue: NavigationMessageQueueManager;
 
   constructor(
     config: MainMenuComponentConfig,
@@ -105,7 +119,7 @@ export class MainMenuCore extends BaseComponentCore<
     overallProgressManager: IReadonlyOverallProgressManager,
     navigationManager: IReadonlyNavigationManager,
     settingsManager: IReadonlySettingsManager,
-    curriculumData: CurriculumRegistry
+    curriculumRegistry: CurriculumRegistry
   ) {
     super(
       config,
@@ -114,101 +128,262 @@ export class MainMenuCore extends BaseComponentCore<
       overallProgressManager,
       navigationManager,
       settingsManager,
-      curriculumData
+      curriculumRegistry
     );
 
-    // Store references we need for public methods
-    this.overallProgress = overallProgressManager;
-    this.curriculum = curriculumData;
+    // Store managers for business logic access
+    this._overallProgressManager = overallProgressManager;
+    this._navigationManager = navigationManager;
+    this._settingsManager = settingsManager;
+    this._curriculumRegistry = curriculumRegistry;
+
+    // Special permissions: can manipulate overall progress and navigation
+    this.overallProgressMessageQueue = 
+      new OverallProgressMessageQueueManager(curriculumRegistry);
+    this.navigationMessageQueue = 
+      new NavigationMessageQueueManager(curriculumRegistry);
   }
 
   /**
    * Create the interface for this core
    */
-  protected createInterface(
-    timeline: TimelineContainer
-  ): BaseComponentInterface<
+  protected createInterface(timeline: TimelineContainer): BaseComponentInterface<
     MainMenuComponentConfig,
     MainMenuComponentProgress,
     any
   > {
-    const { MainMenuInterface } = require("../interfaces/mainMenuInterface.js");
     return new MainMenuInterface(this, timeline);
   }
 
   /**
-   * Check if component is complete.
-   * Main menu is never "complete" - it's always accessible.
+   * Check if component is complete
+   * Main menu is always "complete"
    */
   isComplete(): boolean {
-    return false;
+    return true;
   }
 
   /**
-   * Main menu has no component progress messages (doesn't modify its own progress).
-   * Cross-component messages are queued directly via the queue manager.
+   * Get component-specific progress messages (internal)
+   * Main menu has no component-specific progress
    */
   protected getComponentProgressMessagesInternal(): ComponentProgressMessage[] {
     return [];
   }
 
+  // ============================================================================
+  // PUBLIC GETTERS FOR INTERFACE
+  // ============================================================================
+
   /**
-   * Public method for interface to queue lesson reset.
+   * Get readonly overall progress manager for interface queries.
+   */
+  get overallProgressManager(): IReadonlyOverallProgressManager {
+    return this._overallProgressManager;
+  }
+
+  /**
+   * Get readonly settings manager for interface queries.
+   */
+  get settingsManager(): IReadonlySettingsManager {
+    return this._settingsManager;
+  }
+
+  /**
+   * Get readonly navigation manager for interface queries.
+   */
+  get navigationManager(): IReadonlyNavigationManager {
+    return this._navigationManager;
+  }
+
+  // ============================================================================
+  // MESSAGE POLLING
+  // ============================================================================
+
+  /**
+   * Get queued navigation messages for Main Core to process.
+   */
+  getNavigationMessages(): NavigationMessage[] {
+    if (!this._operationsEnabled) return [];
+    return this.navigationMessageQueue.getMessages();
+  }
+
+  /**
+   * Get queued overall progress messages for Main Core to process.
+   */
+  getOverallProgressMessages(): OverallProgressMessage[] {
+    if (!this._operationsEnabled) return [];
+    return this.overallProgressMessageQueue.getMessages();
+  }
+
+  // ============================================================================
+  // PUBLIC INTERFACE METHODS
+  // ============================================================================
+
+  /**
+   * Check for complete weeks since last streak check and queue appropriate messages.
    * 
-   * This is where the main menu's special authorization is used -
-   * it queues messages targeting OTHER components' progress managers.
+   * Called by interface on render. Processes all complete weeks sequentially,
+   * queuing increment for weeks with goal met, reset for weeks with goal missed.
    * 
-   * @param lessonId - Lesson to reset
+   * For flexible pace (no weekly goal), this is a no-op.
+   */
+  checkAndQueueStreakUpdates(): void {
+    if (!this._operationsEnabled) return;
+
+    const settings = this._settingsManager.getSettings();
+    const pace = settings.learningPace[0];
+    
+    // Flexible pace has no weekly goals, so no streak tracking
+    if (pace === 'flexible') return;
+
+    const progress = this._overallProgressManager.getProgress();
+    const lastCheck = progress.lastStreakCheck;
+    const now = Math.floor(Date.now() / 1000);
+
+    // Get weekly goal from learning pace
+    const weeklyGoal = this.getWeeklyGoal();
+
+    // Get all complete week boundaries since last check
+    const completeWeeks = this.getCompleteWeeksSince(lastCheck, now);
+
+    // Process each complete week sequentially
+    for (const week of completeWeeks) {
+      const lessonsInWeek = this.countLessonsInWeek(week.start, week.end);
+      
+      if (lessonsInWeek >= weeklyGoal) {
+        this.overallProgressMessageQueue.queueIncrementStreak();
+      } else {
+        this.overallProgressMessageQueue.queueResetStreak();
+      }
+    }
+  }
+
+  /**
+   * Queue navigation to a specific lesson.
+   */
+  queueNavigation(entityId: number, page: number): void {
+    if (!this._operationsEnabled) return;
+    this.navigationMessageQueue.queueNavigationMessage(entityId, page);
+  }
+
+  /**
+   * Queue lesson reset (Phase 7 - stub for now).
    */
   queueResetLesson(lessonId: number): void {
-    // TODO: Implement in Phase 7
-    // Will queue component progress messages for all components in lesson
-    // Will also queue overall progress message to mark lesson incomplete
-    console.log(`Reset lesson ${lessonId} - not yet implemented`);
+    throw new Error("Lesson reset not yet implemented");
   }
 
+  // ============================================================================
+  // PRIVATE HELPER METHODS
+  // ============================================================================
+
   /**
-   * Get streak data for interface rendering.
+   * Get weekly goal based on learning pace setting.
    */
-  getStreakData(): { current: number; lastActivity: number } {
-    const progress = this.overallProgress.getProgress();
-    return {
-      current: progress.currentStreak,
-      lastActivity: progress.lastStreakCheck,
+  private getWeeklyGoal(): number {
+    const settings = this._settingsManager.getSettings();
+    const pace = settings.learningPace[0];
+
+    const goalMap: Record<typeof pace, number> = {
+      accelerated: 6,  // 6 lessons/week
+      standard: 3,     // 3 lessons/week (recommended)
+      flexible: 0,     // No weekly goal
     };
+
+    return goalMap[pace];
   }
 
   /**
-   * Get domain progress for all domains.
+   * Get all complete week boundaries between two timestamps.
+   * Uses user's configured week start day/time from settings.
    */
-  getAllDomainProgress(): Array<{ domainId: number; completed: number; total: number }> {
-    const domainIds = this.curriculum.getAllDomainIds();
-    const progress = this.overallProgress.getProgress();
+  private getCompleteWeeksSince(
+    since: number,
+    until: number
+  ): Array<{ start: number; end: number }> {
+    const weeks: Array<{ start: number; end: number }> = [];
     
-    return domainIds.map((domainId: number) => {
-      // Get all lessons in this domain
-      const lessonsInDomain = this.curriculum.getLessonsInDomain(domainId) || [];
-      const total = lessonsInDomain.length;
+    // Get first week start after 'since'
+    let weekStart = this.getNextWeekStartAfter(since);
+    
+    // Collect all complete weeks until 'until'
+    while (true) {
+      const weekEnd = weekStart + (7 * 24 * 60 * 60);
       
-      // Count how many are completed
-      const completed = lessonsInDomain.filter((lessonId) => {
-        const completion = progress.lessonCompletions[lessonId.toString()];
-        return completion && completion.timeCompleted !== null;
-      }).length;
+      // Week is only complete if its end is before 'until'
+      if (weekEnd > until) break;
       
-      return {
-        domainId,
-        completed,
-        total,
-      };
-    });
+      weeks.push({ start: weekStart, end: weekEnd });
+      weekStart = weekEnd;
+    }
+
+    return weeks;
   }
 
   /**
-   * Get lessons for a specific domain.
+   * Get the first week start timestamp after a given time.
+   * Uses SettingsDataManager.getLastWeekStart() which handles week config.
    */
-  getLessonsInDomain(domainId: number): number[] {
-    return this.curriculum.getLessonsInDomain(domainId) || [];
+  private getNextWeekStartAfter(after: number): number {
+    // Cast to concrete type to access getLastWeekStart() method
+    const settingsManager = this._settingsManager as any;
+    const lastWeekStart = settingsManager.getLastWeekStart();
+    
+    if (lastWeekStart > after) {
+      return lastWeekStart;
+    }
+    
+    let weekStart = lastWeekStart;
+    const weekSeconds = 7 * 24 * 60 * 60;
+    
+    while (weekStart <= after) {
+      weekStart += weekSeconds;
+    }
+    
+    return weekStart;
+  }
+
+  /**
+   * Count lessons first completed within a time range.
+   * Uses timeCompleted timestamp to ensure lessons only counted once.
+   */
+  private countLessonsInWeek(startTime: number, endTime: number): number {
+    const progress = this._overallProgressManager.getProgress();
+    let count = 0;
+
+    for (const completion of Object.values(progress.lessonCompletions)) {
+      const timeCompleted = completion.timeCompleted;
+      
+      if (
+        timeCompleted !== null &&
+        timeCompleted >= startTime &&
+        timeCompleted < endTime
+      ) {
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  /**
+   * Count lessons first completed since a timestamp (for current week display).
+   * Public method for interface to call.
+   */
+  countLessonsSince(since: number): number {
+    const progress = this._overallProgressManager.getProgress();
+    let count = 0;
+
+    for (const completion of Object.values(progress.lessonCompletions)) {
+      const timeCompleted = completion.timeCompleted;
+      
+      if (timeCompleted !== null && timeCompleted >= since) {
+        count++;
+      }
+    }
+
+    return count;
   }
 }
 
@@ -218,7 +393,7 @@ export class MainMenuCore extends BaseComponentCore<
 
 /**
  * Validate main menu progress against config.
- * No validation needed - no config-dependent structure.
+ * No validation needed - progress has no config-dependent structure.
  */
 export function validateMainMenuProgress(
   progress: MainMenuComponentProgress,
@@ -232,10 +407,14 @@ export function validateMainMenuProgress(
 
 /**
  * Create initial progress for main menu component.
+ * Required for registry builder.
  */
 export function createInitialProgress(
   config: MainMenuComponentConfig
 ): MainMenuComponentProgress {
-  const tempManager = new MainMenuProgressManager(config, { lastUpdated: 0 });
+  const tempManager = new MainMenuProgressManager(
+    config,
+    { lastUpdated: 0 }
+  );
   return tempManager.createInitialProgress(config);
 }

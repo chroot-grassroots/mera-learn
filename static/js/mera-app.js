@@ -49346,88 +49346,209 @@ var init_newUserWelcomeCore = __esm({
 });
 
 // src/ts/components/interfaces/mainMenuInterface.ts
-var mainMenuInterface_exports = {};
-__export(mainMenuInterface_exports, {
-  MainMenuInterface: () => MainMenuInterface
-});
 var MainMenuInterface;
 var init_mainMenuInterface = __esm({
   "src/ts/components/interfaces/mainMenuInterface.ts"() {
     "use strict";
     init_baseComponentInterface();
     MainMenuInterface = class extends BaseComponentInterface {
-      constructor(core2, timeline2) {
-        super(core2, timeline2);
+      constructor(componentCore, timelineContainer) {
+        super(componentCore, timelineContainer);
+        this.componentCore = componentCore;
       }
-      /**
-       * Create initial internal state.
-       */
       createInternalState() {
         return {
-          rendered: false,
-          expandedDomain: null
+          rendered: false
         };
       }
-      /**
-       * Load component-specific assets.
-       * Main menu has no assets to load.
-       */
       async loadComponentSpecificAssets() {
         this.setAssetLoadingState("ready");
       }
       /**
-       * Render the main menu.
+       * Render main menu to DOM.
        * 
-       * Phase 2: Just a placeholder
-       * Phase 3-7: Full implementation with cards, accordions, etc.
+       * Phase 3: Single streak card centered on screen
        */
       render() {
-        const slot = this.timelineContainer.getComponentArea(this.componentCore.config.id);
-        if (!slot) {
-          console.error(`Main menu: No render area found for component ${this.componentCore.config.id}`);
-          return;
+        this.componentCore.checkAndQueueStreakUpdates();
+        const area = this.timelineContainer.getComponentArea(
+          this.componentCore.config.id
+        );
+        if (area) {
+          area.innerHTML = this.renderStreakCard();
+          this.internal.rendered = true;
         }
-        slot.innerHTML = "";
-        const placeholder = document.createElement("div");
-        placeholder.className = "p-8 text-center";
-        placeholder.innerHTML = `
-      <h1 class="text-3xl font-bold text-gray-800 mb-4">
-        Main Menu
-      </h1>
-      <p class="text-gray-600">
-        Component successfully loaded! UI implementation coming in Phase 3+
-      </p>
-    `;
-        slot.appendChild(placeholder);
-        this.internal.rendered = true;
       }
       /**
-       * Handle domain card click - expand/collapse lesson list.
-       */
-      handleDomainClick(domainId) {
-        if (this.internal.expandedDomain === domainId) {
-          this.internal.expandedDomain = null;
-        } else {
-          this.internal.expandedDomain = domainId;
-        }
-        this.render();
-      }
-      /**
-       * Handle lesson click - queue navigation message.
-       */
-      handleLessonClick(lessonId) {
-        console.log(`Navigate to lesson ${lessonId} - not yet implemented`);
-      }
-      /**
-       * Handle reset button click - queue reset messages.
-       */
-      handleResetClick(lessonId) {
-        this.componentCore.queueResetLesson(lessonId);
-      }
-      /**
-       * Cleanup event listeners on destroy.
+       * Clean up DOM and event listeners.
        */
       destroy() {
+        this.internal.rendered = false;
+      }
+      // ============================================================================
+      // RENDERING METHODS
+      // ============================================================================
+      /**
+       * Render the streak tracking card.
+       * 
+       * Displays:
+       * - Current streak count (completed weeks)
+       * - Current week progress (X/Y lessons this week)
+       * - Encouragement message if behind on weekly goal
+       */
+      renderStreakCard() {
+        const progress = this.componentCore.overallProgressManager.getProgress();
+        const currentStreak = progress.currentStreak;
+        const settingsManager = this.componentCore.settingsManager;
+        const weekStart = settingsManager.getLastWeekStart();
+        const now = Math.floor(Date.now() / 1e3);
+        const weekEnd = weekStart + 7 * 24 * 60 * 60;
+        const lessonsThisWeek = this.componentCore.countLessonsSince(weekStart);
+        const weeklyGoal = this.getWeeklyGoal();
+        const settings = this.componentCore.settingsManager.getSettings();
+        const pace = settings.learningPace[0];
+        if (pace === "flexible") {
+          return this.renderFlexibleStreakCard(currentStreak, lessonsThisWeek);
+        }
+        const remaining = Math.max(0, weeklyGoal - lessonsThisWeek);
+        const goalMet = lessonsThisWeek >= weeklyGoal;
+        const secondsRemaining = weekEnd - now;
+        const daysRemaining = Math.ceil(secondsRemaining / (24 * 60 * 60));
+        return `
+      <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+          <!-- Header -->
+          <h1 class="text-3xl font-bold text-gray-900 mb-6 text-center">
+            Mera
+          </h1>
+
+          <!-- Streak Display -->
+          <div class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-3">
+              Learning Streak
+            </h2>
+            <div class="text-center mb-4">
+              <div class="inline-flex items-baseline">
+                <span class="text-5xl font-bold text-blue-600">${currentStreak}</span>
+                <span class="text-2xl text-gray-600 ml-2">\u{1F525}</span>
+              </div>
+              <div class="text-gray-600 mt-1">
+                week${currentStreak === 1 ? "" : "s"} streak
+              </div>
+            </div>
+          </div>
+
+          <!-- Current Week Progress -->
+          <div class="border-t border-gray-200 pt-6">
+            <div class="mb-4">
+              <div class="flex justify-between text-sm text-gray-600 mb-2">
+                <span>This week's progress</span>
+                <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
+              </div>
+              <!-- Progress bar -->
+              <div class="w-full bg-gray-200 rounded-full h-3">
+                <div 
+                  class="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                  style="width: ${Math.min(100, lessonsThisWeek / weeklyGoal * 100)}%"
+                ></div>
+              </div>
+            </div>
+
+            <!-- Status message -->
+            ${this.renderWeeklyStatusMessage(goalMet, remaining, daysRemaining)}
+          </div>
+
+          <!-- Coming Soon Notice -->
+          <div class="mt-6 text-center text-sm text-gray-500 border-t border-gray-200 pt-4">
+            <p>Domain cards, lesson navigation, and more coming soon!</p>
+          </div>
+        </div>
+      </div>
+    `;
+      }
+      /**
+       * Render status message based on weekly progress.
+       */
+      renderWeeklyStatusMessage(goalMet, remaining, daysRemaining) {
+        if (goalMet) {
+          return `
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div class="flex items-center">
+            <span class="text-2xl mr-3">\u2705</span>
+            <div>
+              <p class="font-medium text-green-900">Goal complete!</p>
+              <p class="text-sm text-green-700">You've hit your weekly target.</p>
+            </div>
+          </div>
+        </div>
+      `;
+        }
+        const lessonWord = remaining === 1 ? "lesson" : "lessons";
+        const dayWord = daysRemaining === 1 ? "day" : "days";
+        return `
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex items-center">
+          <span class="text-2xl mr-3">\u{1F4DA}</span>
+          <div>
+            <p class="font-medium text-blue-900">Keep it up!</p>
+            <p class="text-sm text-blue-700">
+              Complete <strong>${remaining}</strong> more ${lessonWord} 
+              in the next ${daysRemaining} ${dayWord} to maintain your streak.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+      }
+      /**
+       * Render streak card for flexible pace (no weekly goals).
+       */
+      renderFlexibleStreakCard(currentStreak, lessonsThisWeek) {
+        return `
+      <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+          <!-- Header -->
+          <h1 class="text-3xl font-bold text-gray-900 mb-6 text-center">
+            Mera
+          </h1>
+
+          <!-- Flexible Pace Message -->
+          <div class="mb-6 text-center">
+            <h2 class="text-xl font-semibold text-gray-700 mb-3">
+              Learning at Your Own Pace
+            </h2>
+            <div class="text-gray-600">
+              <p class="mb-2">You've completed <strong>${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? "lesson" : "lessons"} this week.</p>
+              <p class="text-sm">No weekly goals - learn whenever works for you!</p>
+            </div>
+          </div>
+
+          <!-- Coming Soon Notice -->
+          <div class="mt-6 text-center text-sm text-gray-500 border-t border-gray-200 pt-4">
+            <p>Domain cards, lesson navigation, and more coming soon!</p>
+          </div>
+        </div>
+      </div>
+    `;
+      }
+      // ============================================================================
+      // HELPER METHODS
+      // ============================================================================
+      /**
+       * Get weekly goal based on current learning pace setting.
+       */
+      getWeeklyGoal() {
+        const settings = this.componentCore.settingsManager.getSettings();
+        const pace = settings.learningPace[0];
+        const goalMap = {
+          accelerated: 6,
+          // 6 lessons/week
+          standard: 3,
+          // 3 lessons/week (recommended)
+          flexible: 0
+          // No weekly goal
+        };
+        return goalMap[pace];
       }
     };
   }
@@ -49435,7 +49556,10 @@ var init_mainMenuInterface = __esm({
 
 // src/ts/components/cores/mainMenuCore.ts
 function createInitialProgress2(config2) {
-  const tempManager = new MainMenuProgressManager(config2, { lastUpdated: 0 });
+  const tempManager = new MainMenuProgressManager(
+    config2,
+    { lastUpdated: 0 }
+  );
   return tempManager.createInitialProgress(config2);
 }
 var MainMenuComponentConfigSchema, MainMenuComponentProgressSchema, MainMenuProgressManager, MainMenuCore;
@@ -49444,6 +49568,9 @@ var init_mainMenuCore = __esm({
     "use strict";
     init_zod();
     init_baseComponentCore();
+    init_mainMenuInterface();
+    init_overallProgressSchema();
+    init_navigationSchema();
     MainMenuComponentConfigSchema = BaseComponentConfigSchema.extend({
       type: external_exports.literal("main_menu")
     });
@@ -49453,6 +49580,7 @@ var init_mainMenuCore = __esm({
     MainMenuProgressManager = class extends BaseComponentProgressManager {
       /**
        * Create initial progress for new users.
+       * Main menu has no progress fields, just timestamp.
        */
       createInitialProgress(config2) {
         return {
@@ -49461,7 +49589,7 @@ var init_mainMenuCore = __esm({
       }
     };
     MainMenuCore = class extends BaseComponentCore {
-      constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumData2) {
+      constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
         super(
           config2,
           progressManager,
@@ -49469,78 +49597,196 @@ var init_mainMenuCore = __esm({
           overallProgressManager,
           navigationManager,
           settingsManager,
-          curriculumData2
+          curriculumRegistry
         );
-        this.overallProgress = overallProgressManager;
-        this.curriculum = curriculumData2;
+        this._overallProgressManager = overallProgressManager;
+        this._navigationManager = navigationManager;
+        this._settingsManager = settingsManager;
+        this._curriculumRegistry = curriculumRegistry;
+        this.overallProgressMessageQueue = new OverallProgressMessageQueueManager(curriculumRegistry);
+        this.navigationMessageQueue = new NavigationMessageQueueManager(curriculumRegistry);
       }
       /**
        * Create the interface for this core
        */
       createInterface(timeline2) {
-        const { MainMenuInterface: MainMenuInterface2 } = (init_mainMenuInterface(), __toCommonJS(mainMenuInterface_exports));
-        return new MainMenuInterface2(this, timeline2);
+        return new MainMenuInterface(this, timeline2);
       }
       /**
-       * Check if component is complete.
-       * Main menu is never "complete" - it's always accessible.
+       * Check if component is complete
+       * Main menu is always "complete"
        */
       isComplete() {
-        return false;
+        return true;
       }
       /**
-       * Main menu has no component progress messages (doesn't modify its own progress).
-       * Cross-component messages are queued directly via the queue manager.
+       * Get component-specific progress messages (internal)
+       * Main menu has no component-specific progress
        */
       getComponentProgressMessagesInternal() {
         return [];
       }
+      // ============================================================================
+      // PUBLIC GETTERS FOR INTERFACE
+      // ============================================================================
       /**
-       * Public method for interface to queue lesson reset.
+       * Get readonly overall progress manager for interface queries.
+       */
+      get overallProgressManager() {
+        return this._overallProgressManager;
+      }
+      /**
+       * Get readonly settings manager for interface queries.
+       */
+      get settingsManager() {
+        return this._settingsManager;
+      }
+      /**
+       * Get readonly navigation manager for interface queries.
+       */
+      get navigationManager() {
+        return this._navigationManager;
+      }
+      // ============================================================================
+      // MESSAGE POLLING
+      // ============================================================================
+      /**
+       * Get queued navigation messages for Main Core to process.
+       */
+      getNavigationMessages() {
+        if (!this._operationsEnabled) return [];
+        return this.navigationMessageQueue.getMessages();
+      }
+      /**
+       * Get queued overall progress messages for Main Core to process.
+       */
+      getOverallProgressMessages() {
+        if (!this._operationsEnabled) return [];
+        return this.overallProgressMessageQueue.getMessages();
+      }
+      // ============================================================================
+      // PUBLIC INTERFACE METHODS
+      // ============================================================================
+      /**
+       * Check for complete weeks since last streak check and queue appropriate messages.
        * 
-       * This is where the main menu's special authorization is used -
-       * it queues messages targeting OTHER components' progress managers.
+       * Called by interface on render. Processes all complete weeks sequentially,
+       * queuing increment for weeks with goal met, reset for weeks with goal missed.
        * 
-       * @param lessonId - Lesson to reset
+       * For flexible pace (no weekly goal), this is a no-op.
+       */
+      checkAndQueueStreakUpdates() {
+        if (!this._operationsEnabled) return;
+        const settings = this._settingsManager.getSettings();
+        const pace = settings.learningPace[0];
+        if (pace === "flexible") return;
+        const progress = this._overallProgressManager.getProgress();
+        const lastCheck = progress.lastStreakCheck;
+        const now = Math.floor(Date.now() / 1e3);
+        const weeklyGoal = this.getWeeklyGoal();
+        const completeWeeks = this.getCompleteWeeksSince(lastCheck, now);
+        for (const week2 of completeWeeks) {
+          const lessonsInWeek = this.countLessonsInWeek(week2.start, week2.end);
+          if (lessonsInWeek >= weeklyGoal) {
+            this.overallProgressMessageQueue.queueIncrementStreak();
+          } else {
+            this.overallProgressMessageQueue.queueResetStreak();
+          }
+        }
+      }
+      /**
+       * Queue navigation to a specific lesson.
+       */
+      queueNavigation(entityId, page) {
+        if (!this._operationsEnabled) return;
+        this.navigationMessageQueue.queueNavigationMessage(entityId, page);
+      }
+      /**
+       * Queue lesson reset (Phase 7 - stub for now).
        */
       queueResetLesson(lessonId) {
-        console.log(`Reset lesson ${lessonId} - not yet implemented`);
+        throw new Error("Lesson reset not yet implemented");
       }
+      // ============================================================================
+      // PRIVATE HELPER METHODS
+      // ============================================================================
       /**
-       * Get streak data for interface rendering.
+       * Get weekly goal based on learning pace setting.
        */
-      getStreakData() {
-        const progress = this.overallProgress.getProgress();
-        return {
-          current: progress.currentStreak,
-          lastActivity: progress.lastStreakCheck
+      getWeeklyGoal() {
+        const settings = this._settingsManager.getSettings();
+        const pace = settings.learningPace[0];
+        const goalMap = {
+          accelerated: 6,
+          // 6 lessons/week
+          standard: 3,
+          // 3 lessons/week (recommended)
+          flexible: 0
+          // No weekly goal
         };
+        return goalMap[pace];
       }
       /**
-       * Get domain progress for all domains.
+       * Get all complete week boundaries between two timestamps.
+       * Uses user's configured week start day/time from settings.
        */
-      getAllDomainProgress() {
-        const domainIds = this.curriculum.getAllDomainIds();
-        const progress = this.overallProgress.getProgress();
-        return domainIds.map((domainId) => {
-          const lessonsInDomain = this.curriculum.getLessonsInDomain(domainId) || [];
-          const total = lessonsInDomain.length;
-          const completed = lessonsInDomain.filter((lessonId) => {
-            const completion = progress.lessonCompletions[lessonId.toString()];
-            return completion && completion.timeCompleted !== null;
-          }).length;
-          return {
-            domainId,
-            completed,
-            total
-          };
-        });
+      getCompleteWeeksSince(since, until) {
+        const weeks = [];
+        let weekStart = this.getNextWeekStartAfter(since);
+        while (true) {
+          const weekEnd = weekStart + 7 * 24 * 60 * 60;
+          if (weekEnd > until) break;
+          weeks.push({ start: weekStart, end: weekEnd });
+          weekStart = weekEnd;
+        }
+        return weeks;
       }
       /**
-       * Get lessons for a specific domain.
+       * Get the first week start timestamp after a given time.
+       * Uses SettingsDataManager.getLastWeekStart() which handles week config.
        */
-      getLessonsInDomain(domainId) {
-        return this.curriculum.getLessonsInDomain(domainId) || [];
+      getNextWeekStartAfter(after) {
+        const settingsManager = this._settingsManager;
+        const lastWeekStart = settingsManager.getLastWeekStart();
+        if (lastWeekStart > after) {
+          return lastWeekStart;
+        }
+        let weekStart = lastWeekStart;
+        const weekSeconds = 7 * 24 * 60 * 60;
+        while (weekStart <= after) {
+          weekStart += weekSeconds;
+        }
+        return weekStart;
+      }
+      /**
+       * Count lessons first completed within a time range.
+       * Uses timeCompleted timestamp to ensure lessons only counted once.
+       */
+      countLessonsInWeek(startTime, endTime) {
+        const progress = this._overallProgressManager.getProgress();
+        let count = 0;
+        for (const completion of Object.values(progress.lessonCompletions)) {
+          const timeCompleted = completion.timeCompleted;
+          if (timeCompleted !== null && timeCompleted >= startTime && timeCompleted < endTime) {
+            count++;
+          }
+        }
+        return count;
+      }
+      /**
+       * Count lessons first completed since a timestamp (for current week display).
+       * Public method for interface to call.
+       */
+      countLessonsSince(since) {
+        const progress = this._overallProgressManager.getProgress();
+        let count = 0;
+        for (const completion of Object.values(progress.lessonCompletions)) {
+          const timeCompleted = completion.timeCompleted;
+          if (timeCompleted !== null && timeCompleted >= since) {
+            count++;
+          }
+        }
+        return count;
       }
     };
   }

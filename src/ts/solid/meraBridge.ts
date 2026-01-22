@@ -1,20 +1,20 @@
 /**
  * meraBridge.ts - Storage Bridge for Mera Platform
- * 
+ *
  * Provides unified interface for dual storage:
  * - Local: Browser localStorage for offline capability
  * - Remote: Solid Pod for data sovereignty and sync
- * 
+ *
  * Uses @inrupt/solid-client for robust Pod operations
  * Uses @inrupt/solid-client-authn-browser for authentication
- * 
+ *
  * Design principles:
  * - Singleton pattern for global access
  * - Consistent BridgeResult interface
  * - String-based persistence (Core handles JSON serialization)
  * - Trust Solid Client's built-in session persistence
  * - Breaking change isolation from Inrupt library updates
- * 
+ *
  * Architecture:
  * - Auto-initialization at module load (fire-and-forget)
  * - Bootstrap polls check() method to wait for completion
@@ -28,22 +28,19 @@ import {
   getSolidDataset,
   getContainedResourceUrlAll,
   createContainerAt,
-} from '@inrupt/solid-client';
-import {
-  getDefaultSession,
-  Session,
-} from '@inrupt/solid-client-authn-browser';
+} from "@inrupt/solid-client";
+import { getDefaultSession, Session } from "@inrupt/solid-client-authn-browser";
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
 
 export enum BridgeErrorType {
-  Authentication = 'authentication',
-  Network = 'network',
-  NotFound = 'not_found',
-  Storage = 'storage',
-  Validation = 'validation',
+  Authentication = "authentication",
+  Network = "network",
+  NotFound = "not_found",
+  Storage = "storage",
+  Validation = "validation",
 }
 
 export interface BridgeResult<T = any> {
@@ -59,7 +56,7 @@ export interface BridgeResult<T = any> {
 
 export class MeraBridge {
   private static instance: MeraBridge | null = null;
-  
+
   private session: Session | null = null;
   private podUrl: string | null = null;
   private initialized: boolean = false;
@@ -85,14 +82,14 @@ export class MeraBridge {
 
   /**
    * Initialize bridge - ensures session is ready and Pod URL is extracted
-   * 
+   *
    * Called automatically at module load (fire-and-forget pattern).
-   * 
+   *
    * Trusts Solid Client's built-in persistence:
    * - getDefaultSession() auto-restores from localStorage
    * - handleIncomingRedirect() handles both OAuth callbacks AND restoration
    * - No manual timestamp tracking needed
-   * 
+   *
    * @returns Promise<boolean> - true if authenticated, false otherwise
    */
   public async initialize(): Promise<boolean> {
@@ -105,31 +102,44 @@ export class MeraBridge {
   }
 
   private async _doInitialize(): Promise<boolean> {
-    console.log('🌉 Mera Bridge initializing...');
+    console.log("🌉 Mera Bridge initializing...");
 
     try {
       // Step 1: Get session
       this.session = getDefaultSession();
-      console.log('📍 Step 1: Initial session check:', {
+      console.log("📍 Step 1: Initial session check:", {
         sessionId: this.session.info.sessionId,
         isLoggedIn: this.session.info.isLoggedIn,
         webId: this.session.info.webId,
       });
 
+      // Step 1.5: Check what's in localStorage (diagnostic)
+      const solidKeys = Object.keys(localStorage).filter(
+        (k) =>
+          k.includes("solid") || k.includes("session") || k.includes("oidc"),
+      );
+      console.log("📍 Step 1.5: localStorage investigation:", {
+        hasCurrentSession: localStorage.getItem("KEY_CURRENT_SESSION") !== null,
+        solidKeyCount: solidKeys.length,
+      });
+
       // Step 2: Call handleIncomingRedirect with restorePreviousSession option
-      // This handles BOTH:
-      // - OAuth callbacks (when URL has ?code=...)
-      // - Session restoration from localStorage (when restorePreviousSession: true)
-      console.log('📍 Step 2: Calling handleIncomingRedirect...');
+      console.log("📍 Step 2: Calling handleIncomingRedirect...");
+      console.log("📍 Step 2a: URL:", window.location.href);
+      console.log(
+        "📍 Step 2b: Has OAuth params:",
+        window.location.href.includes("code="),
+      );
+
       await this.session.handleIncomingRedirect({
         url: window.location.href,
-        restorePreviousSession: true,  // CRITICAL: tells Solid to check localStorage
+        restorePreviousSession: true,
       });
-      console.log('📍 Step 3: handleIncomingRedirect completed');
+      console.log("📍 Step 3: handleIncomingRedirect completed");
 
       // Step 3: Get fresh session after handleIncomingRedirect
       this.session = getDefaultSession();
-      console.log('📍 Step 4: Session after handleIncomingRedirect:', {
+      console.log("📍 Step 4: Session after handleIncomingRedirect:", {
         sessionId: this.session.info.sessionId,
         isLoggedIn: this.session.info.isLoggedIn,
         webId: this.session.info.webId,
@@ -137,17 +147,41 @@ export class MeraBridge {
 
       // Step 4: Check if logged in
       if (this.session.info.isLoggedIn) {
-        console.log('✅ User authenticated');
+        console.log("✅ User authenticated");
         await this._extractPodUrl();
         this.initialized = true;
         return true;
       } else {
-        console.log('⚠️ User not authenticated');
+        console.log("⚠️ User not authenticated");
+
+        // Check if we have orphaned Solid data (browser restart scenario)
+        if (solidKeys.length > 0) {
+          console.log(
+            "🔄 Found Solid data without active session - triggering re-authentication",
+          );
+          console.log("🔄 This will redirect you to login...");
+
+          // Auto-trigger login - user will be redirected away
+          await this.session.login({
+            oidcIssuer: "https://solidcommunity.net",
+            redirectUrl: window.location.href,
+            clientName: "Mera Digital Security Education",
+          });
+
+          // We never reach here - login() redirects away
+          // But TypeScript wants a return, so:
+          return new Promise(() => {}); // Pending forever (we've redirected)
+        }
+
+        // Truly new user - no Solid data at all
+        console.log(
+          "⚠️ No Solid data found - new user or need to authenticate",
+        );
         this.initialized = false;
         return false;
       }
     } catch (error) {
-      console.error('❌ Bridge initialization failed:', error);
+      console.error("❌ Bridge initialization failed:", error);
       this.initialized = false;
       return false;
     }
@@ -158,27 +192,27 @@ export class MeraBridge {
    */
   private async _extractPodUrl(): Promise<void> {
     if (!this.session?.info.isLoggedIn) {
-      throw new Error('Cannot extract Pod URL: not authenticated');
+      throw new Error("Cannot extract Pod URL: not authenticated");
     }
 
     const webId = this.session.info.webId;
     if (!webId) {
-      throw new Error('WebID not available in session');
+      throw new Error("WebID not available in session");
     }
 
     // Extract Pod URL from WebID (typically WebID = Pod URL + /profile/card#me)
     const webIdUrl = new URL(webId);
     this.podUrl = `${webIdUrl.protocol}//${webIdUrl.host}`;
-    
-    console.log('📦 Pod URL extracted:', this.podUrl);
+
+    console.log("📦 Pod URL extracted:", this.podUrl);
   }
 
   /**
    * Lightweight check for bridge readiness
-   * 
+   *
    * Bootstrap polls this method waiting for initialization to complete.
    * This is synchronous and just checks flags - doesn't trigger initialization.
-   * 
+   *
    * @returns boolean - true if initialized and authenticated
    */
   public check(): boolean {
@@ -201,7 +235,7 @@ export class MeraBridge {
     if (this.session) {
       await this.session.logout();
       this.initialized = false;
-      console.log('🚪 Logged out');
+      console.log("🚪 Logged out");
     }
   }
 
@@ -211,28 +245,30 @@ export class MeraBridge {
 
   /**
    * Save pre-stringified JSON to localStorage
-   * 
+   *
    * Architecture: Core handles JSON.stringify, bridge just stores bytes.
    * This ensures single serialization point and trivial verification.
-   * 
+   *
    * @param filename - Storage key (will be prefixed with mera_)
    * @param data - Pre-stringified JSON string
    * @returns BridgeResult indicating success/failure
    */
-  public async localSave(filename: string, data: string): Promise<BridgeResult> {
+  public async localSave(
+    filename: string,
+    data: string,
+  ): Promise<BridgeResult> {
     try {
       const key = `mera_${filename}`;
-      localStorage.setItem(key, data);  // Store string directly
-      
-      console.log('💾 Saved to localStorage:', filename);
-      return { success: true, error: null };
+      localStorage.setItem(key, data); // Store string directly
 
+      console.log("💾 Saved to localStorage:", filename);
+      return { success: true, error: null };
     } catch (error) {
-      console.error('❌ localStorage save failed:', error);
-      
+      console.error("❌ localStorage save failed:", error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         errorType: BridgeErrorType.Storage,
       };
     }
@@ -240,10 +276,10 @@ export class MeraBridge {
 
   /**
    * Load raw JSON string from localStorage
-   * 
+   *
    * Returns the string directly - caller is responsible for parsing.
    * This ensures bridge doesn't need to understand data structure.
-   * 
+   *
    * @param filename - Storage key (mera_ prefix added automatically)
    * @returns BridgeResult<string> with raw JSON string or error
    */
@@ -251,25 +287,24 @@ export class MeraBridge {
     try {
       const key = `mera_${filename}`;
       const item = localStorage.getItem(key);
-      
+
       if (!item) {
         return {
           success: false,
-          error: 'File not found',
+          error: "File not found",
           errorType: BridgeErrorType.NotFound,
         };
       }
 
       // Return string directly - let caller parse if needed
-      console.log('📥 Loaded from localStorage:', filename);
+      console.log("📥 Loaded from localStorage:", filename);
       return { success: true, data: item, error: null };
-
     } catch (error) {
-      console.error('❌ localStorage load failed:', error);
-      
+      console.error("❌ localStorage load failed:", error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         errorType: BridgeErrorType.Storage,
       };
     }
@@ -277,7 +312,7 @@ export class MeraBridge {
 
   /**
    * Delete file from localStorage
-   * 
+   *
    * @param filename - Storage key (mera_ prefix added automatically)
    * @returns BridgeResult indicating success/failure
    */
@@ -285,16 +320,15 @@ export class MeraBridge {
     try {
       const key = `mera_${filename}`;
       localStorage.removeItem(key);
-      
-      console.log('🗑️ Deleted from localStorage:', filename);
-      return { success: true, error: null };
 
+      console.log("🗑️ Deleted from localStorage:", filename);
+      return { success: true, error: null };
     } catch (error) {
-      console.error('❌ localStorage delete failed:', error);
-      
+      console.error("❌ localStorage delete failed:", error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         errorType: BridgeErrorType.Storage,
       };
     }
@@ -302,7 +336,7 @@ export class MeraBridge {
 
   /**
    * List files in localStorage with mera_ prefix
-   * 
+   *
    * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.lofp.*.json")
    * @returns BridgeResult<string[]> with matching filenames
    */
@@ -318,25 +352,26 @@ export class MeraBridge {
       }
 
       // Filter to mera_ prefixed keys
-      const meraKeys = allKeys.filter((key) => key.startsWith('mera_'));
-      
+      const meraKeys = allKeys.filter((key) => key.startsWith("mera_"));
+
       // Strip prefix to get filenames
-      const filenames = meraKeys.map((key) => key.replace('mera_', ''));
+      const filenames = meraKeys.map((key) => key.replace("mera_", ""));
 
       // Apply pattern filter if provided
       const matched = pattern
-        ? filenames.filter((filename) => this._matchesPattern(filename, pattern))
+        ? filenames.filter((filename) =>
+            this._matchesPattern(filename, pattern),
+          )
         : filenames;
 
-      console.log('📋 Listed localStorage files:', matched.length);
+      console.log("📋 Listed localStorage files:", matched.length);
       return { success: true, data: matched, error: null };
-
     } catch (error) {
-      console.error('❌ localStorage list failed:', error);
-      
+      console.error("❌ localStorage list failed:", error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         errorType: BridgeErrorType.Storage,
       };
     }
@@ -348,17 +383,20 @@ export class MeraBridge {
 
   /**
    * Save pre-stringified JSON to Solid Pod
-   * 
+   *
    * Architecture: Core handles JSON.stringify, bridge just stores bytes.
    * This ensures single serialization point and trivial verification.
-   * 
+   *
    * Container path: /mera-learn/ (not /mera/ which is old path)
-   * 
+   *
    * @param filename - File name within mera-learn container
    * @param data - Pre-stringified JSON string
    * @returns BridgeResult indicating success/failure
    */
-  public async solidSave(filename: string, data: string): Promise<BridgeResult> {
+  public async solidSave(
+    filename: string,
+    data: string,
+  ): Promise<BridgeResult> {
     try {
       if (!this.initialized) {
         await this.initialize();
@@ -367,7 +405,7 @@ export class MeraBridge {
       if (!this.session?.info.isLoggedIn) {
         return {
           success: false,
-          error: 'Not authenticated',
+          error: "Not authenticated",
           errorType: BridgeErrorType.Authentication,
         };
       }
@@ -375,7 +413,7 @@ export class MeraBridge {
       if (!this.podUrl) {
         return {
           success: false,
-          error: 'Pod URL not available',
+          error: "Pod URL not available",
           errorType: BridgeErrorType.Authentication,
         };
       }
@@ -390,23 +428,22 @@ export class MeraBridge {
 
       // Save file - data is already a JSON string, don't stringify again
       const fileUrl = `${containerUrl}${filename}`;
-      const blob = new Blob([data], { type: 'application/json' });
-      
-      await overwriteFile(fileUrl, blob, { 
-        contentType: 'application/json',
-        fetch: this.session.fetch 
+      const blob = new Blob([data], { type: "application/json" });
+
+      await overwriteFile(fileUrl, blob, {
+        contentType: "application/json",
+        fetch: this.session.fetch,
       });
 
-      console.log('💾 Saved to Pod:', filename);
+      console.log("💾 Saved to Pod:", filename);
       return { success: true, error: null };
-
     } catch (error) {
       const errorType = this._classifyError(error);
-      console.error('❌ Pod save failed:', error);
-      
+      console.error("❌ Pod save failed:", error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         errorType,
       };
     }
@@ -414,12 +451,12 @@ export class MeraBridge {
 
   /**
    * Load raw JSON string from Solid Pod
-   * 
+   *
    * Returns the string directly - caller is responsible for parsing.
    * This ensures bridge doesn't need to understand data structure.
-   * 
+   *
    * Container path: /mera-learn/ (not /mera/ which is old path)
-   * 
+   *
    * @param filename - File name within mera-learn container
    * @returns BridgeResult<string> with raw JSON string or error
    */
@@ -432,7 +469,7 @@ export class MeraBridge {
       if (!this.session?.info.isLoggedIn) {
         return {
           success: false,
-          error: 'Not authenticated',
+          error: "Not authenticated",
           errorType: BridgeErrorType.Authentication,
         };
       }
@@ -440,7 +477,7 @@ export class MeraBridge {
       if (!this.podUrl) {
         return {
           success: false,
-          error: 'Pod URL not available',
+          error: "Pod URL not available",
           errorType: BridgeErrorType.Authentication,
         };
       }
@@ -450,16 +487,15 @@ export class MeraBridge {
       const text = await file.text();
       // Return string directly - let caller parse if needed
 
-      console.log('📥 Loaded from Pod:', filename);
+      console.log("📥 Loaded from Pod:", filename);
       return { success: true, data: text, error: null };
-
     } catch (error) {
       const errorType = this._classifyError(error);
-      console.error('❌ Pod load failed:', error);
-      
+      console.error("❌ Pod load failed:", error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         errorType,
       };
     }
@@ -467,9 +503,9 @@ export class MeraBridge {
 
   /**
    * Delete file from Solid Pod
-   * 
+   *
    * Container path: /mera-learn/ (not /mera/ which is old path)
-   * 
+   *
    * @param filename - File name within mera-learn container
    * @returns BridgeResult indicating success/failure
    */
@@ -482,7 +518,7 @@ export class MeraBridge {
       if (!this.session?.info.isLoggedIn) {
         return {
           success: false,
-          error: 'Not authenticated',
+          error: "Not authenticated",
           errorType: BridgeErrorType.Authentication,
         };
       }
@@ -490,7 +526,7 @@ export class MeraBridge {
       if (!this.podUrl) {
         return {
           success: false,
-          error: 'Pod URL not available',
+          error: "Pod URL not available",
           errorType: BridgeErrorType.Authentication,
         };
       }
@@ -498,16 +534,15 @@ export class MeraBridge {
       const fileUrl = `${this.podUrl}/mera-learn/${filename}`;
       await deleteFile(fileUrl, { fetch: this.session.fetch });
 
-      console.log('🗑️ Deleted from Pod:', filename);
+      console.log("🗑️ Deleted from Pod:", filename);
       return { success: true, error: null };
-
     } catch (error) {
       const errorType = this._classifyError(error);
-      console.error('❌ Pod delete failed:', error);
-      
+      console.error("❌ Pod delete failed:", error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         errorType,
       };
     }
@@ -515,9 +550,9 @@ export class MeraBridge {
 
   /**
    * List files in Solid Pod mera-learn container
-   * 
+   *
    * Container path: /mera-learn/ (not /mera/ which is old path)
-   * 
+   *
    * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.sp.*.json")
    * @returns BridgeResult<string[]> with matching filenames
    */
@@ -530,7 +565,7 @@ export class MeraBridge {
       if (!this.session?.info.isLoggedIn) {
         return {
           success: false,
-          error: 'Not authenticated',
+          error: "Not authenticated",
           errorType: BridgeErrorType.Authentication,
         };
       }
@@ -538,22 +573,24 @@ export class MeraBridge {
       if (!this.podUrl) {
         return {
           success: false,
-          error: 'Pod URL not available',
+          error: "Pod URL not available",
           errorType: BridgeErrorType.Authentication,
         };
       }
 
       const containerUrl = `${this.podUrl}/mera-learn/`;
-      const dataset = await getSolidDataset(containerUrl, { fetch: this.session.fetch });
+      const dataset = await getSolidDataset(containerUrl, {
+        fetch: this.session.fetch,
+      });
       const fileUrls = getContainedResourceUrlAll(dataset);
-      
+
       // Extract filenames from full URLs
       const filenames = fileUrls
-        .map(url => {
-          const parts = url.split('/');
+        .map((url) => {
+          const parts = url.split("/");
           return parts[parts.length - 1];
         })
-        .filter(filename => {
+        .filter((filename) => {
           // Apply pattern filter if provided
           if (pattern) {
             return this._matchesPattern(filename, pattern);
@@ -561,16 +598,15 @@ export class MeraBridge {
           return true;
         });
 
-      console.log('📋 Listed Pod files:', filenames.length);
+      console.log("📋 Listed Pod files:", filenames.length);
       return { success: true, data: filenames, error: null };
-
     } catch (error) {
       const errorType = this._classifyError(error);
-      console.error('❌ Pod list failed:', error);
-      
+      console.error("❌ Pod list failed:", error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         errorType,
       };
     }
@@ -582,10 +618,10 @@ export class MeraBridge {
 
   /**
    * Simple glob pattern matcher
-   * 
+   *
    * Supports * wildcard for any characters.
    * Example: "mera.*.json" matches "mera.123.json", "mera.backup.json"
-   * 
+   *
    * @param filename - Filename to test
    * @param pattern - Glob pattern with * wildcards
    * @returns boolean - true if filename matches pattern
@@ -594,19 +630,19 @@ export class MeraBridge {
     // Convert glob pattern to regex
     // Escape special regex chars except *
     const regexPattern = pattern
-      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')  // Escape special chars
-      .replace(/\*/g, '.*');                    // Convert * to .*
-    
+      .replace(/[.+?^${}()|[\]\\]/g, "\\$&") // Escape special chars
+      .replace(/\*/g, ".*"); // Convert * to .*
+
     const regex = new RegExp(`^${regexPattern}$`);
     return regex.test(filename);
   }
 
   /**
    * Classify error into BridgeErrorType
-   * 
+   *
    * Examines error message to categorize the type of failure.
    * This helps callers implement appropriate retry/fallback logic.
-   * 
+   *
    * @param error - Error object or unknown value
    * @returns BridgeErrorType - Categorized error type
    */
@@ -617,15 +653,19 @@ export class MeraBridge {
 
     const message = error.message.toLowerCase();
 
-    if (message.includes('401') || message.includes('403') || message.includes('unauthorized')) {
+    if (
+      message.includes("401") ||
+      message.includes("403") ||
+      message.includes("unauthorized")
+    ) {
       return BridgeErrorType.Authentication;
     }
 
-    if (message.includes('404') || message.includes('not found')) {
+    if (message.includes("404") || message.includes("not found")) {
       return BridgeErrorType.NotFound;
     }
 
-    if (message.includes('quota') || message.includes('storage')) {
+    if (message.includes("quota") || message.includes("storage")) {
       return BridgeErrorType.Storage;
     }
 
@@ -634,9 +674,9 @@ export class MeraBridge {
 
   /**
    * Get debug information about bridge state
-   * 
+   *
    * Useful for troubleshooting initialization and authentication issues.
-   * 
+   *
    * @returns Object with bridge status fields
    */
   public getDebugInfo(): {
@@ -670,7 +710,7 @@ const bridgeInstance = MeraBridge.getInstance();
 // Start initialization immediately (fire-and-forget)
 // Bootstrap will poll check() to wait for completion
 bridgeInstance.initialize().catch((err) => {
-  console.error('❌ Bridge initialization failed:', err);
+  console.error("❌ Bridge initialization failed:", err);
 });
 
 // Export for ES modules

@@ -33407,14 +33407,14 @@ var init_meraBridge = __esm({
       // ==========================================================================
       /**
        * Initialize bridge - ensures session is ready and Pod URL is extracted
-       * 
+       *
        * Called automatically at module load (fire-and-forget pattern).
-       * 
+       *
        * Trusts Solid Client's built-in persistence:
        * - getDefaultSession() auto-restores from localStorage
        * - handleIncomingRedirect() handles both OAuth callbacks AND restoration
        * - No manual timestamp tracking needed
-       * 
+       *
        * @returns Promise<boolean> - true if authenticated, false otherwise
        */
       async initialize() {
@@ -33433,11 +33433,22 @@ var init_meraBridge = __esm({
             isLoggedIn: this.session.info.isLoggedIn,
             webId: this.session.info.webId
           });
+          const solidKeys = Object.keys(localStorage).filter(
+            (k) => k.includes("solid") || k.includes("session") || k.includes("oidc")
+          );
+          console.log("\u{1F4CD} Step 1.5: localStorage investigation:", {
+            hasCurrentSession: localStorage.getItem("KEY_CURRENT_SESSION") !== null,
+            solidKeyCount: solidKeys.length
+          });
           console.log("\u{1F4CD} Step 2: Calling handleIncomingRedirect...");
+          console.log("\u{1F4CD} Step 2a: URL:", window.location.href);
+          console.log(
+            "\u{1F4CD} Step 2b: Has OAuth params:",
+            window.location.href.includes("code=")
+          );
           await this.session.handleIncomingRedirect({
             url: window.location.href,
             restorePreviousSession: true
-            // CRITICAL: tells Solid to check localStorage
           });
           console.log("\u{1F4CD} Step 3: handleIncomingRedirect completed");
           this.session = getDefaultSession();
@@ -33453,6 +33464,22 @@ var init_meraBridge = __esm({
             return true;
           } else {
             console.log("\u26A0\uFE0F User not authenticated");
+            if (solidKeys.length > 0) {
+              console.log(
+                "\u{1F504} Found Solid data without active session - triggering re-authentication"
+              );
+              console.log("\u{1F504} This will redirect you to login...");
+              await this.session.login({
+                oidcIssuer: "https://solidcommunity.net",
+                redirectUrl: window.location.href,
+                clientName: "Mera Digital Security Education"
+              });
+              return new Promise(() => {
+              });
+            }
+            console.log(
+              "\u26A0\uFE0F No Solid data found - new user or need to authenticate"
+            );
             this.initialized = false;
             return false;
           }
@@ -33479,10 +33506,10 @@ var init_meraBridge = __esm({
       }
       /**
        * Lightweight check for bridge readiness
-       * 
+       *
        * Bootstrap polls this method waiting for initialization to complete.
        * This is synchronous and just checks flags - doesn't trigger initialization.
-       * 
+       *
        * @returns boolean - true if initialized and authenticated
        */
       check() {
@@ -33511,10 +33538,10 @@ var init_meraBridge = __esm({
       // ==========================================================================
       /**
        * Save pre-stringified JSON to localStorage
-       * 
+       *
        * Architecture: Core handles JSON.stringify, bridge just stores bytes.
        * This ensures single serialization point and trivial verification.
-       * 
+       *
        * @param filename - Storage key (will be prefixed with mera_)
        * @param data - Pre-stringified JSON string
        * @returns BridgeResult indicating success/failure
@@ -33536,10 +33563,10 @@ var init_meraBridge = __esm({
       }
       /**
        * Load raw JSON string from localStorage
-       * 
+       *
        * Returns the string directly - caller is responsible for parsing.
        * This ensures bridge doesn't need to understand data structure.
-       * 
+       *
        * @param filename - Storage key (mera_ prefix added automatically)
        * @returns BridgeResult<string> with raw JSON string or error
        */
@@ -33567,7 +33594,7 @@ var init_meraBridge = __esm({
       }
       /**
        * Delete file from localStorage
-       * 
+       *
        * @param filename - Storage key (mera_ prefix added automatically)
        * @returns BridgeResult indicating success/failure
        */
@@ -33588,7 +33615,7 @@ var init_meraBridge = __esm({
       }
       /**
        * List files in localStorage with mera_ prefix
-       * 
+       *
        * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.lofp.*.json")
        * @returns BridgeResult<string[]> with matching filenames
        */
@@ -33603,7 +33630,9 @@ var init_meraBridge = __esm({
           }
           const meraKeys = allKeys.filter((key) => key.startsWith("mera_"));
           const filenames = meraKeys.map((key) => key.replace("mera_", ""));
-          const matched = pattern ? filenames.filter((filename) => this._matchesPattern(filename, pattern)) : filenames;
+          const matched = pattern ? filenames.filter(
+            (filename) => this._matchesPattern(filename, pattern)
+          ) : filenames;
           console.log("\u{1F4CB} Listed localStorage files:", matched.length);
           return { success: true, data: matched, error: null };
         } catch (error46) {
@@ -33620,12 +33649,12 @@ var init_meraBridge = __esm({
       // ==========================================================================
       /**
        * Save pre-stringified JSON to Solid Pod
-       * 
+       *
        * Architecture: Core handles JSON.stringify, bridge just stores bytes.
        * This ensures single serialization point and trivial verification.
-       * 
+       *
        * Container path: /mera-learn/ (not /mera/ which is old path)
-       * 
+       *
        * @param filename - File name within mera-learn container
        * @param data - Pre-stringified JSON string
        * @returns BridgeResult indicating success/failure
@@ -33674,12 +33703,12 @@ var init_meraBridge = __esm({
       }
       /**
        * Load raw JSON string from Solid Pod
-       * 
+       *
        * Returns the string directly - caller is responsible for parsing.
        * This ensures bridge doesn't need to understand data structure.
-       * 
+       *
        * Container path: /mera-learn/ (not /mera/ which is old path)
-       * 
+       *
        * @param filename - File name within mera-learn container
        * @returns BridgeResult<string> with raw JSON string or error
        */
@@ -33719,9 +33748,9 @@ var init_meraBridge = __esm({
       }
       /**
        * Delete file from Solid Pod
-       * 
+       *
        * Container path: /mera-learn/ (not /mera/ which is old path)
-       * 
+       *
        * @param filename - File name within mera-learn container
        * @returns BridgeResult indicating success/failure
        */
@@ -33760,9 +33789,9 @@ var init_meraBridge = __esm({
       }
       /**
        * List files in Solid Pod mera-learn container
-       * 
+       *
        * Container path: /mera-learn/ (not /mera/ which is old path)
-       * 
+       *
        * @param pattern - Optional glob pattern (e.g., "mera.*.*.*.sp.*.json")
        * @returns BridgeResult<string[]> with matching filenames
        */
@@ -33786,7 +33815,9 @@ var init_meraBridge = __esm({
             };
           }
           const containerUrl = `${this.podUrl}/mera-learn/`;
-          const dataset = await getSolidDataset(containerUrl, { fetch: this.session.fetch });
+          const dataset = await getSolidDataset(containerUrl, {
+            fetch: this.session.fetch
+          });
           const fileUrls = getContainedResourceUrlAll(dataset);
           const filenames = fileUrls.map((url2) => {
             const parts = url2.split("/");
@@ -33814,10 +33845,10 @@ var init_meraBridge = __esm({
       // ==========================================================================
       /**
        * Simple glob pattern matcher
-       * 
+       *
        * Supports * wildcard for any characters.
        * Example: "mera.*.json" matches "mera.123.json", "mera.backup.json"
-       * 
+       *
        * @param filename - Filename to test
        * @param pattern - Glob pattern with * wildcards
        * @returns boolean - true if filename matches pattern
@@ -33829,10 +33860,10 @@ var init_meraBridge = __esm({
       }
       /**
        * Classify error into BridgeErrorType
-       * 
+       *
        * Examines error message to categorize the type of failure.
        * This helps callers implement appropriate retry/fallback logic.
-       * 
+       *
        * @param error - Error object or unknown value
        * @returns BridgeErrorType - Categorized error type
        */
@@ -33854,9 +33885,9 @@ var init_meraBridge = __esm({
       }
       /**
        * Get debug information about bridge state
-       * 
+       *
        * Useful for troubleshooting initialization and authentication issues.
-       * 
+       *
        * @returns Object with bridge status fields
        */
       getDebugInfo() {

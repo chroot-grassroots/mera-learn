@@ -49415,40 +49415,40 @@ var init_mainMenuInterface = __esm({
         const secondsRemaining = weekEnd - now;
         const daysRemaining = Math.ceil(secondsRemaining / (24 * 60 * 60));
         return `
-      <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+      <div class="min-h-screen bg-mera-light dark:bg-mera-dark flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full">
           <!-- Header -->
-          <h1 class="text-3xl font-bold text-gray-900 mb-6 text-center">
+          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
             Mera
           </h1>
 
           <!-- Streak Display -->
           <div class="mb-6">
-            <h2 class="text-xl font-semibold text-gray-700 mb-3">
+            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
               Learning Streak
             </h2>
             <div class="text-center mb-4">
               <div class="inline-flex items-baseline">
-                <span class="text-5xl font-bold text-blue-600">${currentStreak}</span>
-                <span class="text-2xl text-gray-600 ml-2">\u{1F525}</span>
+                <span class="text-5xl font-bold text-green-600 dark:text-green-500">${currentStreak}</span>
+                <span class="text-2xl ml-2">\u{1F525}</span>
               </div>
-              <div class="text-gray-600 mt-1">
+              <div class="text-gray-600 dark:text-gray-400 mt-1">
                 week${currentStreak === 1 ? "" : "s"} streak
               </div>
             </div>
           </div>
 
           <!-- Current Week Progress -->
-          <div class="border-t border-gray-200 pt-6">
+          <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
             <div class="mb-4">
-              <div class="flex justify-between text-sm text-gray-600 mb-2">
+              <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
                 <span>This week's progress</span>
                 <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
               </div>
               <!-- Progress bar -->
-              <div class="w-full bg-gray-200 rounded-full h-3">
+              <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                 <div 
-                  class="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                  class="bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all duration-300"
                   style="width: ${Math.min(100, lessonsThisWeek / weeklyGoal * 100)}%"
                 ></div>
               </div>
@@ -49459,7 +49459,7 @@ var init_mainMenuInterface = __esm({
           </div>
 
           <!-- Coming Soon Notice -->
-          <div class="mt-6 text-center text-sm text-gray-500 border-t border-gray-200 pt-4">
+          <div class="mt-6 text-center text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-4">
             <p>Domain cards, lesson navigation, and more coming soon!</p>
           </div>
         </div>
@@ -49472,12 +49472,12 @@ var init_mainMenuInterface = __esm({
       renderWeeklyStatusMessage(goalMet, remaining, daysRemaining) {
         if (goalMet) {
           return `
-        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
           <div class="flex items-center">
             <span class="text-2xl mr-3">\u2705</span>
             <div>
-              <p class="font-medium text-green-900">Goal complete!</p>
-              <p class="text-sm text-green-700">You've hit your weekly target.</p>
+              <p class="font-medium text-green-900 dark:text-green-200">Goal complete!</p>
+              <p class="text-sm text-green-700 dark:text-green-300">You've hit your weekly target.</p>
             </div>
           </div>
         </div>
@@ -49486,12 +49486,12 @@ var init_mainMenuInterface = __esm({
         const lessonWord = remaining === 1 ? "lesson" : "lessons";
         const dayWord = daysRemaining === 1 ? "day" : "days";
         return `
-      <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
         <div class="flex items-center">
           <span class="text-2xl mr-3">\u{1F4DA}</span>
           <div>
-            <p class="font-medium text-blue-900">Keep it up!</p>
-            <p class="text-sm text-blue-700">
+            <p class="font-medium text-blue-900 dark:text-blue-200">Keep it up!</p>
+            <p class="text-sm text-blue-700 dark:text-blue-300">
               Complete <strong>${remaining}</strong> more ${lessonWord} 
               in the next ${daysRemaining} ${dayWord} to maintain your streak.
             </p>
@@ -49505,26 +49505,26 @@ var init_mainMenuInterface = __esm({
        */
       renderFlexibleStreakCard(currentStreak, lessonsThisWeek) {
         return `
-      <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+      <div class="min-h-screen bg-mera-light dark:bg-mera-dark flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full">
           <!-- Header -->
-          <h1 class="text-3xl font-bold text-gray-900 mb-6 text-center">
+          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
             Mera
           </h1>
 
           <!-- Flexible Pace Message -->
           <div class="mb-6 text-center">
-            <h2 class="text-xl font-semibold text-gray-700 mb-3">
+            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
               Learning at Your Own Pace
             </h2>
-            <div class="text-gray-600">
-              <p class="mb-2">You've completed <strong>${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? "lesson" : "lessons"} this week.</p>
+            <div class="text-gray-600 dark:text-gray-400">
+              <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-white">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? "lesson" : "lessons"} this week.</p>
               <p class="text-sm">No weekly goals - learn whenever works for you!</p>
             </div>
           </div>
 
           <!-- Coming Soon Notice -->
-          <div class="mt-6 text-center text-sm text-gray-500 border-t border-gray-200 pt-4">
+          <div class="mt-6 text-center text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-4">
             <p>Domain cards, lesson navigation, and more coming soon!</p>
           </div>
         </div>

@@ -33437,7 +33437,7 @@ var init_meraBridge = __esm({
             (k) => k.includes("solid") || k.includes("session") || k.includes("oidc")
           );
           console.log("\u{1F4CD} Step 1.5: localStorage investigation:", {
-            hasCurrentSession: localStorage.getItem("KEY_CURRENT_SESSION") !== null,
+            hasCurrentSession: localStorage.getItem("solidClientAuthn:currentSession") !== null,
             solidKeyCount: solidKeys.length
           });
           console.log("\u{1F4CD} Step 2: Calling handleIncomingRedirect...");
@@ -33459,6 +33459,13 @@ var init_meraBridge = __esm({
           });
           if (this.session.info.isLoggedIn) {
             console.log("\u2705 User authenticated");
+            if (this.session.info.sessionId) {
+              localStorage.setItem(
+                "solidClientAuthn:currentSession",
+                this.session.info.sessionId
+              );
+              console.log("\u{1F4DD} Stored session marker for cross-page detection");
+            }
             await this._extractPodUrl();
             this.initialized = true;
             return true;

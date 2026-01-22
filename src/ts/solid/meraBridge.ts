@@ -119,7 +119,8 @@ export class MeraBridge {
           k.includes("solid") || k.includes("session") || k.includes("oidc"),
       );
       console.log("📍 Step 1.5: localStorage investigation:", {
-        hasCurrentSession: localStorage.getItem("KEY_CURRENT_SESSION") !== null,
+        hasCurrentSession:
+          localStorage.getItem("solidClientAuthn:currentSession") !== null,
         solidKeyCount: solidKeys.length,
       });
 
@@ -148,6 +149,16 @@ export class MeraBridge {
       // Step 4: Check if logged in
       if (this.session.info.isLoggedIn) {
         console.log("✅ User authenticated");
+
+        // NEW: Ensure session marker is set for other pages to detect
+        if (this.session.info.sessionId) {
+          localStorage.setItem(
+            "solidClientAuthn:currentSession",
+            this.session.info.sessionId,
+          );
+          console.log("📝 Stored session marker for cross-page detection");
+        }
+
         await this._extractPodUrl();
         this.initialized = true;
         return true;
@@ -169,7 +180,6 @@ export class MeraBridge {
           });
 
           // We never reach here - login() redirects away
-          // But TypeScript wants a return, so:
           return new Promise(() => {}); // Pending forever (we've redirected)
         }
 

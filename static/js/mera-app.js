@@ -55485,18 +55485,18 @@ var TimelineContainer = class {
       throw new Error(`Container ${this.containerId} not found`);
     }
     container.innerHTML = `
-            <div class="max-w-4xl mx-auto py-8 px-4">
-                <div id="${this.timelineId}" class="space-y-8">
-                    <!-- Component slots will be added here -->
-                </div>
-            </div>
-        `;
+        <div class="max-w-4xl lg:max-w-6xl mx-auto py-8 px-4">
+            <div id="${this.timelineId}" class="space-y-8">
+              <!-- Component slots will be added here -->
+             </div>
+        </div>
+    `;
     console.log("\u2705 Timeline container initialized");
   }
   /**
    * Add a slot for a component to render into.
    * Creates a simple wrapper div with consistent spacing.
-   * 
+   *
    * @param componentId - Unique identifier for the component
    */
   addComponentSlot(componentId) {
@@ -55518,7 +55518,7 @@ var TimelineContainer = class {
   /**
    * Get the DOM element where a component should render its content.
    * Component interfaces use this to know where to attach their UI.
-   * 
+   *
    * @param componentId - Component identifier
    * @returns The render area element, or null if not found
    */
@@ -55542,7 +55542,7 @@ var TimelineContainer = class {
   }
   /**
    * Get basic timeline statistics for debugging.
-   * 
+   *
    * @returns Object with timeline metrics
    */
   getTimelineStats() {
@@ -55558,7 +55558,9 @@ var TimelineContainer = class {
 var timelineInstance = null;
 function initializeTimeline(containerId = "lesson-container") {
   if (timelineInstance) {
-    console.warn("\u26A0\uFE0F Timeline already initialized, returning existing instance");
+    console.warn(
+      "\u26A0\uFE0F Timeline already initialized, returning existing instance"
+    );
     return timelineInstance;
   }
   timelineInstance = new TimelineContainer(containerId);

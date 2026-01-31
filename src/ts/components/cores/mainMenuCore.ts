@@ -34,6 +34,7 @@ import {
   NavigationMessageQueueManager,
   type NavigationMessage 
 } from "../../core/navigationSchema.js";
+import { domainData, lessonMetadata } from "../../registry/mera-registry.js";
 
 // ============================================================================
 // SCHEMAS
@@ -58,6 +59,41 @@ export const MainMenuComponentProgressSchema = BaseComponentProgressSchema.exten
 });
 
 export type MainMenuComponentProgress = z.infer<typeof MainMenuComponentProgressSchema>;
+
+// ============================================================================
+// TYPES FOR PHASE 4 - DOMAIN ACCORDION
+// ============================================================================
+
+/**
+ * Domain data with calculated progress
+ */
+export interface DomainData {
+  id: number;
+  title: string;
+  description: string;
+  emoji: string;
+  color: string;
+  completed: number;
+  total: number;
+  percentage: number;
+}
+
+/**
+ * Lesson status for UI rendering
+ */
+export type LessonStatus = 'not-started' | 'started' | 'completed';
+
+/**
+ * Lesson data with status
+ */
+export interface LessonData {
+  id: number;
+  title: string;
+  description: string;
+  difficulty: string;
+  estimatedMinutes: number;
+  status: LessonStatus;
+}
 
 // ============================================================================
 // PROGRESS MANAGER
@@ -196,6 +232,13 @@ export class MainMenuCore extends BaseComponentCore<
     return this._navigationManager;
   }
 
+  /**
+   * Get curriculum registry for domain/lesson queries.
+   */
+  get curriculumRegistry(): CurriculumRegistry {
+    return this._curriculumRegistry;
+  }
+
   // ============================================================================
   // MESSAGE POLLING
   // ============================================================================
@@ -262,7 +305,7 @@ export class MainMenuCore extends BaseComponentCore<
   /**
    * Queue navigation to a specific lesson.
    */
-  queueNavigation(entityId: number, page: number): void {
+  queueNavigation(entityId: number, page: number = 0): void {
     if (!this._operationsEnabled) return;
     this.navigationMessageQueue.queueNavigationMessage(entityId, page);
   }
@@ -365,6 +408,77 @@ export class MainMenuCore extends BaseComponentCore<
     }
 
     return count;
+  }
+
+  // ============================================================================
+  // DOMAIN & LESSON METHODS (Phase 4)
+  // ============================================================================
+
+  /**
+   * Get all domains with calculated progress
+   */
+  getAllDomains(): DomainData[] {
+    const domainIds = this._curriculumRegistry.getAllDomainIds();
+    
+    return domainIds.map(domainId => {
+      const metadata = domainData.find((d: any) => d.id === domainId);
+      
+      // Cast to access getDomainProgress() which isn't on readonly interface
+      const progress = (this._overallProgressManager as any).getDomainProgress(domainId);
+      
+      return {
+        id: domainId,
+        title: metadata?.title || `Domain ${domainId}`,
+        description: metadata?.description || '',
+        emoji: '📚', // Not in domain YAML yet, using default
+        color: '#84e67b', // Not in domain YAML yet, using default green
+        completed: progress.completed,
+        total: progress.total,
+        percentage: progress.total > 0 
+          ? Math.round((progress.completed / progress.total) * 100)
+          : 0
+      };
+    });
+  }
+
+  /**
+   * Get all lessons in a domain with status
+   */
+  getLessonsInDomain(domainId: number): LessonData[] {
+    const lessonIds = this._curriculumRegistry.getLessonsInDomain(domainId);
+    
+    if (!lessonIds) return [];
+
+    return lessonIds.map(lessonId => {
+      const metadata = lessonMetadata.find((l: any) => l.id === lessonId);
+      const status = this.getLessonStatus(lessonId);
+
+      return {
+        id: lessonId,
+        title: metadata?.title || `Lesson ${lessonId}`,
+        description: '', // TODO: Add description field to lesson YAML files
+        difficulty: metadata?.difficulty || 'beginner',
+        estimatedMinutes: metadata?.estimatedMinutes || 10,
+        status
+      };
+    });
+  }
+
+  /**
+   * Determine lesson status: not-started, started, or completed
+   */
+  private getLessonStatus(lessonId: number): LessonStatus {
+    const progress = this._overallProgressManager.getProgress();
+    const completion = progress.lessonCompletions[lessonId.toString()];
+
+    if (!completion) return 'not-started';
+    
+    if (completion.timeCompleted !== null) return 'completed';
+    
+    // If lastUpdated exists but timeCompleted is null, lesson was started
+    if (completion.lastUpdated > 0) return 'started';
+    
+    return 'not-started';
   }
 
   /**

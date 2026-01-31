@@ -49396,16 +49396,16 @@ var init_mainMenuInterface = __esm({
       }
       createInternalState() {
         return {
-          rendered: false
+          rendered: false,
+          expandedDomainId: null,
+          expandedLessonId: null
         };
       }
       async loadComponentSpecificAssets() {
         this.setAssetLoadingState("ready");
       }
       /**
-       * Render main menu to DOM.
-       * 
-       * Phase 3: Single streak card centered on screen
+       * Render main menu: streak card + domain accordions
        */
       render() {
         this.componentCore.checkAndQueueStreakUpdates();
@@ -49413,7 +49413,15 @@ var init_mainMenuInterface = __esm({
           this.componentCore.config.id
         );
         if (area) {
-          area.innerHTML = this.renderStreakCard();
+          area.innerHTML = `
+        <div class="min-h-screen bg-mera-light dark:bg-mera-dark p-4">
+          <div class="max-w-4xl lg:max-w-6xl mx-auto space-y-6">
+            ${this.renderStreakCard()}
+            ${this.renderDomainAccordions()}
+          </div>
+        </div>
+      `;
+          this.attachEventListeners();
           this.internal.rendered = true;
         }
       }
@@ -49453,53 +49461,46 @@ var init_mainMenuInterface = __esm({
         const secondsRemaining = weekEnd - now;
         const daysRemaining = Math.ceil(secondsRemaining / (24 * 60 * 60));
         return `
-      <div class="min-h-screen bg-mera-light dark:bg-mera-dark flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full">
-          <!-- Header -->
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-            Mera
-          </h1>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+        <!-- Header -->
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+          Mera
+        </h1>
 
-          <!-- Streak Display -->
-          <div class="mb-6">
-            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
-              Learning Streak
-            </h2>
-            <div class="text-center mb-4">
-              <div class="inline-flex items-baseline">
-                <span class="text-5xl font-bold text-green-600 dark:text-green-500">${currentStreak}</span>
-                <span class="text-2xl ml-2">\u{1F525}</span>
-              </div>
-              <div class="text-gray-600 dark:text-gray-400 mt-1">
-                week${currentStreak === 1 ? "" : "s"} streak
-              </div>
+        <!-- Streak Display -->
+        <div class="mb-6">
+          <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Learning Streak
+          </h2>
+          <div class="text-center mb-4">
+            <div class="inline-flex items-baseline">
+              <span class="text-5xl font-bold text-green-600 dark:text-green-500">${currentStreak}</span>
+              <span class="text-2xl ml-2">\u{1F525}</span>
+            </div>
+            <div class="text-gray-600 dark:text-gray-400 mt-1">
+              week${currentStreak === 1 ? "" : "s"} streak
+            </div>
+          </div>
+        </div>
+
+        <!-- Current Week Progress -->
+        <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <div class="mb-4">
+            <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
+              <span>This week's progress</span>
+              <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
+            </div>
+            <!-- Progress bar -->
+            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+              <div 
+                class="bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all duration-300"
+                style="width: ${Math.min(100, lessonsThisWeek / weeklyGoal * 100)}%"
+              ></div>
             </div>
           </div>
 
-          <!-- Current Week Progress -->
-          <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <div class="mb-4">
-              <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
-                <span>This week's progress</span>
-                <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
-              </div>
-              <!-- Progress bar -->
-              <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                <div 
-                  class="bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all duration-300"
-                  style="width: ${Math.min(100, lessonsThisWeek / weeklyGoal * 100)}%"
-                ></div>
-              </div>
-            </div>
-
-            <!-- Status message -->
-            ${this.renderWeeklyStatusMessage(goalMet, remaining, daysRemaining)}
-          </div>
-
-          <!-- Coming Soon Notice -->
-          <div class="mt-6 text-center text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-4">
-            <p>Domain cards, lesson navigation, and more coming soon!</p>
-          </div>
+          <!-- Status message -->
+          ${this.renderWeeklyStatusMessage(goalMet, remaining, daysRemaining)}
         </div>
       </div>
     `;
@@ -49543,31 +49544,175 @@ var init_mainMenuInterface = __esm({
        */
       renderFlexibleStreakCard(currentStreak, lessonsThisWeek) {
         return `
-      <div class="min-h-screen bg-mera-light dark:bg-mera-dark flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full">
-          <!-- Header -->
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-            Mera
-          </h1>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+        <!-- Header -->
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+          Mera
+        </h1>
 
-          <!-- Flexible Pace Message -->
-          <div class="mb-6 text-center">
-            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
-              Learning at Your Own Pace
-            </h2>
-            <div class="text-gray-600 dark:text-gray-400">
-              <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-white">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? "lesson" : "lessons"} this week.</p>
-              <p class="text-sm">No weekly goals - learn whenever works for you!</p>
-            </div>
-          </div>
-
-          <!-- Coming Soon Notice -->
-          <div class="mt-6 text-center text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-4">
-            <p>Domain cards, lesson navigation, and more coming soon!</p>
+        <!-- Flexible Pace Message -->
+        <div class="mb-6 text-center">
+          <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Learning at Your Own Pace
+          </h2>
+          <div class="text-gray-600 dark:text-gray-400">
+            <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-white">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? "lesson" : "lessons"} this week.</p>
+            <p class="text-sm">No weekly goals - learn whenever works for you!</p>
           </div>
         </div>
       </div>
     `;
+      }
+      // ============================================================================
+      // DOMAIN ACCORDIONS (Phase 4)
+      // ============================================================================
+      renderDomainAccordions() {
+        const domains = this.componentCore.getAllDomains();
+        const domainCards = domains.map((domain2) => {
+          const isExpanded = this.internal.expandedDomainId === domain2.id;
+          return `
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+          ${this.renderDomainHeader(domain2, isExpanded)}
+          ${isExpanded ? this.renderDomainContent(domain2) : ""}
+        </div>
+      `;
+        }).join("");
+        return `<div class="space-y-4">${domainCards}</div>`;
+      }
+      renderDomainHeader(domain2, isExpanded) {
+        return `
+      <button
+        class="w-full p-6 text-left hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+        data-domain-toggle="${domain2.id}"
+      >
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3 flex-1">
+            <span class="text-2xl">${isExpanded ? "\u25BC" : "\u25B6"}</span>
+            <span class="text-2xl">${domain2.emoji}</span>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold">${domain2.title}</h3>
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                ${domain2.completed} / ${domain2.total} lessons \u2022 ${domain2.percentage}%
+              </p>
+            </div>
+          </div>
+          ${domain2.completed === domain2.total && domain2.total > 0 ? `
+            <span class="text-green-600 dark:text-green-500 text-2xl ml-4">\u2713</span>
+          ` : ""}
+        </div>
+      </button>
+    `;
+      }
+      renderDomainContent(domain2) {
+        const lessons = this.componentCore.getLessonsInDomain(domain2.id);
+        const lessonItems = lessons.map((lesson) => {
+          const isExpanded = this.internal.expandedLessonId === lesson.id;
+          return `
+        <div class="border-b last:border-b-0 dark:border-gray-700">
+          ${this.renderLessonHeader(lesson, isExpanded)}
+          ${isExpanded ? this.renderLessonContent(lesson) : ""}
+        </div>
+      `;
+        }).join("");
+        return `
+      <div class="bg-gray-50 dark:bg-gray-750">
+        ${lessonItems}
+      </div>
+    `;
+      }
+      renderLessonHeader(lesson, isExpanded) {
+        const statusIcon = this.getLessonStatusIcon(lesson.status);
+        return `
+      <div class="flex items-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+        <button
+          class="flex-1 p-4 text-left flex items-center gap-3"
+          data-lesson-toggle="${lesson.id}"
+        >
+          <span class="text-lg">${isExpanded ? "\u25BC" : "\u25B6"}</span>
+          <span class="text-lg">${statusIcon}</span>
+          <div class="flex-1">
+            <h4 class="font-medium">${lesson.title}</h4>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              ${lesson.estimatedMinutes} min \u2022 ${lesson.difficulty}
+            </p>
+          </div>
+        </button>
+      </div>
+    `;
+      }
+      renderLessonContent(lesson) {
+        return `
+      <div class="px-4 pb-4 pl-16">
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+          ${lesson.description || "No description available."}
+        </p>
+        <button
+          class="px-4 py-2 bg-green-600 dark:bg-green-500 text-white 
+                 rounded hover:opacity-90 transition-opacity"
+          data-lesson-navigate="${lesson.id}"
+        >
+          ${lesson.status === "completed" ? "Review Lesson" : lesson.status === "started" ? "Continue Lesson" : "Start Lesson"} \u2192
+        </button>
+      </div>
+    `;
+      }
+      getLessonStatusIcon(status) {
+        switch (status) {
+          case "completed":
+            return '<span class="text-green-600 dark:text-green-500">\u2713</span>';
+          case "started":
+            return '<span class="text-yellow-500">\u25CF</span>';
+          case "not-started":
+            return '<span class="text-gray-400">\u25CB</span>';
+        }
+      }
+      // ============================================================================
+      // EVENT HANDLERS (Phase 4)
+      // ============================================================================
+      attachEventListeners() {
+        const area = this.timelineContainer.getComponentArea(
+          this.componentCore.config.id
+        );
+        if (!area) return;
+        area.querySelectorAll("[data-domain-toggle]").forEach((button) => {
+          button.addEventListener("click", (e) => {
+            const domainId = parseInt(e.currentTarget.dataset.domainToggle);
+            this.toggleDomain(domainId);
+          });
+        });
+        area.querySelectorAll("[data-lesson-toggle]").forEach((button) => {
+          button.addEventListener("click", (e) => {
+            const lessonId = parseInt(e.currentTarget.dataset.lessonToggle);
+            this.toggleLesson(lessonId);
+          });
+        });
+        area.querySelectorAll("[data-lesson-navigate]").forEach((button) => {
+          button.addEventListener("click", (e) => {
+            const lessonId = parseInt(e.currentTarget.dataset.lessonNavigate);
+            this.navigateToLesson(lessonId);
+          });
+        });
+      }
+      toggleDomain(domainId) {
+        if (this.internal.expandedDomainId === domainId) {
+          this.internal.expandedDomainId = null;
+          this.internal.expandedLessonId = null;
+        } else {
+          this.internal.expandedDomainId = domainId;
+          this.internal.expandedLessonId = null;
+        }
+        this.render();
+      }
+      toggleLesson(lessonId) {
+        if (this.internal.expandedLessonId === lessonId) {
+          this.internal.expandedLessonId = null;
+        } else {
+          this.internal.expandedLessonId = lessonId;
+        }
+        this.render();
+      }
+      navigateToLesson(lessonId) {
+        this.componentCore.queueNavigation(lessonId, 0);
       }
       // ============================================================================
       // HELPER METHODS
@@ -49609,6 +49754,7 @@ var init_mainMenuCore = __esm({
     init_mainMenuInterface();
     init_overallProgressSchema();
     init_navigationSchema();
+    init_mera_registry();
     MainMenuComponentConfigSchema = BaseComponentConfigSchema.extend({
       type: external_exports.literal("main_menu")
     });
@@ -49685,6 +49831,12 @@ var init_mainMenuCore = __esm({
       get navigationManager() {
         return this._navigationManager;
       }
+      /**
+       * Get curriculum registry for domain/lesson queries.
+       */
+      get curriculumRegistry() {
+        return this._curriculumRegistry;
+      }
       // ============================================================================
       // MESSAGE POLLING
       // ============================================================================
@@ -49735,7 +49887,7 @@ var init_mainMenuCore = __esm({
       /**
        * Queue navigation to a specific lesson.
        */
-      queueNavigation(entityId, page) {
+      queueNavigation(entityId, page = 0) {
         if (!this._operationsEnabled) return;
         this.navigationMessageQueue.queueNavigationMessage(entityId, page);
       }
@@ -49810,6 +49962,62 @@ var init_mainMenuCore = __esm({
           }
         }
         return count;
+      }
+      // ============================================================================
+      // DOMAIN & LESSON METHODS (Phase 4)
+      // ============================================================================
+      /**
+       * Get all domains with calculated progress
+       */
+      getAllDomains() {
+        const domainIds = this._curriculumRegistry.getAllDomainIds();
+        return domainIds.map((domainId) => {
+          const metadata = domainData.find((d) => d.id === domainId);
+          const progress = this._overallProgressManager.getDomainProgress(domainId);
+          return {
+            id: domainId,
+            title: metadata?.title || `Domain ${domainId}`,
+            description: metadata?.description || "",
+            emoji: "\u{1F4DA}",
+            // Not in domain YAML yet, using default
+            color: "#84e67b",
+            // Not in domain YAML yet, using default green
+            completed: progress.completed,
+            total: progress.total,
+            percentage: progress.total > 0 ? Math.round(progress.completed / progress.total * 100) : 0
+          };
+        });
+      }
+      /**
+       * Get all lessons in a domain with status
+       */
+      getLessonsInDomain(domainId) {
+        const lessonIds = this._curriculumRegistry.getLessonsInDomain(domainId);
+        if (!lessonIds) return [];
+        return lessonIds.map((lessonId) => {
+          const metadata = lessonMetadata.find((l) => l.id === lessonId);
+          const status = this.getLessonStatus(lessonId);
+          return {
+            id: lessonId,
+            title: metadata?.title || `Lesson ${lessonId}`,
+            description: "",
+            // TODO: Add description field to lesson YAML files
+            difficulty: metadata?.difficulty || "beginner",
+            estimatedMinutes: metadata?.estimatedMinutes || 10,
+            status
+          };
+        });
+      }
+      /**
+       * Determine lesson status: not-started, started, or completed
+       */
+      getLessonStatus(lessonId) {
+        const progress = this._overallProgressManager.getProgress();
+        const completion = progress.lessonCompletions[lessonId.toString()];
+        if (!completion) return "not-started";
+        if (completion.timeCompleted !== null) return "completed";
+        if (completion.lastUpdated > 0) return "started";
+        return "not-started";
       }
       /**
        * Count lessons first completed since a timestamp (for current week display).
@@ -50042,7 +50250,7 @@ var init_basicTaskCore = __esm({
 });
 
 // src/ts/registry/mera-registry.ts
-var progressSchemaMap, componentValidatorMap, componentInitializerMap, componentRegistrations, allLessonIds, allComponentIds, lessonMetrics, componentIdToTypeMap, componentToLessonMap, domainLessonMap, curriculumDataRaw, CurriculumRegistry, curriculumData, lessonMetadata;
+var progressSchemaMap, componentValidatorMap, componentInitializerMap, componentRegistrations, allLessonIds, allComponentIds, lessonMetrics, componentIdToTypeMap, componentToLessonMap, domainLessonMap, curriculumDataRaw, CurriculumRegistry, curriculumData, domainData, lessonMetadata;
 var init_mera_registry = __esm({
   "src/ts/registry/mera-registry.ts"() {
     "use strict";
@@ -50117,10 +50325,10 @@ var init_mera_registry = __esm({
       [1000001, 1]
     ]);
     domainLessonMap = /* @__PURE__ */ new Map([
-      [1004, [12348]],
-      [1001, [12345]],
+      [1003, [12347]],
       [1002, [12346]],
-      [1003, [12347]]
+      [1001, [12345]],
+      [1004, [12348]]
     ]);
     curriculumDataRaw = null;
     CurriculumRegistry = class {
@@ -50183,6 +50391,72 @@ var init_mera_registry = __esm({
       componentIdToTypeMap,
       componentToLessonMap
     );
+    domainData = [
+      {
+        "id": 1003,
+        "title": "Communicate Securely",
+        "description": "Protect your conversations from surveillance and interception",
+        "pedagogical_focus": "Secure communication tools and practices for activist organizing",
+        "lesson_count": 20,
+        "estimated_weeks": 7,
+        "order": 3,
+        "key_outcomes": [
+          "Use Signal for sensitive communications",
+          "Verify safety numbers with key contacts",
+          "Understand metadata risks in messaging",
+          "Share files securely without corporate surveillance"
+        ],
+        "core_concept": "End-to-end encryption - protect message content and minimize metadata exposure"
+      },
+      {
+        "id": 1002,
+        "title": "Lock Down Your Accounts",
+        "description": "Secure existing accounts with strong passwords, 2FA, and proper device settings",
+        "pedagogical_focus": "Basic account security and device hardening for everyday protection",
+        "lesson_count": 20,
+        "estimated_weeks": 7,
+        "order": 2,
+        "key_outcomes": [
+          "Implement strong unique passwords with password manager",
+          "Enable two-factor authentication on critical accounts",
+          "Configure secure device settings (disable FaceID, auto-backup)",
+          "Understand and manage app permissions"
+        ],
+        "core_concept": "Defense in depth - multiple layers of security on devices and accounts"
+      },
+      {
+        "id": 1001,
+        "title": "Separate Your Identities",
+        "description": "Learn to compartmentalize your digital life between activist and civilian identities",
+        "pedagogical_focus": "Identity separation and account isolation to protect activist work from surveillance",
+        "lesson_count": 20,
+        "estimated_weeks": 7,
+        "order": 1,
+        "key_outcomes": [
+          "Create separate activist and civilian email accounts",
+          "Migrate sensitive accounts to protected identity",
+          "Understand metadata risks in social media",
+          "Maintain boundaries between identities"
+        ],
+        "core_concept": "Compartmentalization - assume civilian identity is compromised, protect activist identity"
+      },
+      {
+        "id": 1004,
+        "title": "Recognize & Respond to Threats",
+        "description": "Identify phishing, social engineering, and surveillance, then respond appropriately",
+        "pedagogical_focus": "Threat recognition and incident response for activist contexts",
+        "lesson_count": 18,
+        "estimated_weeks": 6,
+        "order": 4,
+        "key_outcomes": [
+          "Recognize phishing attempts and social engineering",
+          "Identify surveillance indicators",
+          "Respond appropriately to device seizure",
+          "Implement threat-appropriate security measures"
+        ],
+        "core_concept": "Threat modeling - recognize attacks and respond proportionally to actual risk"
+      }
+    ];
     lessonMetadata = [
       {
         "id": 12348,

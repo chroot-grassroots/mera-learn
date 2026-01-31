@@ -7,7 +7,14 @@
  */
 
 import { BaseComponentInterface, BaseComponentInterfaceInternalState } from "./baseComponentInterface.js";
-import type { MainMenuCore, MainMenuComponentConfig, MainMenuComponentProgress } from "../cores/mainMenuCore.js";
+import type { 
+  MainMenuCore, 
+  MainMenuComponentConfig, 
+  MainMenuComponentProgress,
+  DomainData,
+  LessonData,
+  LessonStatus
+} from "../cores/mainMenuCore.js";
 import type { TimelineContainer } from "../../ui/timelineContainer.js";
 
 // ============================================================================
@@ -15,7 +22,11 @@ import type { TimelineContainer } from "../../ui/timelineContainer.js";
 // ============================================================================
 
 interface MainMenuInternalState extends BaseComponentInterfaceInternalState {
-  // Will expand in later phases (domain expansion state, etc.)
+  /** Currently expanded domain (null = all collapsed) */
+  expandedDomainId: number | null;
+  
+  /** Currently expanded lesson (null = all collapsed) */
+  expandedLessonId: number | null;
 }
 
 // ============================================================================
@@ -23,12 +34,11 @@ interface MainMenuInternalState extends BaseComponentInterfaceInternalState {
 // ============================================================================
 
 /**
- * Main Menu Interface - renders streak tracking and navigation.
+ * Main Menu Interface - renders streak tracking and domain accordions.
  * 
- * Phase 3 implementation: Streak card only
+ * Phase 3: Streak card ✓
+ * Phase 4: Domain accordions ✓
  * Future phases will add:
- * - Domain progress cards (Phase 4)
- * - Lesson lists (Phase 5)
  * - Jump In card (Phase 6)
  * - Lesson reset (Phase 7)
  */
@@ -48,6 +58,8 @@ export class MainMenuInterface extends BaseComponentInterface<
   protected createInternalState(): MainMenuInternalState {
     return {
       rendered: false,
+      expandedDomainId: null,
+      expandedLessonId: null,
     };
   }
 
@@ -57,9 +69,7 @@ export class MainMenuInterface extends BaseComponentInterface<
   }
 
   /**
-   * Render main menu to DOM.
-   * 
-   * Phase 3: Single streak card centered on screen
+   * Render main menu: streak card + domain accordions
    */
   render(): void {
     // Check streak and queue any necessary updates BEFORE rendering
@@ -70,9 +80,18 @@ export class MainMenuInterface extends BaseComponentInterface<
       this.componentCore.config.id
     );
 
-    // Render streak card
+    // Render both streak card and domain accordions
     if (area) {
-      area.innerHTML = this.renderStreakCard();
+      area.innerHTML = `
+        <div class="min-h-screen bg-mera-light dark:bg-mera-dark p-4">
+          <div class="max-w-4xl lg:max-w-6xl mx-auto space-y-6">
+            ${this.renderStreakCard()}
+            ${this.renderDomainAccordions()}
+          </div>
+        </div>
+      `;
+      
+      this.attachEventListeners();
       this.internal.rendered = true;
     }
   }
@@ -81,8 +100,7 @@ export class MainMenuInterface extends BaseComponentInterface<
    * Clean up DOM and event listeners.
    */
   destroy(): void {
-    // No event listeners to clean up in Phase 3
-    // Future phases will need to remove click handlers
+    // Event listeners automatically removed when innerHTML cleared
     this.internal.rendered = false;
   }
 
@@ -128,53 +146,46 @@ export class MainMenuInterface extends BaseComponentInterface<
     const daysRemaining = Math.ceil(secondsRemaining / (24 * 60 * 60));
 
     return `
-      <div class="min-h-screen bg-mera-light dark:bg-mera-dark flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full">
-          <!-- Header -->
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-            Mera
-          </h1>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+        <!-- Header -->
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+          Mera
+        </h1>
 
-          <!-- Streak Display -->
-          <div class="mb-6">
-            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
-              Learning Streak
-            </h2>
-            <div class="text-center mb-4">
-              <div class="inline-flex items-baseline">
-                <span class="text-5xl font-bold text-green-600 dark:text-green-500">${currentStreak}</span>
-                <span class="text-2xl ml-2">🔥</span>
-              </div>
-              <div class="text-gray-600 dark:text-gray-400 mt-1">
-                week${currentStreak === 1 ? '' : 's'} streak
-              </div>
+        <!-- Streak Display -->
+        <div class="mb-6">
+          <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Learning Streak
+          </h2>
+          <div class="text-center mb-4">
+            <div class="inline-flex items-baseline">
+              <span class="text-5xl font-bold text-green-600 dark:text-green-500">${currentStreak}</span>
+              <span class="text-2xl ml-2">🔥</span>
+            </div>
+            <div class="text-gray-600 dark:text-gray-400 mt-1">
+              week${currentStreak === 1 ? '' : 's'} streak
+            </div>
+          </div>
+        </div>
+
+        <!-- Current Week Progress -->
+        <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <div class="mb-4">
+            <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
+              <span>This week's progress</span>
+              <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
+            </div>
+            <!-- Progress bar -->
+            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+              <div 
+                class="bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all duration-300"
+                style="width: ${Math.min(100, (lessonsThisWeek / weeklyGoal) * 100)}%"
+              ></div>
             </div>
           </div>
 
-          <!-- Current Week Progress -->
-          <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <div class="mb-4">
-              <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
-                <span>This week's progress</span>
-                <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
-              </div>
-              <!-- Progress bar -->
-              <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                <div 
-                  class="bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all duration-300"
-                  style="width: ${Math.min(100, (lessonsThisWeek / weeklyGoal) * 100)}%"
-                ></div>
-              </div>
-            </div>
-
-            <!-- Status message -->
-            ${this.renderWeeklyStatusMessage(goalMet, remaining, daysRemaining)}
-          </div>
-
-          <!-- Coming Soon Notice -->
-          <div class="mt-6 text-center text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-4">
-            <p>Domain cards, lesson navigation, and more coming soon!</p>
-          </div>
+          <!-- Status message -->
+          ${this.renderWeeklyStatusMessage(goalMet, remaining, daysRemaining)}
         </div>
       </div>
     `;
@@ -226,31 +237,208 @@ export class MainMenuInterface extends BaseComponentInterface<
    */
   private renderFlexibleStreakCard(currentStreak: number, lessonsThisWeek: number): string {
     return `
-      <div class="min-h-screen bg-mera-light dark:bg-mera-dark flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full">
-          <!-- Header -->
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-            Mera
-          </h1>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+        <!-- Header -->
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+          Mera
+        </h1>
 
-          <!-- Flexible Pace Message -->
-          <div class="mb-6 text-center">
-            <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
-              Learning at Your Own Pace
-            </h2>
-            <div class="text-gray-600 dark:text-gray-400">
-              <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-white">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? 'lesson' : 'lessons'} this week.</p>
-              <p class="text-sm">No weekly goals - learn whenever works for you!</p>
-            </div>
-          </div>
-
-          <!-- Coming Soon Notice -->
-          <div class="mt-6 text-center text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-4">
-            <p>Domain cards, lesson navigation, and more coming soon!</p>
+        <!-- Flexible Pace Message -->
+        <div class="mb-6 text-center">
+          <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            Learning at Your Own Pace
+          </h2>
+          <div class="text-gray-600 dark:text-gray-400">
+            <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-white">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? 'lesson' : 'lessons'} this week.</p>
+            <p class="text-sm">No weekly goals - learn whenever works for you!</p>
           </div>
         </div>
       </div>
     `;
+  }
+
+  // ============================================================================
+  // DOMAIN ACCORDIONS (Phase 4)
+  // ============================================================================
+
+  private renderDomainAccordions(): string {
+    const domains = this.componentCore.getAllDomains();
+
+    const domainCards = domains.map(domain => {
+      const isExpanded = this.internal.expandedDomainId === domain.id;
+      
+      return `
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+          ${this.renderDomainHeader(domain, isExpanded)}
+          ${isExpanded ? this.renderDomainContent(domain) : ''}
+        </div>
+      `;
+    }).join('');
+
+    return `<div class="space-y-4">${domainCards}</div>`;
+  }
+
+  private renderDomainHeader(domain: DomainData, isExpanded: boolean): string {
+    return `
+      <button
+        class="w-full p-6 text-left hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+        data-domain-toggle="${domain.id}"
+      >
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3 flex-1">
+            <span class="text-2xl">${isExpanded ? '▼' : '▶'}</span>
+            <span class="text-2xl">${domain.emoji}</span>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold">${domain.title}</h3>
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                ${domain.completed} / ${domain.total} lessons • ${domain.percentage}%
+              </p>
+            </div>
+          </div>
+          ${domain.completed === domain.total && domain.total > 0 ? `
+            <span class="text-green-600 dark:text-green-500 text-2xl ml-4">✓</span>
+          ` : ''}
+        </div>
+      </button>
+    `;
+  }
+
+  private renderDomainContent(domain: DomainData): string {
+    const lessons = this.componentCore.getLessonsInDomain(domain.id);
+
+    const lessonItems = lessons.map(lesson => {
+      const isExpanded = this.internal.expandedLessonId === lesson.id;
+      
+      return `
+        <div class="border-b last:border-b-0 dark:border-gray-700">
+          ${this.renderLessonHeader(lesson, isExpanded)}
+          ${isExpanded ? this.renderLessonContent(lesson) : ''}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="bg-gray-50 dark:bg-gray-750">
+        ${lessonItems}
+      </div>
+    `;
+  }
+
+  private renderLessonHeader(lesson: LessonData, isExpanded: boolean): string {
+    const statusIcon = this.getLessonStatusIcon(lesson.status);
+
+    return `
+      <div class="flex items-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+        <button
+          class="flex-1 p-4 text-left flex items-center gap-3"
+          data-lesson-toggle="${lesson.id}"
+        >
+          <span class="text-lg">${isExpanded ? '▼' : '▶'}</span>
+          <span class="text-lg">${statusIcon}</span>
+          <div class="flex-1">
+            <h4 class="font-medium">${lesson.title}</h4>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              ${lesson.estimatedMinutes} min • ${lesson.difficulty}
+            </p>
+          </div>
+        </button>
+      </div>
+    `;
+  }
+
+  private renderLessonContent(lesson: LessonData): string {
+    return `
+      <div class="px-4 pb-4 pl-16">
+        <p class="text-gray-700 dark:text-gray-300 mb-4">
+          ${lesson.description || 'No description available.'}
+        </p>
+        <button
+          class="px-4 py-2 bg-green-600 dark:bg-green-500 text-white 
+                 rounded hover:opacity-90 transition-opacity"
+          data-lesson-navigate="${lesson.id}"
+        >
+          ${lesson.status === 'completed' ? 'Review Lesson' : 
+            lesson.status === 'started' ? 'Continue Lesson' : 'Start Lesson'} →
+        </button>
+      </div>
+    `;
+  }
+
+  private getLessonStatusIcon(status: LessonStatus): string {
+    switch (status) {
+      case 'completed':
+        return '<span class="text-green-600 dark:text-green-500">✓</span>';
+      case 'started':
+        return '<span class="text-yellow-500">●</span>';
+      case 'not-started':
+        return '<span class="text-gray-400">○</span>';
+    }
+  }
+
+  // ============================================================================
+  // EVENT HANDLERS (Phase 4)
+  // ============================================================================
+
+  private attachEventListeners(): void {
+    const area = this.timelineContainer.getComponentArea(
+      this.componentCore.config.id
+    );
+
+    if (!area) return;
+
+    // Domain expansion toggle
+    area.querySelectorAll('[data-domain-toggle]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const domainId = parseInt((e.currentTarget as HTMLElement).dataset.domainToggle!);
+        this.toggleDomain(domainId);
+      });
+    });
+
+    // Lesson expansion toggle
+    area.querySelectorAll('[data-lesson-toggle]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const lessonId = parseInt((e.currentTarget as HTMLElement).dataset.lessonToggle!);
+        this.toggleLesson(lessonId);
+      });
+    });
+
+    // Lesson navigation
+    area.querySelectorAll('[data-lesson-navigate]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const lessonId = parseInt((e.currentTarget as HTMLElement).dataset.lessonNavigate!);
+        this.navigateToLesson(lessonId);
+      });
+    });
+  }
+
+  private toggleDomain(domainId: number): void {
+    if (this.internal.expandedDomainId === domainId) {
+      // Collapse current domain
+      this.internal.expandedDomainId = null;
+      this.internal.expandedLessonId = null; // Also collapse any expanded lesson
+    } else {
+      // Expand new domain
+      this.internal.expandedDomainId = domainId;
+      this.internal.expandedLessonId = null; // Collapse any lesson from previous domain
+    }
+    
+    this.render(); // Re-render to update UI
+  }
+
+  private toggleLesson(lessonId: number): void {
+    if (this.internal.expandedLessonId === lessonId) {
+      // Collapse current lesson
+      this.internal.expandedLessonId = null;
+    } else {
+      // Expand new lesson
+      this.internal.expandedLessonId = lessonId;
+    }
+    
+    this.render(); // Re-render to update UI
+  }
+
+  private navigateToLesson(lessonId: number): void {
+    this.componentCore.queueNavigation(lessonId, 0);
   }
 
   // ============================================================================

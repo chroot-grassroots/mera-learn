@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2026-01-29T20:54:40.194200
+ * Generated on: 2026-01-30T20:58:28.703098
  * 
  * This file contains ALL 12 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -161,10 +161,10 @@ export const componentToLessonMap = new Map<number, number>([
  * Maps domain ID to array of lesson IDs in that domain
  */
 export const domainLessonMap = new Map<number, number[]>([
-    [1004, [12348]],
-    [1001, [12345]],
+    [1003, [12347]],
     [1002, [12346]],
-    [1003, [12347]]
+    [1001, [12345]],
+    [1004, [12348]]
 ]);
 
 /**
@@ -257,23 +257,23 @@ export const curriculumData = new CurriculumRegistry(
  */
 export const domainData = [
   {
-    "domain_id": 1003,
-    "title": "Recognize & Respond to Threats",
-    "description": "Identify phishing, social engineering, and surveillance, then respond appropriately",
-    "pedagogical_focus": "Threat recognition and incident response for activist contexts",
-    "lesson_count": 18,
-    "estimated_weeks": 6,
-    "order": 4,
+    "id": 1003,
+    "title": "Communicate Securely",
+    "description": "Protect your conversations from surveillance and interception",
+    "pedagogical_focus": "Secure communication tools and practices for activist organizing",
+    "lesson_count": 20,
+    "estimated_weeks": 7,
+    "order": 3,
     "key_outcomes": [
-      "Recognize phishing attempts and social engineering",
-      "Identify surveillance indicators",
-      "Respond appropriately to device seizure",
-      "Implement threat-appropriate security measures"
+      "Use Signal for sensitive communications",
+      "Verify safety numbers with key contacts",
+      "Understand metadata risks in messaging",
+      "Share files securely without corporate surveillance"
     ],
-    "core_concept": "Threat modeling - recognize attacks and respond proportionally to actual risk"
+    "core_concept": "End-to-end encryption - protect message content and minimize metadata exposure"
   },
   {
-    "domain_id": 1002,
+    "id": 1002,
     "title": "Lock Down Your Accounts",
     "description": "Secure existing accounts with strong passwords, 2FA, and proper device settings",
     "pedagogical_focus": "Basic account security and device hardening for everyday protection",
@@ -289,7 +289,7 @@ export const domainData = [
     "core_concept": "Defense in depth - multiple layers of security on devices and accounts"
   },
   {
-    "domain_id": 1001,
+    "id": 1001,
     "title": "Separate Your Identities",
     "description": "Learn to compartmentalize your digital life between activist and civilian identities",
     "pedagogical_focus": "Identity separation and account isolation to protect activist work from surveillance",
@@ -305,10 +305,10 @@ export const domainData = [
     "core_concept": "Compartmentalization - assume civilian identity is compromised, protect activist identity"
   },
   {
-    "domain_id": 1004,
+    "id": 1004,
     "title": "Recognize & Respond to Threats",
-    "description": "Identify phishing, social engineering, and surveillance, and respond appropriately",
-    "pedagogical_focus": "Threat recognition and incident response",
+    "description": "Identify phishing, social engineering, and surveillance, then respond appropriately",
+    "pedagogical_focus": "Threat recognition and incident response for activist contexts",
     "lesson_count": 18,
     "estimated_weeks": 6,
     "order": 4,
@@ -317,7 +317,8 @@ export const domainData = [
       "Identify surveillance indicators",
       "Respond appropriately to device seizure",
       "Implement threat-appropriate security measures"
-    ]
+    ],
+    "core_concept": "Threat modeling - recognize attacks and respond proportionally to actual risk"
   }
 ];
 

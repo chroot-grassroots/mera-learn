@@ -1,7 +1,7 @@
 # Domain 2: Lock Down Your Accounts  
 # Metadata file describing this learning domain
 
-domain_id: 1002
+id: 1002
 title: "Lock Down Your Accounts"
 description: "Secure existing accounts with strong passwords, 2FA, and proper device settings"
 pedagogical_focus: "Basic account security and device hardening for everyday protection"

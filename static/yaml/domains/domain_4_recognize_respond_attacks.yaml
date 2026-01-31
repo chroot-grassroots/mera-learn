@@ -1,15 +1,16 @@
 # Domain 4: Recognize & Respond to Threats
-# This is a metadata file describing a curriculum domain, not a lesson
+# Metadata file describing this learning domain
 
-domain_id: 1004
+id: 1004
 title: "Recognize & Respond to Threats"
-description: "Identify phishing, social engineering, and surveillance, and respond appropriately"
-pedagogical_focus: "Threat recognition and incident response"
+description: "Identify phishing, social engineering, and surveillance, then respond appropriately"
+pedagogical_focus: "Threat recognition and incident response for activist contexts"
 lesson_count: 18
 estimated_weeks: 6
 order: 4
 key_outcomes:
-  - Recognize phishing attempts and social engineering
-  - Identify surveillance indicators
-  - Respond appropriately to device seizure
-  - Implement threat-appropriate security measures
+  - "Recognize phishing attempts and social engineering"
+  - "Identify surveillance indicators"
+  - "Respond appropriately to device seizure"
+  - "Implement threat-appropriate security measures"
+core_concept: "Threat modeling - recognize attacks and respond proportionally to actual risk"

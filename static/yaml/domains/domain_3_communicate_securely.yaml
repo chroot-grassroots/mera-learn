@@ -1,16 +1,16 @@
-# Domain 4: Recognize & Respond to Threats
+# Domain 3: Communicate Securely
 # Metadata file describing this learning domain
 
-domain_id: 1003
-title: "Recognize & Respond to Threats"
-description: "Identify phishing, social engineering, and surveillance, then respond appropriately"
-pedagogical_focus: "Threat recognition and incident response for activist contexts"
-lesson_count: 18
-estimated_weeks: 6
-order: 4
+id: 1003
+title: "Communicate Securely"
+description: "Protect your conversations from surveillance and interception"
+pedagogical_focus: "Secure communication tools and practices for activist organizing"
+lesson_count: 20
+estimated_weeks: 7
+order: 3
 key_outcomes:
-  - "Recognize phishing attempts and social engineering"
-  - "Identify surveillance indicators"
-  - "Respond appropriately to device seizure"
-  - "Implement threat-appropriate security measures"
-core_concept: "Threat modeling - recognize attacks and respond proportionally to actual risk"
+  - "Use Signal for sensitive communications"
+  - "Verify safety numbers with key contacts"
+  - "Understand metadata risks in messaging"
+  - "Share files securely without corporate surveillance"
+core_concept: "End-to-end encryption - protect message content and minimize metadata exposure"

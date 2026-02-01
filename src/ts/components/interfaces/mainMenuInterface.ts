@@ -146,15 +146,15 @@ export class MainMenuInterface extends BaseComponentInterface<
     const daysRemaining = Math.ceil(secondsRemaining / (24 * 60 * 60));
 
     return `
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+      <div class="bg-amber-100 dark:bg-amber-900/30 rounded-xl shadow-lg p-8">
         <!-- Header -->
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-amber-50 mb-6 text-center">
           Mera
         </h1>
 
         <!-- Streak Display -->
         <div class="mb-6">
-          <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-amber-50 mb-3">
             Learning Streak
           </h2>
           <div class="text-center mb-4">
@@ -162,7 +162,7 @@ export class MainMenuInterface extends BaseComponentInterface<
               <span class="text-5xl font-bold text-green-600 dark:text-green-500">${currentStreak}</span>
               <span class="text-2xl ml-2">🔥</span>
             </div>
-            <div class="text-gray-600 dark:text-gray-400 mt-1">
+            <div class="text-gray-800 dark:text-amber-100 mt-1">
               week${currentStreak === 1 ? '' : 's'} streak
             </div>
           </div>
@@ -171,7 +171,7 @@ export class MainMenuInterface extends BaseComponentInterface<
         <!-- Current Week Progress -->
         <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
           <div class="mb-4">
-            <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
+            <div class="flex justify-between text-sm text-gray-800 dark:text-amber-100 mb-2">
               <span>This week's progress</span>
               <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
             </div>
@@ -201,7 +201,7 @@ export class MainMenuInterface extends BaseComponentInterface<
   ): string {
     if (goalMet) {
       return `
-        <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+        <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
           <div class="flex items-center">
             <span class="text-2xl mr-3">✅</span>
             <div>
@@ -217,12 +217,12 @@ export class MainMenuInterface extends BaseComponentInterface<
     const dayWord = daysRemaining === 1 ? 'day' : 'days';
 
     return `
-      <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+      <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
         <div class="flex items-center">
           <span class="text-2xl mr-3">📚</span>
           <div>
-            <p class="font-medium text-blue-900 dark:text-blue-200">Keep it up!</p>
-            <p class="text-sm text-blue-700 dark:text-blue-300">
+            <p class="font-medium text-gray-900 dark:text-amber-50">Keep it up!</p>
+            <p class="text-sm text-gray-800 dark:text-amber-100">
               Complete <strong>${remaining}</strong> more ${lessonWord} 
               in the next ${daysRemaining} ${dayWord} to maintain your streak.
             </p>
@@ -237,19 +237,19 @@ export class MainMenuInterface extends BaseComponentInterface<
    */
   private renderFlexibleStreakCard(currentStreak: number, lessonsThisWeek: number): string {
     return `
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+      <div class="bg-amber-100 dark:bg-amber-900/30 rounded-xl shadow-lg p-8">
         <!-- Header -->
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-amber-50 mb-6 text-center">
           Mera
         </h1>
 
         <!-- Flexible Pace Message -->
         <div class="mb-6 text-center">
-          <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-3">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-amber-50 mb-3">
             Learning at Your Own Pace
           </h2>
-          <div class="text-gray-600 dark:text-gray-400">
-            <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-white">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? 'lesson' : 'lessons'} this week.</p>
+          <div class="text-gray-800 dark:text-amber-100">
+            <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-amber-50">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? 'lesson' : 'lessons'} this week.</p>
             <p class="text-sm">No weekly goals - learn whenever works for you!</p>
           </div>
         </div>
@@ -268,7 +268,7 @@ export class MainMenuInterface extends BaseComponentInterface<
       const isExpanded = this.internal.expandedDomainId === domain.id;
       
       return `
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+        <div class="bg-amber-100 dark:bg-amber-900/30 rounded-lg shadow-md overflow-hidden">
           ${this.renderDomainHeader(domain, isExpanded)}
           ${isExpanded ? this.renderDomainContent(domain) : ''}
         </div>
@@ -281,7 +281,7 @@ export class MainMenuInterface extends BaseComponentInterface<
   private renderDomainHeader(domain: DomainData, isExpanded: boolean): string {
     return `
       <button
-        class="w-full p-6 text-left hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+        class="w-full p-6 text-left hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors text-gray-900 dark:text-amber-50"
         data-domain-toggle="${domain.id}"
       >
         <div class="flex items-center justify-between">
@@ -290,7 +290,7 @@ export class MainMenuInterface extends BaseComponentInterface<
             <span class="text-2xl">${domain.emoji}</span>
             <div class="flex-1">
               <h3 class="text-xl font-bold">${domain.title}</h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400">
+              <p class="text-sm text-gray-800 dark:text-amber-100">
                 ${domain.completed} / ${domain.total} lessons • ${domain.percentage}%
               </p>
             </div>
@@ -318,7 +318,7 @@ export class MainMenuInterface extends BaseComponentInterface<
     }).join('');
 
     return `
-      <div class="bg-gray-50 dark:bg-gray-750">
+      <div>
         ${lessonItems}
       </div>
     `;
@@ -328,16 +328,16 @@ export class MainMenuInterface extends BaseComponentInterface<
     const statusIcon = this.getLessonStatusIcon(lesson.status);
 
     return `
-      <div class="flex items-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+      <div class="flex items-center hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
         <button
-          class="flex-1 p-4 text-left flex items-center gap-3"
+          class="flex-1 p-4 text-left flex items-center gap-3 text-gray-900 dark:text-amber-50"
           data-lesson-toggle="${lesson.id}"
         >
           <span class="text-lg">${isExpanded ? '▼' : '▶'}</span>
           <span class="text-lg">${statusIcon}</span>
           <div class="flex-1">
             <h4 class="font-medium">${lesson.title}</h4>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
+            <p class="text-sm text-gray-800 dark:text-amber-100">
               ${lesson.estimatedMinutes} min • ${lesson.difficulty}
             </p>
           </div>
@@ -349,7 +349,7 @@ export class MainMenuInterface extends BaseComponentInterface<
   private renderLessonContent(lesson: LessonData): string {
     return `
       <div class="px-4 pb-4 pl-16">
-        <p class="text-gray-700 dark:text-gray-300 mb-4">
+        <p class="text-gray-800 dark:text-amber-100 mb-4">
           ${lesson.description || 'No description available.'}
         </p>
         <button
@@ -369,9 +369,9 @@ export class MainMenuInterface extends BaseComponentInterface<
       case 'completed':
         return '<span class="text-green-600 dark:text-green-500">✓</span>';
       case 'started':
-        return '<span class="text-yellow-500">●</span>';
+        return '<span class="text-amber-600 dark:text-amber-500">●</span>';
       case 'not-started':
-        return '<span class="text-gray-400">○</span>';
+        return '<span class="text-gray-400 dark:text-amber-200">○</span>';
     }
   }
 

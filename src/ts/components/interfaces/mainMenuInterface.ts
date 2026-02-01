@@ -16,6 +16,7 @@ import type {
   LessonStatus
 } from "../cores/mainMenuCore.js";
 import type { TimelineContainer } from "../../ui/timelineContainer.js";
+import { MeraStyles } from "../../ui/meraStyles.js";
 
 // ============================================================================
 // INTERNAL STATE
@@ -83,8 +84,8 @@ export class MainMenuInterface extends BaseComponentInterface<
     // Render both streak card and domain accordions
     if (area) {
       area.innerHTML = `
-        <div class="min-h-screen bg-mera-light dark:bg-mera-dark p-4">
-          <div class="max-w-4xl lg:max-w-6xl mx-auto space-y-6">
+        <div class="${MeraStyles.containers.pageWrapper}">
+          <div class="${MeraStyles.containers.contentContainer}">
             ${this.renderStreakCard()}
             ${this.renderDomainAccordions()}
           </div>
@@ -146,39 +147,39 @@ export class MainMenuInterface extends BaseComponentInterface<
     const daysRemaining = Math.ceil(secondsRemaining / (24 * 60 * 60));
 
     return `
-      <div class="bg-amber-100 dark:bg-amber-900/30 rounded-xl shadow-lg p-8">
+      <div class="${MeraStyles.containers.card}">
         <!-- Header -->
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-amber-50 mb-6 text-center">
+        <h1 class="${MeraStyles.typography.heading1}">
           Mera
         </h1>
 
         <!-- Streak Display -->
-        <div class="mb-6">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-amber-50 mb-3">
+        <div class="${MeraStyles.patterns.marginBottom.xlarge}">
+          <h2 class="${MeraStyles.typography.heading2}">
             Learning Streak
           </h2>
-          <div class="text-center mb-4">
-            <div class="inline-flex items-baseline">
-              <span class="text-5xl font-bold text-green-600 dark:text-green-500">${currentStreak}</span>
-              <span class="text-2xl ml-2">🔥</span>
+          <div class="${MeraStyles.layout.textCenter} ${MeraStyles.patterns.marginBottom.large}">
+            <div class="${MeraStyles.layout.inlineFlexBaseline}">
+              <span class="${MeraStyles.typography.displayLarge}">${currentStreak}</span>
+              <span class="${MeraStyles.typography.displayMedium} ml-2">🔥</span>
             </div>
-            <div class="text-gray-800 dark:text-amber-100 mt-1">
+            <div class="${MeraStyles.typography.body} ${MeraStyles.patterns.marginTop.small}">
               week${currentStreak === 1 ? '' : 's'} streak
             </div>
           </div>
         </div>
 
         <!-- Current Week Progress -->
-        <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-          <div class="mb-4">
-            <div class="flex justify-between text-sm text-gray-800 dark:text-amber-100 mb-2">
+        <div class="${MeraStyles.borders.topSection}">
+          <div class="${MeraStyles.patterns.marginBottom.large}">
+            <div class="${MeraStyles.layout.flexBetween} ${MeraStyles.typography.bodySmall} ${MeraStyles.patterns.marginBottom.small}">
               <span>This week's progress</span>
               <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
             </div>
             <!-- Progress bar -->
-            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+            <div class="${MeraStyles.progress.barContainer}">
               <div 
-                class="bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all duration-300"
+                class="${MeraStyles.progress.barFill}"
                 style="width: ${Math.min(100, (lessonsThisWeek / weeklyGoal) * 100)}%"
               ></div>
             </div>
@@ -201,12 +202,12 @@ export class MainMenuInterface extends BaseComponentInterface<
   ): string {
     if (goalMet) {
       return `
-        <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-          <div class="flex items-center">
-            <span class="text-2xl mr-3">✅</span>
+        <div class="${MeraStyles.status.successBox}">
+          <div class="${MeraStyles.patterns.messageLayout}">
+            <span class="${MeraStyles.typography.displayMedium} ${MeraStyles.patterns.iconMarginRight}">✅</span>
             <div>
-              <p class="font-medium text-green-900 dark:text-green-200">Goal complete!</p>
-              <p class="text-sm text-green-700 dark:text-green-300">You've hit your weekly target.</p>
+              <p class="${MeraStyles.status.successText}">Goal complete!</p>
+              <p class="${MeraStyles.status.successTextSecondary}">You've hit your weekly target.</p>
             </div>
           </div>
         </div>
@@ -217,12 +218,12 @@ export class MainMenuInterface extends BaseComponentInterface<
     const dayWord = daysRemaining === 1 ? 'day' : 'days';
 
     return `
-      <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
-        <div class="flex items-center">
-          <span class="text-2xl mr-3">📚</span>
+      <div class="${MeraStyles.status.infoBox}">
+        <div class="${MeraStyles.patterns.messageLayout}">
+          <span class="${MeraStyles.typography.displayMedium} ${MeraStyles.patterns.iconMarginRight}">📚</span>
           <div>
-            <p class="font-medium text-gray-900 dark:text-amber-50">Keep it up!</p>
-            <p class="text-sm text-gray-800 dark:text-amber-100">
+            <p class="${MeraStyles.status.successText} ${MeraStyles.typography.textPrimary}">Keep it up!</p>
+            <p class="${MeraStyles.typography.bodySmall}">
               Complete <strong>${remaining}</strong> more ${lessonWord} 
               in the next ${daysRemaining} ${dayWord} to maintain your streak.
             </p>
@@ -237,20 +238,23 @@ export class MainMenuInterface extends BaseComponentInterface<
    */
   private renderFlexibleStreakCard(currentStreak: number, lessonsThisWeek: number): string {
     return `
-      <div class="bg-amber-100 dark:bg-amber-900/30 rounded-xl shadow-lg p-8">
+      <div class="${MeraStyles.containers.card}">
         <!-- Header -->
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-amber-50 mb-6 text-center">
+        <h1 class="${MeraStyles.typography.heading1}">
           Mera
         </h1>
 
         <!-- Flexible Pace Message -->
-        <div class="mb-6 text-center">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-amber-50 mb-3">
+        <div class="${MeraStyles.patterns.marginBottom.xlarge} ${MeraStyles.layout.textCenter}">
+          <h2 class="${MeraStyles.typography.heading2}">
             Learning at Your Own Pace
           </h2>
-          <div class="text-gray-800 dark:text-amber-100">
-            <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-amber-50">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? 'lesson' : 'lessons'} this week.</p>
-            <p class="text-sm">No weekly goals - learn whenever works for you!</p>
+          <div class="${MeraStyles.typography.body}">
+            <p class="${MeraStyles.patterns.marginBottom.small}">
+              You've completed <strong class="${MeraStyles.typography.textPrimary}">${lessonsThisWeek}</strong> 
+              ${lessonsThisWeek === 1 ? 'lesson' : 'lessons'} this week.
+            </p>
+            <p class="${MeraStyles.typography.bodySmall}">No weekly goals - learn whenever works for you!</p>
           </div>
         </div>
       </div>
@@ -268,35 +272,35 @@ export class MainMenuInterface extends BaseComponentInterface<
       const isExpanded = this.internal.expandedDomainId === domain.id;
       
       return `
-        <div class="bg-amber-100 dark:bg-amber-900/30 rounded-lg shadow-md overflow-hidden">
+        <div class="${MeraStyles.containers.cardCompact}">
           ${this.renderDomainHeader(domain, isExpanded)}
           ${isExpanded ? this.renderDomainContent(domain) : ''}
         </div>
       `;
     }).join('');
 
-    return `<div class="space-y-4">${domainCards}</div>`;
+    return `<div class="${MeraStyles.layout.spaceYMedium}">${domainCards}</div>`;
   }
 
   private renderDomainHeader(domain: DomainData, isExpanded: boolean): string {
     return `
       <button
-        class="w-full p-6 text-left hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors text-gray-900 dark:text-amber-50"
+        class="${MeraStyles.interactive.buttonLarge}"
         data-domain-toggle="${domain.id}"
       >
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3 flex-1">
-            <span class="text-2xl">${isExpanded ? '▼' : '▶'}</span>
-            <span class="text-2xl">${domain.emoji}</span>
+        <div class="${MeraStyles.layout.flexCenterBetween}">
+          <div class="${MeraStyles.layout.flexCenter} ${MeraStyles.layout.gapSmall} flex-1">
+            <span class="${MeraStyles.patterns.expandArrow}">${isExpanded ? '▼' : '▶'}</span>
+            <span class="${MeraStyles.patterns.sectionEmoji}">${domain.emoji}</span>
             <div class="flex-1">
-              <h3 class="text-xl font-bold">${domain.title}</h3>
-              <p class="text-sm text-gray-800 dark:text-amber-100">
+              <h3 class="${MeraStyles.typography.heading3}">${domain.title}</h3>
+              <p class="${MeraStyles.typography.bodySmall}">
                 ${domain.completed} / ${domain.total} lessons • ${domain.percentage}%
               </p>
             </div>
           </div>
           ${domain.completed === domain.total && domain.total > 0 ? `
-            <span class="text-green-600 dark:text-green-500 text-2xl ml-4">✓</span>
+            <span class="${MeraStyles.status.successAccent} ${MeraStyles.typography.displayMedium} ${MeraStyles.patterns.marginLeftMedium}">✓</span>
           ` : ''}
         </div>
       </button>
@@ -310,7 +314,7 @@ export class MainMenuInterface extends BaseComponentInterface<
       const isExpanded = this.internal.expandedLessonId === lesson.id;
       
       return `
-        <div class="border-b last:border-b-0 dark:border-gray-700">
+        <div class="${MeraStyles.borders.bottomExceptLast}">
           ${this.renderLessonHeader(lesson, isExpanded)}
           ${isExpanded ? this.renderLessonContent(lesson) : ''}
         </div>
@@ -328,16 +332,16 @@ export class MainMenuInterface extends BaseComponentInterface<
     const statusIcon = this.getLessonStatusIcon(lesson.status);
 
     return `
-      <div class="flex items-center hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
+      <div class="${MeraStyles.layout.flexCenter} ${MeraStyles.interactive.hoverWrapper}">
         <button
-          class="flex-1 p-4 text-left flex items-center gap-3 text-gray-900 dark:text-amber-50"
+          class="${MeraStyles.interactive.buttonMedium}"
           data-lesson-toggle="${lesson.id}"
         >
-          <span class="text-lg">${isExpanded ? '▼' : '▶'}</span>
-          <span class="text-lg">${statusIcon}</span>
+          <span class="${MeraStyles.patterns.statusIcon}">${isExpanded ? '▼' : '▶'}</span>
+          <span class="${MeraStyles.patterns.statusIcon}">${statusIcon}</span>
           <div class="flex-1">
-            <h4 class="font-medium">${lesson.title}</h4>
-            <p class="text-sm text-gray-800 dark:text-amber-100">
+            <h4 class="${MeraStyles.typography.heading4}">${lesson.title}</h4>
+            <p class="${MeraStyles.typography.bodySmall}">
               ${lesson.estimatedMinutes} min • ${lesson.difficulty}
             </p>
           </div>
@@ -348,13 +352,12 @@ export class MainMenuInterface extends BaseComponentInterface<
 
   private renderLessonContent(lesson: LessonData): string {
     return `
-      <div class="px-4 pb-4 pl-16">
-        <p class="text-gray-800 dark:text-amber-100 mb-4">
+      <div class="${MeraStyles.patterns.padding.medium} ${MeraStyles.patterns.padding.leftLarge}">
+        <p class="${MeraStyles.typography.body} ${MeraStyles.patterns.marginBottom.large}">
           ${lesson.description || 'No description available.'}
         </p>
         <button
-          class="px-4 py-2 bg-green-600 dark:bg-green-500 text-white 
-                 rounded hover:opacity-90 transition-opacity"
+          class="${MeraStyles.interactive.buttonPrimary}"
           data-lesson-navigate="${lesson.id}"
         >
           ${lesson.status === 'completed' ? 'Review Lesson' : 
@@ -367,7 +370,7 @@ export class MainMenuInterface extends BaseComponentInterface<
   private getLessonStatusIcon(status: LessonStatus): string {
     switch (status) {
       case 'completed':
-        return '<span class="text-green-600 dark:text-green-500">✓</span>';
+        return `<span class="${MeraStyles.status.successAccent}">✓</span>`;
       case 'started':
         return '<span class="text-amber-600 dark:text-amber-500">●</span>';
       case 'not-started':

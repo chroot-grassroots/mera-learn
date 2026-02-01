@@ -49383,12 +49383,169 @@ var init_newUserWelcomeCore = __esm({
   }
 });
 
+// src/ts/ui/meraStyles.ts
+var MeraStyles;
+var init_meraStyles = __esm({
+  "src/ts/ui/meraStyles.ts"() {
+    "use strict";
+    MeraStyles = {
+      // ==========================================================================
+      // TYPOGRAPHY
+      // ==========================================================================
+      typography: {
+        /** Page title (e.g., "Mera") - 3xl, bold, centered */
+        heading1: "text-3xl font-bold text-gray-900 dark:text-amber-50 mb-6 text-center",
+        /** Section headers (e.g., "Learning Streak") - xl, semibold */
+        heading2: "text-xl font-semibold text-gray-900 dark:text-amber-50 mb-3",
+        /** Subsection headers (e.g., domain titles) - xl, bold */
+        heading3: "text-xl font-bold",
+        /** Item titles (e.g., lesson titles) - medium weight */
+        heading4: "font-medium",
+        /** Primary body text */
+        body: "text-gray-800 dark:text-amber-100",
+        /** Secondary/smaller body text */
+        bodySmall: "text-sm text-gray-800 dark:text-amber-100",
+        /** Emphasized text color only (no size) */
+        textPrimary: "text-gray-900 dark:text-amber-50",
+        /** Large display numbers (e.g., streak count) */
+        displayLarge: "text-5xl font-bold text-green-600 dark:text-green-500",
+        /** Medium display text (e.g., emojis, section icons) */
+        displayMedium: "text-2xl",
+        /** Icon/indicator size text */
+        iconText: "text-lg"
+      },
+      // ==========================================================================
+      // CONTAINERS & CARDS
+      // ==========================================================================
+      containers: {
+        /** Full page wrapper */
+        pageWrapper: "min-h-screen bg-mera-light dark:bg-mera-dark p-4",
+        /** Main content container with responsive max-width */
+        contentContainer: "max-w-4xl lg:max-w-6xl mx-auto space-y-6",
+        /** Primary card (rounded corners, shadow, padding) */
+        card: "bg-amber-100 dark:bg-amber-900/30 rounded-xl shadow-lg p-8",
+        /** Secondary card (less padding, medium shadow) */
+        cardMedium: "bg-amber-100 dark:bg-amber-900/30 rounded-lg shadow-md p-6",
+        /** Compact card (for nested content) */
+        cardCompact: "bg-amber-100 dark:bg-amber-900/30 rounded-lg shadow-md overflow-hidden",
+        /** Message box (lighter, less prominent) */
+        messageBox: "bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4"
+      },
+      // ==========================================================================
+      // STATUS & FEEDBACK
+      // ==========================================================================
+      status: {
+        /** Success message container */
+        successBox: "bg-green-50 dark:bg-green-900/20 rounded-lg p-4",
+        /** Success text (primary) - for headings */
+        successText: "font-medium text-green-900 dark:text-green-200",
+        /** Success text (secondary) - for body text */
+        successTextSecondary: "text-sm text-green-700 dark:text-green-300",
+        /** Success accent (checkmarks, highlights) */
+        successAccent: "text-green-600 dark:text-green-500",
+        /** Info/encouragement box (uses amber) */
+        infoBox: "bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4"
+      },
+      // ==========================================================================
+      // INTERACTIVE ELEMENTS
+      // ==========================================================================
+      interactive: {
+        /** Primary action button (green, prominent) */
+        buttonPrimary: "px-4 py-2 bg-green-600 dark:bg-green-500 text-white rounded hover:opacity-90 transition-opacity",
+        /** Large clickable area (domain/section toggle) */
+        buttonLarge: "w-full p-6 text-left hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors text-gray-900 dark:text-amber-50",
+        /** Medium clickable area (lesson toggle) */
+        buttonMedium: "flex-1 p-4 text-left flex items-center gap-3 text-gray-900 dark:text-amber-50",
+        /** Standard hover state wrapper */
+        hoverWrapper: "hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+      },
+      // ==========================================================================
+      // PROGRESS & VISUAL ELEMENTS
+      // ==========================================================================
+      progress: {
+        /** Progress bar container (background track) */
+        barContainer: "w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3",
+        /** Progress bar fill (animated green) */
+        barFill: "bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all duration-300"
+      },
+      // ==========================================================================
+      // BORDERS & DIVIDERS
+      // ==========================================================================
+      borders: {
+        /** Standard border color */
+        default: "border-gray-200 dark:border-gray-700",
+        /** Top border with padding */
+        topSection: "border-t border-gray-200 dark:border-gray-700 pt-6",
+        /** Bottom border on all children except last */
+        bottomExceptLast: "border-b last:border-b-0 dark:border-gray-700"
+      },
+      // ==========================================================================
+      // LAYOUT & SPACING
+      // ==========================================================================
+      layout: {
+        /** Vertical spacing between major sections */
+        spaceYLarge: "space-y-6",
+        /** Vertical spacing between subsections */
+        spaceYMedium: "space-y-4",
+        /** Horizontal gap in flex/grid */
+        gapSmall: "gap-3",
+        /** Flex with items centered vertically */
+        flexCenter: "flex items-center",
+        /** Flex with space-between */
+        flexBetween: "flex justify-between",
+        /** Flex items centered, space between */
+        flexCenterBetween: "flex items-center justify-between",
+        /** Inline flex with baseline alignment */
+        inlineFlexBaseline: "inline-flex items-baseline",
+        /** Text alignment */
+        textCenter: "text-center"
+      },
+      // ==========================================================================
+      // SPECIFIC PATTERNS (commonly repeated combinations)
+      // ==========================================================================
+      patterns: {
+        /** Icon + text message layout */
+        messageLayout: "flex items-center",
+        /** Accordion arrow (expands/collapses) */
+        expandArrow: "text-2xl",
+        /** Domain/section emoji */
+        sectionEmoji: "text-2xl",
+        /** Status icon (lesson completion) */
+        statusIcon: "text-lg",
+        /** Margin spacing after icons */
+        iconMarginRight: "mr-3",
+        /** Margin spacing on left side */
+        marginLeftMedium: "ml-4",
+        /** Bottom margin variations */
+        marginBottom: {
+          xlarge: "mb-6",
+          large: "mb-4",
+          medium: "mb-3",
+          small: "mb-2",
+          xsmall: "mb-1"
+        },
+        /** Top margin */
+        marginTop: {
+          small: "mt-1",
+          medium: "mt-2"
+        },
+        /** Padding variations */
+        padding: {
+          medium: "px-4 pb-4",
+          leftLarge: "pl-16"
+        }
+      }
+    };
+  }
+});
+
 // src/ts/components/interfaces/mainMenuInterface.ts
 var MainMenuInterface;
 var init_mainMenuInterface = __esm({
   "src/ts/components/interfaces/mainMenuInterface.ts"() {
     "use strict";
     init_baseComponentInterface();
+    init_meraStyles();
     MainMenuInterface = class extends BaseComponentInterface {
       constructor(componentCore, timelineContainer) {
         super(componentCore, timelineContainer);
@@ -49414,8 +49571,8 @@ var init_mainMenuInterface = __esm({
         );
         if (area) {
           area.innerHTML = `
-        <div class="min-h-screen bg-mera-light dark:bg-mera-dark p-4">
-          <div class="max-w-4xl lg:max-w-6xl mx-auto space-y-6">
+        <div class="${MeraStyles.containers.pageWrapper}">
+          <div class="${MeraStyles.containers.contentContainer}">
             ${this.renderStreakCard()}
             ${this.renderDomainAccordions()}
           </div>
@@ -49461,39 +49618,39 @@ var init_mainMenuInterface = __esm({
         const secondsRemaining = weekEnd - now;
         const daysRemaining = Math.ceil(secondsRemaining / (24 * 60 * 60));
         return `
-      <div class="bg-amber-100 dark:bg-amber-900/30 rounded-xl shadow-lg p-8">
+      <div class="${MeraStyles.containers.card}">
         <!-- Header -->
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-amber-50 mb-6 text-center">
+        <h1 class="${MeraStyles.typography.heading1}">
           Mera
         </h1>
 
         <!-- Streak Display -->
-        <div class="mb-6">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-amber-50 mb-3">
+        <div class="${MeraStyles.patterns.marginBottom.xlarge}">
+          <h2 class="${MeraStyles.typography.heading2}">
             Learning Streak
           </h2>
-          <div class="text-center mb-4">
-            <div class="inline-flex items-baseline">
-              <span class="text-5xl font-bold text-green-600 dark:text-green-500">${currentStreak}</span>
-              <span class="text-2xl ml-2">\u{1F525}</span>
+          <div class="${MeraStyles.layout.textCenter} ${MeraStyles.patterns.marginBottom.large}">
+            <div class="${MeraStyles.layout.inlineFlexBaseline}">
+              <span class="${MeraStyles.typography.displayLarge}">${currentStreak}</span>
+              <span class="${MeraStyles.typography.displayMedium} ml-2">\u{1F525}</span>
             </div>
-            <div class="text-gray-800 dark:text-amber-100 mt-1">
+            <div class="${MeraStyles.typography.body} ${MeraStyles.patterns.marginTop.small}">
               week${currentStreak === 1 ? "" : "s"} streak
             </div>
           </div>
         </div>
 
         <!-- Current Week Progress -->
-        <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-          <div class="mb-4">
-            <div class="flex justify-between text-sm text-gray-800 dark:text-amber-100 mb-2">
+        <div class="${MeraStyles.borders.topSection}">
+          <div class="${MeraStyles.patterns.marginBottom.large}">
+            <div class="${MeraStyles.layout.flexBetween} ${MeraStyles.typography.bodySmall} ${MeraStyles.patterns.marginBottom.small}">
               <span>This week's progress</span>
               <span class="font-medium">${lessonsThisWeek} / ${weeklyGoal} lessons</span>
             </div>
             <!-- Progress bar -->
-            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+            <div class="${MeraStyles.progress.barContainer}">
               <div 
-                class="bg-green-600 dark:bg-green-500 h-3 rounded-full transition-all duration-300"
+                class="${MeraStyles.progress.barFill}"
                 style="width: ${Math.min(100, lessonsThisWeek / weeklyGoal * 100)}%"
               ></div>
             </div>
@@ -49511,12 +49668,12 @@ var init_mainMenuInterface = __esm({
       renderWeeklyStatusMessage(goalMet, remaining, daysRemaining) {
         if (goalMet) {
           return `
-        <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-          <div class="flex items-center">
-            <span class="text-2xl mr-3">\u2705</span>
+        <div class="${MeraStyles.status.successBox}">
+          <div class="${MeraStyles.patterns.messageLayout}">
+            <span class="${MeraStyles.typography.displayMedium} ${MeraStyles.patterns.iconMarginRight}">\u2705</span>
             <div>
-              <p class="font-medium text-green-900 dark:text-green-200">Goal complete!</p>
-              <p class="text-sm text-green-700 dark:text-green-300">You've hit your weekly target.</p>
+              <p class="${MeraStyles.status.successText}">Goal complete!</p>
+              <p class="${MeraStyles.status.successTextSecondary}">You've hit your weekly target.</p>
             </div>
           </div>
         </div>
@@ -49525,12 +49682,12 @@ var init_mainMenuInterface = __esm({
         const lessonWord = remaining === 1 ? "lesson" : "lessons";
         const dayWord = daysRemaining === 1 ? "day" : "days";
         return `
-      <div class="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
-        <div class="flex items-center">
-          <span class="text-2xl mr-3">\u{1F4DA}</span>
+      <div class="${MeraStyles.status.infoBox}">
+        <div class="${MeraStyles.patterns.messageLayout}">
+          <span class="${MeraStyles.typography.displayMedium} ${MeraStyles.patterns.iconMarginRight}">\u{1F4DA}</span>
           <div>
-            <p class="font-medium text-gray-900 dark:text-amber-50">Keep it up!</p>
-            <p class="text-sm text-gray-800 dark:text-amber-100">
+            <p class="${MeraStyles.status.successText} ${MeraStyles.typography.textPrimary}">Keep it up!</p>
+            <p class="${MeraStyles.typography.bodySmall}">
               Complete <strong>${remaining}</strong> more ${lessonWord} 
               in the next ${daysRemaining} ${dayWord} to maintain your streak.
             </p>
@@ -49544,20 +49701,23 @@ var init_mainMenuInterface = __esm({
        */
       renderFlexibleStreakCard(currentStreak, lessonsThisWeek) {
         return `
-      <div class="bg-amber-100 dark:bg-amber-900/30 rounded-xl shadow-lg p-8">
+      <div class="${MeraStyles.containers.card}">
         <!-- Header -->
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-amber-50 mb-6 text-center">
+        <h1 class="${MeraStyles.typography.heading1}">
           Mera
         </h1>
 
         <!-- Flexible Pace Message -->
-        <div class="mb-6 text-center">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-amber-50 mb-3">
+        <div class="${MeraStyles.patterns.marginBottom.xlarge} ${MeraStyles.layout.textCenter}">
+          <h2 class="${MeraStyles.typography.heading2}">
             Learning at Your Own Pace
           </h2>
-          <div class="text-gray-800 dark:text-amber-100">
-            <p class="mb-2">You've completed <strong class="text-gray-900 dark:text-amber-50">${lessonsThisWeek}</strong> ${lessonsThisWeek === 1 ? "lesson" : "lessons"} this week.</p>
-            <p class="text-sm">No weekly goals - learn whenever works for you!</p>
+          <div class="${MeraStyles.typography.body}">
+            <p class="${MeraStyles.patterns.marginBottom.small}">
+              You've completed <strong class="${MeraStyles.typography.textPrimary}">${lessonsThisWeek}</strong> 
+              ${lessonsThisWeek === 1 ? "lesson" : "lessons"} this week.
+            </p>
+            <p class="${MeraStyles.typography.bodySmall}">No weekly goals - learn whenever works for you!</p>
           </div>
         </div>
       </div>
@@ -49571,33 +49731,33 @@ var init_mainMenuInterface = __esm({
         const domainCards = domains.map((domain2) => {
           const isExpanded = this.internal.expandedDomainId === domain2.id;
           return `
-        <div class="bg-amber-100 dark:bg-amber-900/30 rounded-lg shadow-md overflow-hidden">
+        <div class="${MeraStyles.containers.cardCompact}">
           ${this.renderDomainHeader(domain2, isExpanded)}
           ${isExpanded ? this.renderDomainContent(domain2) : ""}
         </div>
       `;
         }).join("");
-        return `<div class="space-y-4">${domainCards}</div>`;
+        return `<div class="${MeraStyles.layout.spaceYMedium}">${domainCards}</div>`;
       }
       renderDomainHeader(domain2, isExpanded) {
         return `
       <button
-        class="w-full p-6 text-left hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors text-gray-900 dark:text-amber-50"
+        class="${MeraStyles.interactive.buttonLarge}"
         data-domain-toggle="${domain2.id}"
       >
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3 flex-1">
-            <span class="text-2xl">${isExpanded ? "\u25BC" : "\u25B6"}</span>
-            <span class="text-2xl">${domain2.emoji}</span>
+        <div class="${MeraStyles.layout.flexCenterBetween}">
+          <div class="${MeraStyles.layout.flexCenter} ${MeraStyles.layout.gapSmall} flex-1">
+            <span class="${MeraStyles.patterns.expandArrow}">${isExpanded ? "\u25BC" : "\u25B6"}</span>
+            <span class="${MeraStyles.patterns.sectionEmoji}">${domain2.emoji}</span>
             <div class="flex-1">
-              <h3 class="text-xl font-bold">${domain2.title}</h3>
-              <p class="text-sm text-gray-800 dark:text-amber-100">
+              <h3 class="${MeraStyles.typography.heading3}">${domain2.title}</h3>
+              <p class="${MeraStyles.typography.bodySmall}">
                 ${domain2.completed} / ${domain2.total} lessons \u2022 ${domain2.percentage}%
               </p>
             </div>
           </div>
           ${domain2.completed === domain2.total && domain2.total > 0 ? `
-            <span class="text-green-600 dark:text-green-500 text-2xl ml-4">\u2713</span>
+            <span class="${MeraStyles.status.successAccent} ${MeraStyles.typography.displayMedium} ${MeraStyles.patterns.marginLeftMedium}">\u2713</span>
           ` : ""}
         </div>
       </button>
@@ -49608,7 +49768,7 @@ var init_mainMenuInterface = __esm({
         const lessonItems = lessons.map((lesson) => {
           const isExpanded = this.internal.expandedLessonId === lesson.id;
           return `
-        <div class="border-b last:border-b-0 dark:border-gray-700">
+        <div class="${MeraStyles.borders.bottomExceptLast}">
           ${this.renderLessonHeader(lesson, isExpanded)}
           ${isExpanded ? this.renderLessonContent(lesson) : ""}
         </div>
@@ -49623,16 +49783,16 @@ var init_mainMenuInterface = __esm({
       renderLessonHeader(lesson, isExpanded) {
         const statusIcon = this.getLessonStatusIcon(lesson.status);
         return `
-      <div class="flex items-center hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
+      <div class="${MeraStyles.layout.flexCenter} ${MeraStyles.interactive.hoverWrapper}">
         <button
-          class="flex-1 p-4 text-left flex items-center gap-3 text-gray-900 dark:text-amber-50"
+          class="${MeraStyles.interactive.buttonMedium}"
           data-lesson-toggle="${lesson.id}"
         >
-          <span class="text-lg">${isExpanded ? "\u25BC" : "\u25B6"}</span>
-          <span class="text-lg">${statusIcon}</span>
+          <span class="${MeraStyles.patterns.statusIcon}">${isExpanded ? "\u25BC" : "\u25B6"}</span>
+          <span class="${MeraStyles.patterns.statusIcon}">${statusIcon}</span>
           <div class="flex-1">
-            <h4 class="font-medium">${lesson.title}</h4>
-            <p class="text-sm text-gray-800 dark:text-amber-100">
+            <h4 class="${MeraStyles.typography.heading4}">${lesson.title}</h4>
+            <p class="${MeraStyles.typography.bodySmall}">
               ${lesson.estimatedMinutes} min \u2022 ${lesson.difficulty}
             </p>
           </div>
@@ -49642,13 +49802,12 @@ var init_mainMenuInterface = __esm({
       }
       renderLessonContent(lesson) {
         return `
-      <div class="px-4 pb-4 pl-16">
-        <p class="text-gray-800 dark:text-amber-100 mb-4">
+      <div class="${MeraStyles.patterns.padding.medium} ${MeraStyles.patterns.padding.leftLarge}">
+        <p class="${MeraStyles.typography.body} ${MeraStyles.patterns.marginBottom.large}">
           ${lesson.description || "No description available."}
         </p>
         <button
-          class="px-4 py-2 bg-green-600 dark:bg-green-500 text-white 
-                 rounded hover:opacity-90 transition-opacity"
+          class="${MeraStyles.interactive.buttonPrimary}"
           data-lesson-navigate="${lesson.id}"
         >
           ${lesson.status === "completed" ? "Review Lesson" : lesson.status === "started" ? "Continue Lesson" : "Start Lesson"} \u2192
@@ -49659,7 +49818,7 @@ var init_mainMenuInterface = __esm({
       getLessonStatusIcon(status) {
         switch (status) {
           case "completed":
-            return '<span class="text-green-600 dark:text-green-500">\u2713</span>';
+            return `<span class="${MeraStyles.status.successAccent}">\u2713</span>`;
           case "started":
             return '<span class="text-amber-600 dark:text-amber-500">\u25CF</span>';
           case "not-started":

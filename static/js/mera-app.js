@@ -56873,6 +56873,10 @@ function setupUI() {
     if (authStatus) {
       authStatus.classList.add("hidden");
     }
+    const headerAuthStatus = document.getElementById("header-auth-status");
+    if (headerAuthStatus) {
+      headerAuthStatus.textContent = "";
+    }
     const lessonContainer = document.getElementById("lesson-container");
     if (lessonContainer) {
       lessonContainer.classList.remove("hidden");

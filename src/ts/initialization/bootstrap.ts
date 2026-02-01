@@ -73,6 +73,12 @@ function setupUI(): boolean {
       authStatus.classList.add("hidden");
     }
 
+    // HIDE THE HEADER STATUS
+    const headerAuthStatus = document.getElementById("header-auth-status");
+    if (headerAuthStatus) {
+      headerAuthStatus.textContent = "";
+    }
+
     // Show lesson-container for timeline
     const lessonContainer = document.getElementById("lesson-container");
     if (lessonContainer) {

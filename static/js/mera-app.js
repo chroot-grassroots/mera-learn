@@ -50771,6 +50771,7 @@ var init_settingsMenuCore = __esm({
           settingsManager,
           curriculumRegistry
         );
+        this._settingsManager = settingsManager;
         this.settingsMessageQueue = new SettingsMenuSettingsMessageQueueManager();
         this.navigationMessageQueue = new SettingsMenuNavigationMessageQueueManager();
       }
@@ -50787,7 +50788,7 @@ var init_settingsMenuCore = __esm({
        * Get readonly settings manager for interface queries.
        */
       get settingsManager() {
-        return this.settingsManager;
+        return this._settingsManager;
       }
       /**
        * Check if component is complete (always true - no completion criteria)

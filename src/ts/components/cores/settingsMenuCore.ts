@@ -145,6 +145,7 @@ export class SettingsMenuCore extends BaseComponentCore<
 > {
   protected settingsMessageQueue: SettingsMenuSettingsMessageQueueManager;
   protected navigationMessageQueue: SettingsMenuNavigationMessageQueueManager;
+  private _settingsManager: IReadonlySettingsManager;
 
   constructor(
     config: SettingsMenuComponentConfig,
@@ -165,6 +166,7 @@ export class SettingsMenuCore extends BaseComponentCore<
       curriculumRegistry,
     );
 
+    this._settingsManager = settingsManager;
     this.settingsMessageQueue = new SettingsMenuSettingsMessageQueueManager();
     this.navigationMessageQueue =
       new SettingsMenuNavigationMessageQueueManager();
@@ -190,7 +192,7 @@ export class SettingsMenuCore extends BaseComponentCore<
    * Get readonly settings manager for interface queries.
    */
   get settingsManager(): IReadonlySettingsManager {
-    return this.settingsManager;
+    return this._settingsManager;
   }
 
   /**

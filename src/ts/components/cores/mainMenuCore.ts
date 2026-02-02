@@ -1,10 +1,10 @@
 /**
  * @fileoverview Main Menu Component Core
  * @module components/cores/mainMenuCore
- * 
+ *
  * Singleton component serving as user's home base.
  * Displays progress, manages streaks, enables navigation and lesson resets.
- * 
+ *
  * Special permissions:
  * - Can modify overall progress (streak tracking)
  * - Can modify navigation (lesson clicks)
@@ -26,13 +26,13 @@ import type { IReadonlySettingsManager } from "../../core/settingsSchema.js";
 import type { CurriculumRegistry } from "../../registry/mera-registry.js";
 import { TimelineContainer } from "../../ui/timelineContainer.js";
 import { ComponentProgressMessage } from "../../core/coreTypes.js";
-import { 
+import {
   OverallProgressMessageQueueManager,
-  type OverallProgressMessage 
+  type OverallProgressMessage,
 } from "../../core/overallProgressSchema.js";
-import { 
+import {
   NavigationMessageQueueManager,
-  type NavigationMessage 
+  type NavigationMessage,
 } from "../../core/navigationSchema.js";
 import { domainData, lessonMetadata } from "../../registry/mera-registry.js";
 
@@ -48,17 +48,22 @@ export const MainMenuComponentConfigSchema = BaseComponentConfigSchema.extend({
   type: z.literal("main_menu"),
 });
 
-export type MainMenuComponentConfig = z.infer<typeof MainMenuComponentConfigSchema>;
+export type MainMenuComponentConfig = z.infer<
+  typeof MainMenuComponentConfigSchema
+>;
 
 /**
  * Main menu component progress schema.
  * Boilerplate only - tracks lastUpdated but no custom progress state.
  */
-export const MainMenuComponentProgressSchema = BaseComponentProgressSchema.extend({
-  // No additional fields needed
-});
+export const MainMenuComponentProgressSchema =
+  BaseComponentProgressSchema.extend({
+    // No additional fields needed
+  });
 
-export type MainMenuComponentProgress = z.infer<typeof MainMenuComponentProgressSchema>;
+export type MainMenuComponentProgress = z.infer<
+  typeof MainMenuComponentProgressSchema
+>;
 
 // ============================================================================
 // TYPES FOR PHASE 4 - DOMAIN ACCORDION
@@ -81,7 +86,7 @@ export interface DomainData {
 /**
  * Lesson status for UI rendering
  */
-export type LessonStatus = 'not-started' | 'started' | 'completed';
+export type LessonStatus = "not-started" | "started" | "completed";
 
 /**
  * Lesson data with status
@@ -101,7 +106,7 @@ export interface LessonData {
 
 /**
  * Main Menu Progress Manager - minimal implementation.
- * 
+ *
  * Main menu doesn't track component-specific progress.
  * This class exists to satisfy the architecture but does minimal work.
  */
@@ -113,7 +118,9 @@ export class MainMenuProgressManager extends BaseComponentProgressManager<
    * Create initial progress for new users.
    * Main menu has no progress fields, just timestamp.
    */
-  createInitialProgress(config: MainMenuComponentConfig): MainMenuComponentProgress {
+  createInitialProgress(
+    config: MainMenuComponentConfig,
+  ): MainMenuComponentProgress {
     return {
       lastUpdated: 0,
     };
@@ -126,7 +133,7 @@ export class MainMenuProgressManager extends BaseComponentProgressManager<
 
 /**
  * Main Menu Core - manages streak checking and message queuing.
- * 
+ *
  * Responsibilities:
  * - Check for complete weeks since last streak check
  * - Calculate lessons completed per week
@@ -155,7 +162,7 @@ export class MainMenuCore extends BaseComponentCore<
     overallProgressManager: IReadonlyOverallProgressManager,
     navigationManager: IReadonlyNavigationManager,
     settingsManager: IReadonlySettingsManager,
-    curriculumRegistry: CurriculumRegistry
+    curriculumRegistry: CurriculumRegistry,
   ) {
     super(
       config,
@@ -164,7 +171,7 @@ export class MainMenuCore extends BaseComponentCore<
       overallProgressManager,
       navigationManager,
       settingsManager,
-      curriculumRegistry
+      curriculumRegistry,
     );
 
     // Store managers for business logic access
@@ -174,16 +181,20 @@ export class MainMenuCore extends BaseComponentCore<
     this._curriculumRegistry = curriculumRegistry;
 
     // Special permissions: can manipulate overall progress and navigation
-    this.overallProgressMessageQueue = 
-      new OverallProgressMessageQueueManager(curriculumRegistry);
-    this.navigationMessageQueue = 
-      new NavigationMessageQueueManager(curriculumRegistry);
+    this.overallProgressMessageQueue = new OverallProgressMessageQueueManager(
+      curriculumRegistry,
+    );
+    this.navigationMessageQueue = new NavigationMessageQueueManager(
+      curriculumRegistry,
+    );
   }
 
   /**
    * Create the interface for this core
    */
-  protected createInterface(timeline: TimelineContainer): BaseComponentInterface<
+  protected createInterface(
+    timeline: TimelineContainer,
+  ): BaseComponentInterface<
     MainMenuComponentConfig,
     MainMenuComponentProgress,
     any
@@ -265,10 +276,10 @@ export class MainMenuCore extends BaseComponentCore<
 
   /**
    * Check for complete weeks since last streak check and queue appropriate messages.
-   * 
+   *
    * Called by interface on render. Processes all complete weeks sequentially,
    * queuing increment for weeks with goal met, reset for weeks with goal missed.
-   * 
+   *
    * For flexible pace (no weekly goal), this is a no-op.
    */
   checkAndQueueStreakUpdates(): void {
@@ -276,9 +287,9 @@ export class MainMenuCore extends BaseComponentCore<
 
     const settings = this._settingsManager.getSettings();
     const pace = settings.learningPace[0];
-    
+
     // Flexible pace has no weekly goals, so no streak tracking
-    if (pace === 'flexible') return;
+    if (pace === "flexible") return;
 
     const progress = this._overallProgressManager.getProgress();
     const lastCheck = progress.lastStreakCheck;
@@ -293,7 +304,7 @@ export class MainMenuCore extends BaseComponentCore<
     // Process each complete week sequentially
     for (const week of completeWeeks) {
       const lessonsInWeek = this.countLessonsInWeek(week.start, week.end);
-      
+
       if (lessonsInWeek >= weeklyGoal) {
         this.overallProgressMessageQueue.queueIncrementStreak();
       } else {
@@ -308,6 +319,15 @@ export class MainMenuCore extends BaseComponentCore<
   queueNavigation(entityId: number, page: number = 0): void {
     if (!this._operationsEnabled) return;
     this.navigationMessageQueue.queueNavigationMessage(entityId, page);
+  }
+
+  /**
+   * Queue navigation to settings menu.
+   * Opens settings at entity 2, page 0.
+   */
+  queueNavigationToSettings(): void {
+    if (!this._operationsEnabled) return;
+    this.navigationMessageQueue.queueNavigationMessage(2, 0);
   }
 
   /**
@@ -329,9 +349,9 @@ export class MainMenuCore extends BaseComponentCore<
     const pace = settings.learningPace[0];
 
     const goalMap: Record<typeof pace, number> = {
-      accelerated: 6,  // 6 lessons/week
-      standard: 3,     // 3 lessons/week (recommended)
-      flexible: 0,     // No weekly goal
+      accelerated: 6, // 6 lessons/week
+      standard: 3, // 3 lessons/week (recommended)
+      flexible: 0, // No weekly goal
     };
 
     return goalMap[pace];
@@ -343,20 +363,20 @@ export class MainMenuCore extends BaseComponentCore<
    */
   private getCompleteWeeksSince(
     since: number,
-    until: number
+    until: number,
   ): Array<{ start: number; end: number }> {
     const weeks: Array<{ start: number; end: number }> = [];
-    
+
     // Get first week start after 'since'
     let weekStart = this.getNextWeekStartAfter(since);
-    
+
     // Collect all complete weeks until 'until'
     while (true) {
-      const weekEnd = weekStart + (7 * 24 * 60 * 60);
-      
+      const weekEnd = weekStart + 7 * 24 * 60 * 60;
+
       // Week is only complete if its end is before 'until'
       if (weekEnd > until) break;
-      
+
       weeks.push({ start: weekStart, end: weekEnd });
       weekStart = weekEnd;
     }
@@ -372,18 +392,18 @@ export class MainMenuCore extends BaseComponentCore<
     // Cast to concrete type to access getLastWeekStart() method
     const settingsManager = this._settingsManager as any;
     const lastWeekStart = settingsManager.getLastWeekStart();
-    
+
     if (lastWeekStart > after) {
       return lastWeekStart;
     }
-    
+
     let weekStart = lastWeekStart;
     const weekSeconds = 7 * 24 * 60 * 60;
-    
+
     while (weekStart <= after) {
       weekStart += weekSeconds;
     }
-    
+
     return weekStart;
   }
 
@@ -397,7 +417,7 @@ export class MainMenuCore extends BaseComponentCore<
 
     for (const completion of Object.values(progress.lessonCompletions)) {
       const timeCompleted = completion.timeCompleted;
-      
+
       if (
         timeCompleted !== null &&
         timeCompleted >= startTime &&
@@ -419,24 +439,27 @@ export class MainMenuCore extends BaseComponentCore<
    */
   getAllDomains(): DomainData[] {
     const domainIds = this._curriculumRegistry.getAllDomainIds();
-    
-    return domainIds.map(domainId => {
+
+    return domainIds.map((domainId) => {
       const metadata = domainData.find((d: any) => d.id === domainId);
-      
+
       // Cast to access getDomainProgress() which isn't on readonly interface
-      const progress = (this._overallProgressManager as any).getDomainProgress(domainId);
-      
+      const progress = (this._overallProgressManager as any).getDomainProgress(
+        domainId,
+      );
+
       return {
         id: domainId,
         title: metadata?.title || `Domain ${domainId}`,
-        description: metadata?.description || '',
-        emoji: '📚', // Not in domain YAML yet, using default
-        color: '#84e67b', // Not in domain YAML yet, using default green
+        description: metadata?.description || "",
+        emoji: "📚", // Not in domain YAML yet, using default
+        color: "#84e67b", // Not in domain YAML yet, using default green
         completed: progress.completed,
         total: progress.total,
-        percentage: progress.total > 0 
-          ? Math.round((progress.completed / progress.total) * 100)
-          : 0
+        percentage:
+          progress.total > 0
+            ? Math.round((progress.completed / progress.total) * 100)
+            : 0,
       };
     });
   }
@@ -446,20 +469,20 @@ export class MainMenuCore extends BaseComponentCore<
    */
   getLessonsInDomain(domainId: number): LessonData[] {
     const lessonIds = this._curriculumRegistry.getLessonsInDomain(domainId);
-    
+
     if (!lessonIds) return [];
 
-    return lessonIds.map(lessonId => {
+    return lessonIds.map((lessonId) => {
       const metadata = lessonMetadata.find((l: any) => l.id === lessonId);
       const status = this.getLessonStatus(lessonId);
 
       return {
         id: lessonId,
         title: metadata?.title || `Lesson ${lessonId}`,
-        description: '', // TODO: Add description field to lesson YAML files
-        difficulty: metadata?.difficulty || 'beginner',
+        description: "", // TODO: Add description field to lesson YAML files
+        difficulty: metadata?.difficulty || "beginner",
         estimatedMinutes: metadata?.estimatedMinutes || 10,
-        status
+        status,
       };
     });
   }
@@ -471,14 +494,14 @@ export class MainMenuCore extends BaseComponentCore<
     const progress = this._overallProgressManager.getProgress();
     const completion = progress.lessonCompletions[lessonId.toString()];
 
-    if (!completion) return 'not-started';
-    
-    if (completion.timeCompleted !== null) return 'completed';
-    
+    if (!completion) return "not-started";
+
+    if (completion.timeCompleted !== null) return "completed";
+
     // If lastUpdated exists but timeCompleted is null, lesson was started
-    if (completion.lastUpdated > 0) return 'started';
-    
-    return 'not-started';
+    if (completion.lastUpdated > 0) return "started";
+
+    return "not-started";
   }
 
   /**
@@ -491,7 +514,7 @@ export class MainMenuCore extends BaseComponentCore<
 
     for (const completion of Object.values(progress.lessonCompletions)) {
       const timeCompleted = completion.timeCompleted;
-      
+
       if (timeCompleted !== null && timeCompleted >= since) {
         count++;
       }
@@ -511,7 +534,7 @@ export class MainMenuCore extends BaseComponentCore<
  */
 export function validateMainMenuProgress(
   progress: MainMenuComponentProgress,
-  config: MainMenuComponentConfig
+  config: MainMenuComponentConfig,
 ): { cleaned: MainMenuComponentProgress; defaultedRatio: number } {
   return {
     cleaned: progress,
@@ -524,11 +547,8 @@ export function validateMainMenuProgress(
  * Required for registry builder.
  */
 export function createInitialProgress(
-  config: MainMenuComponentConfig
+  config: MainMenuComponentConfig,
 ): MainMenuComponentProgress {
-  const tempManager = new MainMenuProgressManager(
-    config,
-    { lastUpdated: 0 }
-  );
+  const tempManager = new MainMenuProgressManager(config, { lastUpdated: 0 });
   return tempManager.createInitialProgress(config);
 }

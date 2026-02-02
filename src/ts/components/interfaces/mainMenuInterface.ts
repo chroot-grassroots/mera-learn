@@ -149,9 +149,17 @@ export class MainMenuInterface extends BaseComponentInterface<
     return `
       <div class="${MeraStyles.containers.card}">
         <!-- Header -->
-        <h1 class="${MeraStyles.typography.heading1}">
-          Mera
-        </h1>
+             <div class="${MeraStyles.layout.flexBetween} ${MeraStyles.patterns.marginBottom.xlarge}">
+          <h1 class="${MeraStyles.typography.heading1} mb-0">
+            Mera
+          </h1>
+          <button
+            id="btn-open-settings"
+            class="text-gray-600 dark:text-amber-200 hover:text-gray-900 dark:hover:text-amber-50 text-2xl"
+            aria-label="Open settings">
+            ⚙️
+          </button>
+        </div>
 
         <!-- Streak Display -->
         <div class="${MeraStyles.patterns.marginBottom.xlarge}">
@@ -240,9 +248,17 @@ export class MainMenuInterface extends BaseComponentInterface<
     return `
       <div class="${MeraStyles.containers.card}">
         <!-- Header -->
-        <h1 class="${MeraStyles.typography.heading1}">
-          Mera
-        </h1>
+          <div class="${MeraStyles.layout.flexBetween} ${MeraStyles.patterns.marginBottom.xlarge}">
+          <h1 class="${MeraStyles.typography.heading1} mb-0">
+            Mera
+          </h1>
+          <button
+            id="btn-open-settings"
+            class="text-gray-600 dark:text-amber-200 hover:text-gray-900 dark:hover:text-amber-50 text-2xl"
+            aria-label="Open settings">
+            ⚙️
+          </button>
+        </div>
 
         <!-- Flexible Pace Message -->
         <div class="${MeraStyles.patterns.marginBottom.xlarge} ${MeraStyles.layout.textCenter}">
@@ -388,6 +404,12 @@ export class MainMenuInterface extends BaseComponentInterface<
     );
 
     if (!area) return;
+
+    // Settings button
+    const settingsButton = area.querySelector('#btn-open-settings');
+    settingsButton?.addEventListener('click', () => {
+      this.componentCore.queueNavigationToSettings();
+    });
 
     // Domain expansion toggle
     area.querySelectorAll('[data-domain-toggle]').forEach(button => {

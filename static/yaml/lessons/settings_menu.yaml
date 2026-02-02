@@ -1,0 +1,18 @@
+metadata:
+  id: 2
+  entityType: menu
+  title: "Settings"
+  description: "Configure accessibility, learning pace, and preferences"
+  difficulty: beginner
+  estimatedMinutes: 2
+  version: "1.0.0"
+
+pages:
+  - id: 100002
+    title: "Settings"
+    order: 0
+    components:
+      - id: 1000002
+        type: settings_menu
+        accessibility_label: "Settings menu - configure your preferences"
+        order: 100

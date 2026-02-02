@@ -49620,9 +49620,17 @@ var init_mainMenuInterface = __esm({
         return `
       <div class="${MeraStyles.containers.card}">
         <!-- Header -->
-        <h1 class="${MeraStyles.typography.heading1}">
-          Mera
-        </h1>
+             <div class="${MeraStyles.layout.flexBetween} ${MeraStyles.patterns.marginBottom.xlarge}">
+          <h1 class="${MeraStyles.typography.heading1} mb-0">
+            Mera
+          </h1>
+          <button
+            id="btn-open-settings"
+            class="text-gray-600 dark:text-amber-200 hover:text-gray-900 dark:hover:text-amber-50 text-2xl"
+            aria-label="Open settings">
+            \u2699\uFE0F
+          </button>
+        </div>
 
         <!-- Streak Display -->
         <div class="${MeraStyles.patterns.marginBottom.xlarge}">
@@ -49703,9 +49711,17 @@ var init_mainMenuInterface = __esm({
         return `
       <div class="${MeraStyles.containers.card}">
         <!-- Header -->
-        <h1 class="${MeraStyles.typography.heading1}">
-          Mera
-        </h1>
+          <div class="${MeraStyles.layout.flexBetween} ${MeraStyles.patterns.marginBottom.xlarge}">
+          <h1 class="${MeraStyles.typography.heading1} mb-0">
+            Mera
+          </h1>
+          <button
+            id="btn-open-settings"
+            class="text-gray-600 dark:text-amber-200 hover:text-gray-900 dark:hover:text-amber-50 text-2xl"
+            aria-label="Open settings">
+            \u2699\uFE0F
+          </button>
+        </div>
 
         <!-- Flexible Pace Message -->
         <div class="${MeraStyles.patterns.marginBottom.xlarge} ${MeraStyles.layout.textCenter}">
@@ -49833,6 +49849,10 @@ var init_mainMenuInterface = __esm({
           this.componentCore.config.id
         );
         if (!area) return;
+        const settingsButton = area.querySelector("#btn-open-settings");
+        settingsButton?.addEventListener("click", () => {
+          this.componentCore.queueNavigationToSettings();
+        });
         area.querySelectorAll("[data-domain-toggle]").forEach((button) => {
           button.addEventListener("click", (e) => {
             const domainId = parseInt(e.currentTarget.dataset.domainToggle);
@@ -49898,10 +49918,7 @@ var init_mainMenuInterface = __esm({
 
 // src/ts/components/cores/mainMenuCore.ts
 function createInitialProgress2(config2) {
-  const tempManager = new MainMenuProgressManager(
-    config2,
-    { lastUpdated: 0 }
-  );
+  const tempManager = new MainMenuProgressManager(config2, { lastUpdated: 0 });
   return tempManager.createInitialProgress(config2);
 }
 var MainMenuComponentConfigSchema, MainMenuComponentProgressSchema, MainMenuProgressManager, MainMenuCore;
@@ -49946,8 +49963,12 @@ var init_mainMenuCore = __esm({
         this._navigationManager = navigationManager;
         this._settingsManager = settingsManager;
         this._curriculumRegistry = curriculumRegistry;
-        this.overallProgressMessageQueue = new OverallProgressMessageQueueManager(curriculumRegistry);
-        this.navigationMessageQueue = new NavigationMessageQueueManager(curriculumRegistry);
+        this.overallProgressMessageQueue = new OverallProgressMessageQueueManager(
+          curriculumRegistry
+        );
+        this.navigationMessageQueue = new NavigationMessageQueueManager(
+          curriculumRegistry
+        );
       }
       /**
        * Create the interface for this core
@@ -50018,10 +50039,10 @@ var init_mainMenuCore = __esm({
       // ============================================================================
       /**
        * Check for complete weeks since last streak check and queue appropriate messages.
-       * 
+       *
        * Called by interface on render. Processes all complete weeks sequentially,
        * queuing increment for weeks with goal met, reset for weeks with goal missed.
-       * 
+       *
        * For flexible pace (no weekly goal), this is a no-op.
        */
       checkAndQueueStreakUpdates() {
@@ -50049,6 +50070,14 @@ var init_mainMenuCore = __esm({
       queueNavigation(entityId, page = 0) {
         if (!this._operationsEnabled) return;
         this.navigationMessageQueue.queueNavigationMessage(entityId, page);
+      }
+      /**
+       * Queue navigation to settings menu.
+       * Opens settings at entity 2, page 0.
+       */
+      queueNavigationToSettings() {
+        if (!this._operationsEnabled) return;
+        this.navigationMessageQueue.queueNavigationMessage(2, 0);
       }
       /**
        * Queue lesson reset (Phase 7 - stub for now).
@@ -50132,7 +50161,9 @@ var init_mainMenuCore = __esm({
         const domainIds = this._curriculumRegistry.getAllDomainIds();
         return domainIds.map((domainId) => {
           const metadata = domainData.find((d) => d.id === domainId);
-          const progress = this._overallProgressManager.getDomainProgress(domainId);
+          const progress = this._overallProgressManager.getDomainProgress(
+            domainId
+          );
           return {
             id: domainId,
             title: metadata?.title || `Domain ${domainId}`,
@@ -50408,6 +50439,402 @@ var init_basicTaskCore = __esm({
   }
 });
 
+// src/ts/components/interfaces/settingsMenuInterface.ts
+var settingsMenuInterface_exports = {};
+__export(settingsMenuInterface_exports, {
+  SettingsMenuInterface: () => SettingsMenuInterface
+});
+var SettingsMenuInterface;
+var init_settingsMenuInterface = __esm({
+  "src/ts/components/interfaces/settingsMenuInterface.ts"() {
+    "use strict";
+    init_baseComponentInterface();
+    init_meraStyles();
+    SettingsMenuInterface = class extends BaseComponentInterface {
+      constructor(core2, timelineContainer) {
+        super(core2, timelineContainer);
+      }
+      /**
+       * Create initial internal state
+       */
+      createInternalState() {
+        return {
+          rendered: false
+        };
+      }
+      /**
+       * Load component-specific assets (none needed)
+       */
+      async loadComponentSpecificAssets() {
+        return Promise.resolve();
+      }
+      /**
+       * Cleanup method
+       */
+      destroy() {
+      }
+      /**
+       * Render the settings menu
+       */
+      render() {
+        const area = this.timelineContainer.getComponentArea(
+          this.componentCore.config.id
+        );
+        if (!area) {
+          console.error("SettingsMenu: No component area available");
+          return;
+        }
+        const settings = this.componentCore.settingsManager.getSettings();
+        const fontSize = settings.fontSize[0];
+        const highContrast = settings.highContrast[0];
+        const reducedMotion = settings.reducedMotion[0];
+        const focusIndicatorStyle = settings.focusIndicatorStyle[0];
+        const audioEnabled = settings.audioEnabled[0];
+        const learningPace = settings.learningPace[0];
+        const theme = settings.theme[0];
+        area.innerHTML = `
+      <div class="${MeraStyles.containers.pageWrapper}">
+        <div class="${MeraStyles.containers.contentContainer}">
+          <div class="${MeraStyles.containers.card} ${MeraStyles.layout.spaceYLarge}">
+            
+            <!-- Header -->
+            <div class="${MeraStyles.layout.textCenter}">
+              <h1 class="${MeraStyles.typography.heading1}">\u2699\uFE0F Settings</h1>
+            </div>
+
+            <!-- Accessibility Section -->
+            <div class="${MeraStyles.borders.topSection}">
+              <h2 class="${MeraStyles.typography.heading2}">Accessibility</h2>
+              
+              <div class="${MeraStyles.layout.spaceYMedium}">
+                <!-- Font Size -->
+                <div class="${MeraStyles.containers.messageBox}">
+                  <label class="${MeraStyles.typography.heading4} ${MeraStyles.patterns.marginBottom.medium}">
+                    Font Size
+                  </label>
+                  <select 
+                    id="select-font-size"
+                    class="w-full px-4 py-2 bg-white dark:bg-gray-800 border ${MeraStyles.borders.default} rounded ${MeraStyles.typography.body}">
+                    <option value="small" ${fontSize === "small" ? "selected" : ""}>Small</option>
+                    <option value="medium" ${fontSize === "medium" ? "selected" : ""}>Medium</option>
+                    <option value="large" ${fontSize === "large" ? "selected" : ""}>Large</option>
+                  </select>
+                </div>
+
+                <!-- High Contrast -->
+                <div class="${MeraStyles.containers.messageBox}">
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      id="check-high-contrast"
+                      ${highContrast ? "checked" : ""}
+                      class="w-5 h-5">
+                    <span class="${MeraStyles.typography.heading4}">High Contrast Mode</span>
+                  </label>
+                </div>
+
+                <!-- Reduced Motion -->
+                <div class="${MeraStyles.containers.messageBox}">
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      id="check-reduced-motion"
+                      ${reducedMotion ? "checked" : ""}
+                      class="w-5 h-5">
+                    <span class="${MeraStyles.typography.heading4}">Reduce Motion</span>
+                  </label>
+                </div>
+
+                <!-- Focus Indicator -->
+                <div class="${MeraStyles.containers.messageBox}">
+                  <label class="${MeraStyles.typography.heading4} ${MeraStyles.patterns.marginBottom.medium}">
+                    Focus Indicator Style
+                  </label>
+                  <select 
+                    id="select-focus-style"
+                    class="w-full px-4 py-2 bg-white dark:bg-gray-800 border ${MeraStyles.borders.default} rounded ${MeraStyles.typography.body}">
+                    <option value="default" ${focusIndicatorStyle === "default" ? "selected" : ""}>Default</option>
+                    <option value="enhanced" ${focusIndicatorStyle === "enhanced" ? "selected" : ""}>Enhanced</option>
+                  </select>
+                </div>
+
+                <!-- Audio -->
+                <div class="${MeraStyles.containers.messageBox}">
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      id="check-audio-enabled"
+                      ${audioEnabled ? "checked" : ""}
+                      class="w-5 h-5">
+                    <span class="${MeraStyles.typography.heading4}">Enable Audio</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Appearance Section -->
+            <div class="${MeraStyles.borders.topSection}">
+              <h2 class="${MeraStyles.typography.heading2}">Appearance</h2>
+              
+              <div class="${MeraStyles.containers.messageBox}">
+                <label class="${MeraStyles.typography.heading4} ${MeraStyles.patterns.marginBottom.medium}">
+                  Theme
+                </label>
+                <select 
+                  id="select-theme"
+                  class="w-full px-4 py-2 bg-white dark:bg-gray-800 border ${MeraStyles.borders.default} rounded ${MeraStyles.typography.body}">
+                  <option value="auto" ${theme === "auto" ? "selected" : ""}>Auto (System)</option>
+                  <option value="light" ${theme === "light" ? "selected" : ""}>Light</option>
+                  <option value="dark" ${theme === "dark" ? "selected" : ""}>Dark</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Learning Section -->
+            <div class="${MeraStyles.borders.topSection}">
+              <h2 class="${MeraStyles.typography.heading2}">Learning Pace</h2>
+              
+              <div class="${MeraStyles.containers.messageBox}">
+                <select 
+                  id="select-learning-pace"
+                  class="w-full px-4 py-2 bg-white dark:bg-gray-800 border ${MeraStyles.borders.default} rounded ${MeraStyles.typography.body}">
+                  <option value="flexible" ${learningPace === "flexible" ? "selected" : ""}>Flexible - Learn at your own pace</option>
+                  <option value="standard" ${learningPace === "standard" ? "selected" : ""}>Standard - 3 lessons per week</option>
+                  <option value="accelerated" ${learningPace === "accelerated" ? "selected" : ""}>Accelerated - 6 lessons per week</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="${MeraStyles.layout.textCenter}">
+              <button 
+                id="btn-back-to-menu"
+                class="${MeraStyles.interactive.buttonPrimary}">
+                \u2190 Back to Main Menu
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    `;
+        this.setupEventListeners();
+        this.internal.rendered = true;
+      }
+      /**
+       * Setup event listeners for settings controls
+       */
+      setupEventListeners() {
+        const fontSizeSelect = document.getElementById("select-font-size");
+        fontSizeSelect?.addEventListener("change", () => {
+          const size = fontSizeSelect.value;
+          this.componentCore.queueSettingsMessage({
+            method: "setFontSize",
+            args: [size]
+          });
+        });
+        const highContrastCheck = document.getElementById("check-high-contrast");
+        highContrastCheck?.addEventListener("change", () => {
+          this.componentCore.queueSettingsMessage({
+            method: "setHighContrast",
+            args: [highContrastCheck.checked]
+          });
+        });
+        const reducedMotionCheck = document.getElementById("check-reduced-motion");
+        reducedMotionCheck?.addEventListener("change", () => {
+          this.componentCore.queueSettingsMessage({
+            method: "setReducedMotion",
+            args: [reducedMotionCheck.checked]
+          });
+        });
+        const focusStyleSelect = document.getElementById("select-focus-style");
+        focusStyleSelect?.addEventListener("change", () => {
+          const style = focusStyleSelect.value;
+          this.componentCore.queueSettingsMessage({
+            method: "setFocusIndicatorStyle",
+            args: [style]
+          });
+        });
+        const audioEnabledCheck = document.getElementById("check-audio-enabled");
+        audioEnabledCheck?.addEventListener("change", () => {
+          this.componentCore.queueSettingsMessage({
+            method: "setAudioEnabled",
+            args: [audioEnabledCheck.checked]
+          });
+        });
+        const themeSelect = document.getElementById("select-theme");
+        themeSelect?.addEventListener("change", () => {
+          const theme = themeSelect.value;
+          this.componentCore.queueSettingsMessage({
+            method: "setTheme",
+            args: [theme]
+          });
+        });
+        const learningPaceSelect = document.getElementById("select-learning-pace");
+        learningPaceSelect?.addEventListener("change", () => {
+          const pace = learningPaceSelect.value;
+          this.componentCore.queueSettingsMessage({
+            method: "setLearningPace",
+            args: [pace]
+          });
+        });
+        const backButton = document.getElementById("btn-back-to-menu");
+        backButton?.addEventListener("click", () => {
+          this.componentCore.queueNavigationToMainMenu();
+        });
+      }
+    };
+  }
+});
+
+// src/ts/components/cores/settingsMenuCore.ts
+function createInitialProgress4(config2) {
+  const tempManager = new SettingsMenuProgressManager(config2, {
+    lastUpdated: 0
+  });
+  return tempManager.createInitialProgress(config2);
+}
+var SettingsMenuComponentConfigSchema, SettingsMenuComponentProgressSchema, SettingsMenuProgressManager, SettingsMenuSettingsMessageQueueManager, SettingsMenuNavigationMessageQueueManager, SettingsMenuCore;
+var init_settingsMenuCore = __esm({
+  "src/ts/components/cores/settingsMenuCore.ts"() {
+    "use strict";
+    init_zod();
+    init_baseComponentCore();
+    SettingsMenuComponentConfigSchema = BaseComponentConfigSchema.extend({
+      type: external_exports.literal("settings_menu")
+    });
+    SettingsMenuComponentProgressSchema = BaseComponentProgressSchema.extend({
+      // No additional fields needed
+    });
+    SettingsMenuProgressManager = class extends BaseComponentProgressManager {
+      /**
+       * Create initial progress for new users.
+       */
+      createInitialProgress(config2) {
+        return {
+          lastUpdated: 0
+        };
+      }
+    };
+    SettingsMenuSettingsMessageQueueManager = class {
+      constructor() {
+        this.queue = [];
+      }
+      /**
+       * Queue a settings message
+       */
+      queueMessage(message2) {
+        console.log(`\u{1F4E4} SettingsMenu queuing settings message:`, message2.method);
+        this.queue.push(message2);
+      }
+      /**
+       * Get all queued messages and clear the queue
+       */
+      getMessages() {
+        const messages = [...this.queue];
+        this.queue = [];
+        return messages;
+      }
+    };
+    SettingsMenuNavigationMessageQueueManager = class {
+      constructor() {
+        this.queue = [];
+      }
+      /**
+       * Queue navigation to main menu
+       */
+      queueNavigationToMainMenu() {
+        console.log(`\u{1F4E4} SettingsMenu queuing navigation to main menu`);
+        this.queue.push({
+          method: "setCurrentView",
+          args: [0, 0]
+          // Entity 0 (main menu), page 0
+        });
+      }
+      /**
+       * Get all queued messages and clear the queue
+       */
+      getMessages() {
+        const messages = [...this.queue];
+        this.queue = [];
+        return messages;
+      }
+    };
+    SettingsMenuCore = class extends BaseComponentCore {
+      constructor(config2, progressManager, timeline2, overallProgressManager, navigationManager, settingsManager, curriculumRegistry) {
+        super(
+          config2,
+          progressManager,
+          timeline2,
+          overallProgressManager,
+          navigationManager,
+          settingsManager,
+          curriculumRegistry
+        );
+        this.settingsMessageQueue = new SettingsMenuSettingsMessageQueueManager();
+        this.navigationMessageQueue = new SettingsMenuNavigationMessageQueueManager();
+      }
+      /**
+       * Create the interface for this core
+       */
+      createInterface(timeline2) {
+        const {
+          SettingsMenuInterface: SettingsMenuInterface2
+        } = (init_settingsMenuInterface(), __toCommonJS(settingsMenuInterface_exports));
+        return new SettingsMenuInterface2(this, timeline2);
+      }
+      /**
+       * Get readonly settings manager for interface queries.
+       */
+      get settingsManager() {
+        return this.settingsManager;
+      }
+      /**
+       * Check if component is complete (always true - no completion criteria)
+       */
+      isComplete() {
+        return true;
+      }
+      /**
+       * Get component-specific progress messages (none for settings menu)
+       */
+      getComponentProgressMessagesInternal() {
+        return [];
+      }
+      /**
+       * Get queued settings messages
+       */
+      getSettingsMessages() {
+        if (!this._operationsEnabled) {
+          return [];
+        }
+        return this.settingsMessageQueue.getMessages();
+      }
+      /**
+       * Get queued navigation messages
+       */
+      getNavigationMessages() {
+        if (!this._operationsEnabled) {
+          return [];
+        }
+        return this.navigationMessageQueue.getMessages();
+      }
+      /**
+       * Public interface for component to queue settings message
+       */
+      queueSettingsMessage(message2) {
+        this.settingsMessageQueue.queueMessage(message2);
+      }
+      /**
+       * Public interface for component to queue navigation to main menu
+       */
+      queueNavigationToMainMenu() {
+        this.navigationMessageQueue.queueNavigationToMainMenu();
+      }
+    };
+  }
+});
+
 // src/ts/registry/mera-registry.ts
 var progressSchemaMap, componentValidatorMap, componentInitializerMap, componentRegistrations, allLessonIds, allComponentIds, lessonMetrics, componentIdToTypeMap, componentToLessonMap, domainLessonMap, curriculumDataRaw, CurriculumRegistry, curriculumData, domainData, lessonMetadata;
 var init_mera_registry = __esm({
@@ -50416,10 +50843,12 @@ var init_mera_registry = __esm({
     init_newUserWelcomeCore();
     init_mainMenuCore();
     init_basicTaskCore();
+    init_settingsMenuCore();
     progressSchemaMap = /* @__PURE__ */ new Map([
       ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
       ["main_menu", MainMenuComponentProgressSchema],
-      ["basic_task", BasicTaskComponentProgressSchema]
+      ["basic_task", BasicTaskComponentProgressSchema],
+      ["settings_menu", SettingsMenuComponentProgressSchema]
     ]);
     componentValidatorMap = /* @__PURE__ */ new Map([
       ["basic_task", validateBasicTaskStructure]
@@ -50427,7 +50856,8 @@ var init_mera_registry = __esm({
     componentInitializerMap = /* @__PURE__ */ new Map([
       ["new_user_welcome", createInitialProgress],
       ["main_menu", createInitialProgress2],
-      ["basic_task", createInitialProgress3]
+      ["basic_task", createInitialProgress3],
+      ["settings_menu", createInitialProgress4]
     ]);
     componentRegistrations = [
       {
@@ -50447,15 +50877,22 @@ var init_mera_registry = __esm({
         configSchema: BasicTaskComponentConfigSchema,
         progressSchema: BasicTaskComponentProgressSchema,
         typeName: "basic_task"
+      },
+      {
+        componentClass: SettingsMenuProgressManager,
+        configSchema: SettingsMenuComponentConfigSchema,
+        progressSchema: SettingsMenuComponentProgressSchema,
+        typeName: "settings_menu"
       }
     ];
-    allLessonIds = [0, 1, 12345, 12346, 12347, 12348];
-    allComponentIds = [123456, 123457, 223456, 223457, 323456, 323457, 423456, 423457, 1e6, 1000001];
+    allLessonIds = [0, 1, 2, 12345, 12346, 12347, 12348];
+    allComponentIds = [123456, 123457, 223456, 223457, 323456, 323457, 423456, 423457, 1e6, 1000001, 1000002];
     lessonMetrics = /* @__PURE__ */ new Map([
       [12348, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
       [0, { pageCount: 1, componentCount: 1, title: "Main Menu", difficulty: "beginner" }],
       [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
       [1, { pageCount: 1, componentCount: 1, title: "Welcome to Mera", difficulty: "beginner" }],
+      [2, { pageCount: 1, componentCount: 1, title: "Settings", difficulty: "beginner" }],
       [12346, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
       [12347, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }]
     ]);
@@ -50469,7 +50906,8 @@ var init_mera_registry = __esm({
       [423456, "basic_task"],
       [423457, "basic_task"],
       [1e6, "main_menu"],
-      [1000001, "new_user_welcome"]
+      [1000001, "new_user_welcome"],
+      [1000002, "settings_menu"]
     ]);
     componentToLessonMap = /* @__PURE__ */ new Map([
       [123456, 12345],
@@ -50481,7 +50919,8 @@ var init_mera_registry = __esm({
       [423456, 12348],
       [423457, 12348],
       [1e6, 0],
-      [1000001, 1]
+      [1000001, 1],
+      [1000002, 2]
     ]);
     domainLessonMap = /* @__PURE__ */ new Map([
       [1003, [12347]],
@@ -50662,6 +51101,18 @@ var init_mera_registry = __esm({
         "componentCount": 1,
         "difficulty": "beginner",
         "estimatedMinutes": 5,
+        "required": true,
+        "domainId": null
+      },
+      {
+        "id": 2,
+        "path": "static/yaml/lessons/settings_menu.yaml",
+        "title": "Settings",
+        "entityType": "lesson",
+        "pageCount": 1,
+        "componentCount": 1,
+        "difficulty": "beginner",
+        "estimatedMinutes": 2,
         "required": true,
         "domainId": null
       },
@@ -54797,6 +55248,7 @@ init_coreTypes();
 init_basicTaskCore();
 init_newUserWelcomeCore();
 init_mainMenuCore();
+init_settingsMenuCore();
 var LessonMetadataSchema = external_exports.object({
   id: ImmutableId,
   entityType: external_exports.enum(["lesson", "menu"]),
@@ -54812,7 +55264,8 @@ var LessonMetadataSchema = external_exports.object({
 var ComponentConfigSchema = external_exports.discriminatedUnion("type", [
   BasicTaskComponentConfigSchema,
   NewUserWelcomeComponentConfigSchema,
-  MainMenuComponentConfigSchema
+  MainMenuComponentConfigSchema,
+  SettingsMenuComponentConfigSchema
   // Add new component schemas here as you create them
   // Example: QuizComponentConfigSchema,
   // Example: VideoComponentConfigSchema,
@@ -55811,6 +56264,7 @@ init_mera_registry();
 init_basicTaskCore();
 init_newUserWelcomeCore();
 init_mainMenuCore();
+init_settingsMenuCore();
 function createComponentProgressManager(componentType, config2, progressData) {
   switch (componentType) {
     case "basic_task": {
@@ -55832,6 +56286,13 @@ function createComponentProgressManager(componentType, config2, progressData) {
     case "main_menu": {
       const validated = MainMenuComponentProgressSchema.parse(progressData);
       return new MainMenuProgressManager(
+        config2,
+        validated
+      );
+    }
+    case "settings_menu": {
+      const validated = SettingsMenuComponentProgressSchema.parse(progressData);
+      return new SettingsMenuProgressManager(
         config2,
         validated
       );
@@ -55885,6 +56346,16 @@ var MESSAGE_TYPE_PERMISSIONS = {
     navigation: true,
     // Can navigate to lessons
     settings: false
+    // Cannot change settings
+  },
+  "settings_menu": {
+    componentProgress: false,
+    // It can only reset all directly via pod
+    overallProgress: false,
+    // It can only reset all directly via pod
+    navigation: true,
+    // Can navigate back to main menu
+    settings: true
     // Cannot change settings
   }
   // Add additional components here
@@ -56012,6 +56483,7 @@ function getTimelineInstance() {
 // src/ts/components/componentCoreFactory.ts
 init_newUserWelcomeCore();
 init_mainMenuCore();
+init_settingsMenuCore();
 function createComponentCore(componentType, config2, progressManager, curriculumData2, overallProgressManager, navigationManager, settingsManager) {
   const timeline2 = getTimelineInstance();
   switch (componentType) {
@@ -56045,6 +56517,17 @@ function createComponentCore(componentType, config2, progressManager, curriculum
         settingsManager,
         curriculumData2
       );
+    case "settings_menu": {
+      return new SettingsMenuCore(
+        config2,
+        progressManager,
+        timeline2,
+        overallProgressManager,
+        navigationManager,
+        settingsManager,
+        curriculumData2
+      );
+    }
     // TODO: Add other component types as they're implemented
     // case 'quiz':
     //   return new QuizCore(

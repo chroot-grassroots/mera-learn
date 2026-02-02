@@ -18,6 +18,11 @@ import {
   MainMenuComponentProgressSchema,
   MainMenuProgressManager,
 } from "./cores/mainMenuCore.js";
+import {
+  SettingsMenuComponentConfig,
+  SettingsMenuComponentProgressSchema,
+  SettingsMenuProgressManager,
+} from "./cores/settingsMenuCore.js";
 
 /**
  * Create the appropriate progress manager for a component type.
@@ -48,11 +53,17 @@ export function createComponentProgressManager(
         validated,
       );
     }
-
     case "main_menu": {
       const validated = MainMenuComponentProgressSchema.parse(progressData);
       return new MainMenuProgressManager(
         config as MainMenuComponentConfig,
+        validated,
+      );
+    }
+    case "settings_menu": {
+      const validated = SettingsMenuComponentProgressSchema.parse(progressData);
+      return new SettingsMenuProgressManager(
+        config as SettingsMenuComponentConfig,
         validated,
       );
     }

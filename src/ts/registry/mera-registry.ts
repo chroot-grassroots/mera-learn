@@ -1,6 +1,6 @@
 /*
  * Auto-generated Complete Registry for TypeScript Bundling
- * Generated on: 2026-02-01T14:54:48.081467
+ * Generated on: 2026-02-01T18:10:22.542195
  * 
  * This file contains ALL 12 mappings and parsed YAML data.
  * Gets bundled into mera-app.js via TypeScript compilation.
@@ -18,6 +18,9 @@ import {
 import { 
     BasicTaskProgressManager, BasicTaskComponentConfigSchema, BasicTaskComponentProgressSchema, validateBasicTaskStructure, createInitialProgress as createInitialBasicTaskProgress
 } from '../components/cores/basicTaskCore.js';
+import { 
+    SettingsMenuProgressManager, SettingsMenuComponentConfigSchema, SettingsMenuComponentProgressSchema, createInitialProgress as createInitialSettingsMenuProgress
+} from '../components/cores/settingsMenuCore.js';
 
 /**
  * MAPPING 1: Component Type to Class
@@ -25,7 +28,8 @@ import {
 export const componentTypeMap = new Map<string, any>([
     ["new_user_welcome", NewUserWelcomeProgressManager],
     ["main_menu", MainMenuProgressManager],
-    ["basic_task", BasicTaskProgressManager]
+    ["basic_task", BasicTaskProgressManager],
+    ["settings_menu", SettingsMenuProgressManager]
 ]);
 
 /**
@@ -34,7 +38,8 @@ export const componentTypeMap = new Map<string, any>([
 export const configSchemaMap = new Map<string, any>([
     ["new_user_welcome", NewUserWelcomeComponentConfigSchema],
     ["main_menu", MainMenuComponentConfigSchema],
-    ["basic_task", BasicTaskComponentConfigSchema]
+    ["basic_task", BasicTaskComponentConfigSchema],
+    ["settings_menu", SettingsMenuComponentConfigSchema]
 ]);
 
 /**
@@ -43,7 +48,8 @@ export const configSchemaMap = new Map<string, any>([
 export const progressSchemaMap = new Map<string, any>([
     ["new_user_welcome", NewUserWelcomeComponentProgressSchema],
     ["main_menu", MainMenuComponentProgressSchema],
-    ["basic_task", BasicTaskComponentProgressSchema]
+    ["basic_task", BasicTaskComponentProgressSchema],
+    ["settings_menu", SettingsMenuComponentProgressSchema]
 ]);
 
 /**
@@ -59,7 +65,8 @@ export const componentValidatorMap = new Map<string, Function>([
 export const componentInitializerMap = new Map<string, Function>([
     ["new_user_welcome", createInitialNewUserWelcomeProgress],
     ["main_menu", createInitialMainMenuProgress],
-    ["basic_task", createInitialBasicTaskProgress]
+    ["basic_task", createInitialBasicTaskProgress],
+    ["settings_menu", createInitialSettingsMenuProgress]
 ]);
 
 /**
@@ -84,18 +91,24 @@ export const componentRegistrations = [
         configSchema: BasicTaskComponentConfigSchema,
         progressSchema: BasicTaskComponentProgressSchema,
         typeName: 'basic_task'
+    },
+    {
+        componentClass: SettingsMenuProgressManager,
+        configSchema: SettingsMenuComponentConfigSchema,
+        progressSchema: SettingsMenuComponentProgressSchema,
+        typeName: 'settings_menu'
     }
 ];
 
 /**
  * MAPPING 7: All Entity IDs (Lessons + Menus)
  */
-export const allLessonIds = [0, 1, 12345, 12346, 12347, 12348];
+export const allLessonIds = [0, 1, 2, 12345, 12346, 12347, 12348];
 
 /**
  * MAPPING 7.5: All Component IDs
  */
-export const allComponentIds = [123456, 123457, 223456, 223457, 323456, 323457, 423456, 423457, 1000000, 1000001];
+export const allComponentIds = [123456, 123457, 223456, 223457, 323456, 323457, 423456, 423457, 1000000, 1000001, 1000002];
 
 /**
  * Lesson Metrics Type
@@ -116,6 +129,7 @@ export const lessonMetrics = new Map<number, LessonMetrics>([
     [0, { pageCount: 1, componentCount: 1, title: "Main Menu", difficulty: "beginner" }],
     [12345, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
     [1, { pageCount: 1, componentCount: 1, title: "Welcome to Mera", difficulty: "beginner" }],
+    [2, { pageCount: 1, componentCount: 1, title: "Settings", difficulty: "beginner" }],
     [12346, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }],
     [12347, { pageCount: 2, componentCount: 2, title: "Phishing Recognition Basics", difficulty: "beginner" }]
 ]);
@@ -135,7 +149,8 @@ export const componentIdToTypeMap = new Map<number, string>([
     [423456, "basic_task"],
     [423457, "basic_task"],
     [1000000, "main_menu"],
-    [1000001, "new_user_welcome"]
+    [1000001, "new_user_welcome"],
+    [1000002, "settings_menu"]
 ]);
 
 /**
@@ -153,7 +168,8 @@ export const componentToLessonMap = new Map<number, number>([
     [423456, 12348],
     [423457, 12348],
     [1000000, 0],
-    [1000001, 1]
+    [1000001, 1],
+    [1000002, 2]
 ]);
 
 /**
@@ -372,6 +388,18 @@ export const lessonMetadata = [
     "componentCount": 1,
     "difficulty": "beginner",
     "estimatedMinutes": 5,
+    "required": true,
+    "domainId": null
+  },
+  {
+    "id": 2,
+    "path": "static/yaml/lessons/settings_menu.yaml",
+    "title": "Settings",
+    "entityType": "lesson",
+    "pageCount": 1,
+    "componentCount": 1,
+    "difficulty": "beginner",
+    "estimatedMinutes": 2,
     "required": true,
     "domainId": null
   },

@@ -45,6 +45,12 @@ export const MESSAGE_TYPE_PERMISSIONS: Record<string, {
     navigation: true,          // Can navigate to lessons
     settings: false           // Cannot change settings
   },
+   'settings_menu': {
+    componentProgress: false,   // It can only reset all directly via pod
+    overallProgress: false,     // It can only reset all directly via pod
+    navigation: true,          // Can navigate back to main menu
+    settings: true           // Cannot change settings
+  },
   // Add additional components here
 
 };

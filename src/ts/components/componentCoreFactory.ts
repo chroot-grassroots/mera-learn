@@ -26,6 +26,9 @@ import type { NewUserWelcomeProgressManager } from "./cores/newUserWelcomeCore.j
 import { MainMenuCore } from "./cores/mainMenuCore.js";
 import type { MainMenuComponentConfig } from "./cores/mainMenuCore.js";
 import type { MainMenuProgressManager } from "./cores/mainMenuCore.js";
+import { SettingsMenuCore } from "./cores/settingsMenuCore.js";
+import type { SettingsMenuComponentConfig } from "./cores/settingsMenuCore.js";
+import type { SettingsMenuProgressManager } from "./cores/settingsMenuCore.js";
 
 /**
  * Create a component Core instance based on type string.
@@ -84,6 +87,18 @@ export function createComponentCore(
         settingsManager,
         curriculumData,
       );
+
+    case "settings_menu": {
+      return new SettingsMenuCore(
+        config as SettingsMenuComponentConfig,
+        progressManager,
+        timeline,
+        overallProgressManager,
+        navigationManager,
+        settingsManager,
+        curriculumData,
+      );
+    }
 
     // TODO: Add other component types as they're implemented
     // case 'quiz':

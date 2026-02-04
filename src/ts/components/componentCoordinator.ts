@@ -20,6 +20,7 @@
  * - Main Core continues polling during coordination
  */
 
+import { getTimelineInstance } from "../ui/timelineContainer.js";
 import type { BaseComponentCore } from "./cores/baseComponentCore.js";
 
 /**
@@ -66,6 +67,9 @@ class ComponentCoordinator {
   async beginPageLoad(
     cores: Map<number, BaseComponentCore<any, any>>
   ): Promise<void> {
+    
+    getTimelineInstance().clearTimeline();
+    
     console.log(
       `🎬 ComponentCoordinator: Beginning page load with ${cores.size} components`
     );

@@ -56578,6 +56578,7 @@ var ComponentCoordinator = class {
    * @returns Promise that resolves when page load complete (or times out)
    */
   async beginPageLoad(cores) {
+    getTimelineInstance().clearTimeline();
     console.log(
       `\u{1F3AC} ComponentCoordinator: Beginning page load with ${cores.size} components`
     );

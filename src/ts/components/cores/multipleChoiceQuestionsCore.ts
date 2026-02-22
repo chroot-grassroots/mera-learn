@@ -53,13 +53,14 @@ export const MultipleChoiceQuestionComponentConfigSchema =
     question: z.string().min(1).max(1000),
     questionImage: z.string().min(1).max(500).optional(),
     answers: z.array(AnswerSchema).min(1),
+    singleAnswer: z.boolean(),
     correctAnswers: z.array(z.number().min(1)).min(1),
     feedbackCorrect: z.string().min(1).max(1000).optional(),
     feedbackIncorrect: z.string().min(1).max(1000).optional(),
     feedbackCustom: z.array(CustomFeedbackSchema).optional(),
   }).superRefine((data, ctx) => {
     const answerIds = data.answers.map((a) => a.id);
-    
+
     // Validate correctAnswers reference existing answer IDs
     data.correctAnswers.forEach((answerNumber: number, index: number) => {
       if (!answerIds.includes(answerNumber))
@@ -84,6 +85,14 @@ export const MultipleChoiceQuestionComponentConfigSchema =
             path: ["feedbackCustom", index, "answers"],
           });
         }
+      });
+    }
+
+    if (data.singleAnswer && data.correctAnswers.length > 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "singleAnswer is true but correctAnswers has multiple entries",
+        path: ["correctAnswers"],
       });
     }
   });
@@ -252,7 +261,7 @@ export class MultipleChoiceQuestionMessageQueueManager {
    *
    * @param selectedAnswer - New selected answer
    */
-  queueSelectedAnswer (selectedAnswer: number[] | null): void {
+  queueSelectedAnswer(selectedAnswer: number[] | null): void {
     this.messageQueue.push({
       type: "component_progress",
       componentId: this.componentId,
@@ -293,7 +302,7 @@ export class MultipleChoiceQuestionCore extends BaseComponentCore<
     overallProgressManager: IReadonlyOverallProgressManager,
     navigationManager: IReadonlyNavigationManager,
     settingsManager: IReadonlySettingsManager,
-    curriculumRegistry: CurriculumRegistry
+    curriculumRegistry: CurriculumRegistry,
   ) {
     super(
       config,
@@ -302,19 +311,18 @@ export class MultipleChoiceQuestionCore extends BaseComponentCore<
       overallProgressManager,
       navigationManager,
       settingsManager,
-      curriculumRegistry
+      curriculumRegistry,
     );
 
-    this._componentProgressQueueManager = new MultipleChoiceQuestionMessageQueueManager(
-      config.id
-    );
+    this._componentProgressQueueManager =
+      new MultipleChoiceQuestionMessageQueueManager(config.id);
   }
 
   /**
    * Create the interface for this core
    */
   protected createInterface(
-    timeline: TimelineContainer
+    timeline: TimelineContainer,
   ): BaseComponentInterface<
     MultipleChoiceQuestionComponentConfig,
     MultipleChoiceQuestionComponentProgress,
@@ -327,11 +335,18 @@ export class MultipleChoiceQuestionCore extends BaseComponentCore<
    * Set selected answer and queue message to main core
    */
   setSelectedAnswer(selectedAnswer: number[] | null): void {
-    (this._progressManager as MultipleChoiceQuestionProgressManager).setSelectedAnswer(
-      selectedAnswer
-    );
+    (
+      this._progressManager as MultipleChoiceQuestionProgressManager
+    ).setSelectedAnswer(selectedAnswer);
 
     this._componentProgressQueueManager.queueSelectedAnswer(selectedAnswer);
+  }
+
+  /**
+   * Getter for component progress
+   */
+  get progress(): Readonly<MultipleChoiceQuestionComponentProgress> {
+    return this._progressManager.getProgress();
   }
 
   /**
@@ -359,14 +374,12 @@ export class MultipleChoiceQuestionCore extends BaseComponentCore<
  *
  * Routes validated messages to appropriate MultipleChoiceQuestionProgressManager methods.
  */
-export class MultipleChoiceQuestionProgressMessageHandler
-  implements IComponentProgressMessageHandler
-{
+export class MultipleChoiceQuestionProgressMessageHandler implements IComponentProgressMessageHandler {
   constructor(
     private componentManagers: Map<
       number,
       BaseComponentProgressManager<any, any>
-    >
+    >,
   ) {}
 
   getComponentType(): string {
@@ -375,7 +388,7 @@ export class MultipleChoiceQuestionProgressMessageHandler
 
   handleMessage(message: ComponentProgressMessage): void {
     const manager = this.componentManagers.get(
-      message.componentId
+      message.componentId,
     ) as MultipleChoiceQuestionProgressManager;
 
     if (!manager) {
@@ -384,24 +397,22 @@ export class MultipleChoiceQuestionProgressMessageHandler
 
     switch (message.method) {
       case "setSelectedAnswer":
-        manager.setSelectedAnswer(
-          message.args[0] as number[] | null,
-        );
+        manager.setSelectedAnswer(message.args[0] as number[] | null);
         break;
 
       default:
         throw new Error(
-          `MultipleChoiceQuestion components only support: setSelectedAnswer. Got: ${message.method}`
+          `MultipleChoiceQuestion components only support: setSelectedAnswer. Got: ${message.method}`,
         );
     }
   }
 }
- 
+
 /**
  * Create initial progress for new users (registry builder requirement)
  */
 export function createInitialProgress(
-  config: MultipleChoiceQuestionComponentConfig
+  config: MultipleChoiceQuestionComponentConfig,
 ): MultipleChoiceQuestionComponentProgress {
   return {
     lastUpdated: 0,

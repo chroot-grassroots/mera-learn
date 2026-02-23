@@ -15,6 +15,7 @@ import type {
 } from "../cores/multipleChoiceQuestionsCore.js";
 import { MeraStyles } from "../../ui/meraStyles.js";
 import { MultipleChoiceQuestionCore } from "../cores/multipleChoiceQuestionsCore";
+
 // ============================================================================
 // INTERNAL STATE
 // ============================================================================
@@ -84,7 +85,7 @@ export class MultipleChoiceQuestionInterface extends BaseComponentInterface<
     </div>
   `;
 
-    // Safe injection of user content via textContent
+    // Safe injection of question text
     const questionElement = slot.querySelector(
       `#question-text-${this.componentCore.config.id}`,
     );
@@ -133,6 +134,77 @@ export class MultipleChoiceQuestionInterface extends BaseComponentInterface<
       // Append to the answers container
       answersContainer?.appendChild(singleAnswerContainer);
     });
+  }
+
+  private renderSubmitButton(slot: HTMLElement): void {
+    const submitContainer = slot.querySelector(
+      `#submit-${this.componentCore.config.id}`,
+    );
+
+    // Set inner HTLM for the button
+    if (submitContainer) {
+      submitContainer.innerHTML = `
+    <button 
+      id="submit-btn-${this.componentCore.config.id}" 
+      class="${MeraStyles.interactive.buttonSubmitDimmed}">
+      Submit
+    </button>`;
+    }
+  }
+
+  updateUI(): void {
+    const slot = this.timelineContainer.getComponentArea(
+      this.componentCore.config.id,
+    );
+
+    if (!slot) {
+      // Add error logic
+      return;
+    }
+
+    const submitButton = slot.querySelector(
+      `#submit-btn-${this.componentCore.config.id}`,
+    );
+
+    if (!submitButton) {
+      // Add error logic
+      return;
+    }
+
+    // Brighten submit button if there is a tenative answer that is not the submitted answer
+    if (
+      !(
+        this.internal.tentativeAnswer === null ||
+        this.answersMatch(
+          this.internal.tentativeAnswer,
+          this.componentCore.progress.selectedAnswer,
+        )
+      )
+    ) {
+      submitButton.classList.remove(MeraStyles.interactive.buttonSubmitDimmed);
+      submitButton.classList.add(MeraStyles.interactive.buttonSubmitActive);
+    } else {
+      submitButton.classList.remove(MeraStyles.interactive.buttonSubmitActive);
+      submitButton.classList.add(MeraStyles.interactive.buttonSubmitDimmed);
+    }
+  }
+
+  private answersMatch(t: number[] | null, s: number[] | null): boolean {
+    // If both are null, then answers match
+    if (t === null && s === null) return true;
+
+    // If both aren't null, then if either is null they don't match.
+    if (t === null || s === null) return false;
+
+    // If they are different lengths they don't match
+    if (t.length != s.length) return false;
+
+    // Sort both
+    const sortedT = [...t].sort((a, b) => a - b);
+    const sortedS = [...s].sort((a, b) => a - b);
+
+    // They match iff every element matches in sorted array
+    return sortedT.every((val, i) => val === sortedS[i]);
   }
 
   destroy(): void {

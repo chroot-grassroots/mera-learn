@@ -113,6 +113,12 @@ export const MeraStyles = {
     
     /** Standard hover state wrapper */
     hoverWrapper: "hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors",
+
+    /** Submit button active */
+    buttonSubmitActive: "px-4 py-2 rounded font-medium bg-amber-800 text-white opacity-100 cursor-pointer",
+  
+    /** Submit button dimmed */
+    buttonSubmitDimmed: "px-4 py-2 rounded font-medium bg-amber-800 text-white opacity-50 cursor-not-allowed",
   },
 
   // ==========================================================================
